@@ -1,0 +1,397 @@
+import { useState, useEffect, useCallback } from "react";
+import { Link } from "react-router-dom";
+import { useAuth } from "@/lib/auth-context";
+import { supabase } from "@/lib/supabase";
+import type { BillInstance } from "@/lib/types";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+  DollarSign,
+  User,
+  Calendar,
+} from "lucide-react";
+import { format } from "date-fns";
+
+const MONTHS = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December"
+];
+
+interface PeriodSummary {
+  bills: BillInstance[];
+  telesTotal: number;
+  nicoleTotal: number;
+  householdTotal: number;
+}
+
+export function DashboardPage() {
+  const { household } = useAuth();
+  const [currentDate, setCurrentDate] = useState(new Date());
+  const [bills, setBills] = useState<BillInstance[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const year = currentDate.getFullYear();
+  const month = currentDate.getMonth() + 1;
+
+  const fetchBills = useCallback(async () => {
+    if (!household) return;
+
+    setLoading(true);
+    const { data, error } = await supabase
+      .from("bill_instances")
+      .select("*")
+      .eq("household_id", household.id)
+      .eq("year", year)
+      .eq("month", month);
+
+    if (!error && data) {
+      setBills(data as BillInstance[]);
+    }
+    setLoading(false);
+  }, [household, year, month]);
+
+  useEffect(() => {
+    fetchBills();
+  }, [fetchBills]);
+
+  const togglePaid = async (bill: BillInstance) => {
+    const { error } = await supabase
+      .from("bill_instances")
+      .update({ is_paid: !bill.is_paid })
+      .eq("id", bill.id);
+
+    if (!error) {
+      setBills((prev) =>
+        prev.map((b) => (b.id === bill.id ? { ...b, is_paid: !b.is_paid } : b))
+      );
+    }
+  };
+
+  const getPeriodSummary = (periodBucket: "1_14" | "15_eom"): PeriodSummary => {
+    const periodBills = bills.filter((b) => b.period_bucket === periodBucket);
+    const telesTotal = periodBills.reduce((sum, b) => sum + Number(b.teles_amount), 0);
+    const nicoleTotal = periodBills.reduce((sum, b) => sum + Number(b.nicole_amount), 0);
+    const householdTotal = periodBills.reduce((sum, b) => sum + Number(b.amount), 0);
+
+    return {
+      bills: periodBills,
+      telesTotal,
+      nicoleTotal,
+      householdTotal,
+    };
+  };
+
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
+    }).format(amount);
+  };
+
+  const navigateMonth = (direction: "prev" | "next") => {
+    setCurrentDate((prev) => {
+      const newDate = new Date(prev);
+      if (direction === "prev") {
+        newDate.setMonth(newDate.getMonth() - 1);
+      } else {
+        newDate.setMonth(newDate.getMonth() + 1);
+      }
+      return newDate;
+    });
+  };
+
+  const goToCurrentMonth = () => {
+    setCurrentDate(new Date());
+  };
+
+  const isFirstPeriod = () => {
+    const now = new Date();
+    return now.getDate() <= 14;
+  };
+
+  const period1 = getPeriodSummary("1_14");
+  const period2 = getPeriodSummary("15_eom");
+
+  if (!household) {
+    return null;
+  }
+
+  return (
+    <div className="min-h-screen bg-background">
+      <div className="border-b">
+        <div className="container mx-auto px-4 py-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-semibold tracking-tight">
+                {household.name}
+              </h1>
+              <p className="text-sm text-muted-foreground">
+                Household Cashflow Dashboard
+              </p>
+            </div>
+            <div className="flex items-center gap-4">
+              <Link to="/bills/new">
+                <Button>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Bill
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="container mx-auto px-4 py-6">
+        <div className="mb-6 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="icon" onClick={() => navigateMonth("prev")}>
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <div className="flex items-center gap-4">
+              <Select
+                value={month.toString()}
+                onValueChange={(value) => {
+                  const newDate = new Date(currentDate);
+                  newDate.setMonth(parseInt(value) - 1);
+                  setCurrentDate(newDate);
+                }}
+              >
+                <SelectTrigger className="w-[140px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {MONTHS.map((m, i) => (
+                    <SelectItem key={m} value={(i + 1).toString()}>
+                      {m}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select
+                value={year.toString()}
+                onValueChange={(value) => {
+                  const newDate = new Date(currentDate);
+                  newDate.setFullYear(parseInt(value));
+                  setCurrentDate(newDate);
+                }}
+              >
+                <SelectTrigger className="w-[100px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {Array.from({ length: 5 }, (_, i) => year - 2 + i).map((y) => (
+                    <SelectItem key={y} value={y.toString()}>
+                      {y}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button variant="outline" size="icon" onClick={() => navigateMonth("next")}>
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+          <Button variant="ghost" onClick={goToCurrentMonth}>
+            Today
+          </Button>
+        </div>
+
+        {loading ? (
+          <div className="grid gap-6 md:grid-cols-2">
+            {[1, 2].map((i) => (
+              <Card key={i}>
+                <CardHeader>
+                  <Skeleton className="h-6 w-32" />
+                  <Skeleton className="h-4 w-48" />
+                </CardHeader>
+                <CardContent>
+                  <Skeleton className="h-32 w-full" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <div className="grid gap-6 md:grid-cols-2">
+            <PeriodCard
+              title="1st - 14th"
+              period="1_14"
+              summary={period1}
+              formatCurrency={formatCurrency}
+              togglePaid={togglePaid}
+              isCurrentPeriod={year === new Date().getFullYear() && month === new Date().getMonth() + 1 && isFirstPeriod()}
+            />
+            <PeriodCard
+              title="15th - End of Month"
+              period="15_eom"
+              summary={period2}
+              formatCurrency={formatCurrency}
+              togglePaid={togglePaid}
+              isCurrentPeriod={year === new Date().getFullYear() && month === new Date().getMonth() + 1 && !isFirstPeriod()}
+            />
+          </div>
+        )}
+
+        <div className="mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Monthly Summary</CardTitle>
+              <CardDescription>
+                Total bills for {MONTHS[month - 1]} {year}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 md:grid-cols-3">
+                <div className="flex items-center gap-3 rounded-lg border p-4">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-blue-600 dark:bg-blue-900 dark:text-blue-300">
+                    <User className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Teles Total</p>
+                    <p className="text-2xl font-semibold text-blue-600 dark:text-blue-400">
+                      {formatCurrency(period1.telesTotal + period2.telesTotal)}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 rounded-lg border p-4">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-100 text-green-600 dark:bg-green-900 dark:text-green-300">
+                    <User className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Nicole Total</p>
+                    <p className="text-2xl font-semibold text-green-600 dark:text-green-400">
+                      {formatCurrency(period1.nicoleTotal + period2.nicoleTotal)}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 rounded-lg border p-4">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+                    <DollarSign className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-muted-foreground">Household Total</p>
+                    <p className="text-2xl font-semibold">
+                      {formatCurrency(period1.householdTotal + period2.householdTotal)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface PeriodCardProps {
+  title: string;
+  period: "1_14" | "15_eom";
+  summary: PeriodSummary;
+  formatCurrency: (amount: number) => string;
+  togglePaid: (bill: BillInstance) => void;
+  isCurrentPeriod: boolean;
+}
+
+function PeriodCard({
+  title,
+  summary,
+  formatCurrency,
+  togglePaid,
+  isCurrentPeriod,
+}: PeriodCardProps) {
+  return (
+    <Card className={isCurrentPeriod ? "ring-2 ring-primary" : ""}>
+      <CardHeader className="pb-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <CardTitle className="text-lg">{title}</CardTitle>
+            <CardDescription>
+              {summary.bills.length} bill{summary.bills.length !== 1 ? "s" : ""}
+            </CardDescription>
+          </div>
+          {isCurrentPeriod && (
+            <Badge variant="default">Current Period</Badge>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent>
+        <div className="mb-4 grid grid-cols-3 gap-2 rounded-lg bg-muted/50 p-3">
+          <div className="text-center">
+            <p className="text-xs font-medium text-blue-600 dark:text-blue-400">Teles</p>
+            <p className="text-sm font-semibold">{formatCurrency(summary.telesTotal)}</p>
+          </div>
+          <div className="text-center">
+            <p className="text-xs font-medium text-green-600 dark:text-green-400">Nicole</p>
+            <p className="text-sm font-semibold">{formatCurrency(summary.nicoleTotal)}</p>
+          </div>
+          <div className="text-center">
+            <p className="text-xs font-medium text-muted-foreground">Total</p>
+            <p className="text-sm font-semibold">{formatCurrency(summary.householdTotal)}</p>
+          </div>
+        </div>
+
+        {summary.bills.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-8 text-center">
+            <Calendar className="h-8 w-8 text-muted-foreground/50" />
+            <p className="mt-2 text-sm text-muted-foreground">No bills for this period</p>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            {summary.bills.map((bill) => (
+              <div
+                key={bill.id}
+                className="flex items-center gap-3 rounded-lg border p-3 transition-colors hover:bg-muted/50"
+              >
+                <Checkbox
+                  checked={bill.is_paid}
+                  onCheckedChange={() => togglePaid(bill)}
+                />
+                <div className="flex-1 min-w-0">
+                  <p className={`text-sm font-medium truncate ${bill.is_paid ? "line-through text-muted-foreground" : ""}`}>
+                    {bill.name}
+                  </p>
+                  {bill.due_date && (
+                    <p className="text-xs text-muted-foreground">
+                      Due: {format(new Date(bill.due_date), "MMM d")}
+                    </p>
+                  )}
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="text-sm font-medium">{formatCurrency(Number(bill.amount))}</p>
+                  <div className="mt-0.5 flex items-center gap-2 text-xs">
+                    <span className="text-blue-600 dark:text-blue-400">
+                      {formatCurrency(Number(bill.teles_amount))}
+                    </span>
+                    <span className="text-muted-foreground">/</span>
+                    <span className="text-green-600 dark:text-green-400">
+                      {formatCurrency(Number(bill.nicole_amount))}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
