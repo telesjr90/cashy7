@@ -13,19 +13,22 @@ export interface Database {
         Row: {
           id: string;
           name: string;
-          owner_id: string;
+          created_by: string | null;
+          owner_id: string | null;
           created_at: string;
         };
         Insert: {
           id?: string;
           name: string;
-          owner_id?: string;
+          created_by?: string | null;
+          owner_id?: string | null;
           created_at?: string;
         };
         Update: {
           id?: string;
           name?: string;
-          owner_id?: string;
+          created_by?: string | null;
+          owner_id?: string | null;
           created_at?: string;
         };
       };
@@ -34,6 +37,10 @@ export interface Database {
           id: string;
           household_id: string;
           user_id: string;
+          email: string | null;
+          display_name: string | null;
+          role: "owner" | "member";
+          status: "active" | "invited";
           is_owner: boolean;
           is_active: boolean;
           created_at: string;
@@ -42,6 +49,10 @@ export interface Database {
           id?: string;
           household_id: string;
           user_id: string;
+          email?: string | null;
+          display_name?: string | null;
+          role?: "owner" | "member";
+          status?: "active" | "invited";
           is_owner?: boolean;
           is_active?: boolean;
           created_at?: string;
@@ -50,6 +61,10 @@ export interface Database {
           id?: string;
           household_id?: string;
           user_id?: string;
+          email?: string | null;
+          display_name?: string | null;
+          role?: "owner" | "member";
+          status?: "active" | "invited";
           is_owner?: boolean;
           is_active?: boolean;
           created_at?: string;
@@ -62,6 +77,7 @@ export interface Database {
           name: string;
           color: string | null;
           pay_schedule: string;
+          pay_schedule_description: string | null;
           paycheck_amount: number;
           created_at: string;
         };
@@ -71,6 +87,7 @@ export interface Database {
           name: string;
           color?: string | null;
           pay_schedule?: string;
+          pay_schedule_description?: string | null;
           paycheck_amount?: number;
           created_at?: string;
         };
@@ -80,6 +97,7 @@ export interface Database {
           name?: string;
           color?: string | null;
           pay_schedule?: string;
+          pay_schedule_description?: string | null;
           paycheck_amount?: number;
           created_at?: string;
         };
@@ -89,10 +107,15 @@ export interface Database {
           id: string;
           household_id: string;
           name: string;
+          category: string;
           default_amount: number | null;
+          due_day: string | null;
           is_variable: boolean;
           period_bucket: "1_14" | "15_eom";
-          category: string;
+          recurring: boolean;
+          active_from: string;
+          active_until: string | null;
+          notes: string | null;
           is_active: boolean;
           created_at: string;
         };
@@ -100,10 +123,15 @@ export interface Database {
           id?: string;
           household_id: string;
           name: string;
-          default_amount?: number | null;
-          is_variable?: boolean;
-          period_bucket: "1_14" | "15_eom";
           category?: string;
+          default_amount?: number | null;
+          due_day?: string | null;
+          is_variable?: boolean;
+          period_bucket?: "1_14" | "15_eom";
+          recurring?: boolean;
+          active_from?: string;
+          active_until?: string | null;
+          notes?: string | null;
           is_active?: boolean;
           created_at?: string;
         };
@@ -111,10 +139,15 @@ export interface Database {
           id?: string;
           household_id?: string;
           name?: string;
+          category?: string;
           default_amount?: number | null;
+          due_day?: string | null;
           is_variable?: boolean;
           period_bucket?: "1_14" | "15_eom";
-          category?: string;
+          recurring?: boolean;
+          active_from?: string;
+          active_until?: string | null;
+          notes?: string | null;
           is_active?: boolean;
           created_at?: string;
         };
@@ -133,6 +166,9 @@ export interface Database {
           nicole_amount: number;
           due_date: string | null;
           is_paid: boolean;
+          paid_status: "unpaid" | "paid";
+          paid_at: string | null;
+          paid_by_user_id: string | null;
           notes: string | null;
           created_at: string;
           updated_at: string | null;
@@ -150,6 +186,9 @@ export interface Database {
           nicole_amount?: number;
           due_date?: string | null;
           is_paid?: boolean;
+          paid_status?: "unpaid" | "paid";
+          paid_at?: string | null;
+          paid_by_user_id?: string | null;
           notes?: string | null;
           created_at?: string;
           updated_at?: string | null;
@@ -167,6 +206,9 @@ export interface Database {
           nicole_amount?: number;
           due_date?: string | null;
           is_paid?: boolean;
+          paid_status?: "unpaid" | "paid";
+          paid_at?: string | null;
+          paid_by_user_id?: string | null;
           notes?: string | null;
           created_at?: string;
           updated_at?: string | null;
@@ -212,7 +254,7 @@ export interface Database {
           payment_date: string;
           month: number;
           year: number;
-          period_bucket: string;
+          period_bucket: "1_14";
           total_payment: number;
           teles_amount: number;
           nicole_amount: number;
@@ -228,7 +270,7 @@ export interface Database {
           payment_date: string;
           month: number;
           year: number;
-          period_bucket?: string;
+          period_bucket?: "1_14";
           total_payment?: number;
           teles_amount?: number;
           nicole_amount?: number;
@@ -244,7 +286,7 @@ export interface Database {
           payment_date?: string;
           month?: number;
           year?: number;
-          period_bucket?: string;
+          period_bucket?: "1_14";
           total_payment?: number;
           teles_amount?: number;
           nicole_amount?: number;
@@ -256,7 +298,12 @@ export interface Database {
       };
     };
     Views: Record<string, never>;
-    Functions: Record<string, never>;
+    Functions: {
+      get_my_household_id: {
+        Args: Record<string, never>;
+        Returns: string | null;
+      };
+    };
     Enums: Record<string, never>;
   };
 }
