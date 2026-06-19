@@ -31,9 +31,23 @@ import {
 } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { ArrowLeft, Plus, Loader as Loader2, CreditCard, Trash2 } from "lucide-react";
-import { format } from "date-fns";
-import { split5149, formatCurrency } from "@/lib/format";
+import {
+  ArrowLeft,
+  Plus,
+  Loader as Loader2,
+  CreditCard,
+  Trash2,
+  Pencil,
+} from "lucide-react";
+import { format, addMonths, parseISO } from "date-fns";
+import {
+  split5149,
+  formatCurrency,
+  debtBillInstanceName,
+  computeRegularDebtPayment,
+  computeDebtPaymentAmounts,
+  splitDebtPayment,
+} from "@/lib/format";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -61,15 +75,67 @@ const MONTHS = [
   { value: "12", label: "December" },
 ];
 
+type ScheduleSplitType = "5149" | "custom";
+
+type ScheduleForm = {
+  paymentsLeft: string;
+  firstPaymentDate: string;
+  frequency: "monthly";
+  totalPaymentPerPayment: string;
+  splitType: ScheduleSplitType;
+  telesAmount: string;
+  nicoleAmount: string;
+};
+
+function defaultFirstPaymentDate(): string {
+  const now = new Date();
+  return format(new Date(now.getFullYear(), now.getMonth() + 1, 1), "yyyy-MM-dd");
+}
+
+function createDefaultScheduleForm(): ScheduleForm {
+  return {
+    paymentsLeft: "4",
+    firstPaymentDate: defaultFirstPaymentDate(),
+    frequency: "monthly",
+    totalPaymentPerPayment: "",
+    splitType: "5149",
+    telesAmount: "",
+    nicoleAmount: "",
+  };
+}
+
+function updateScheduleFromBalance(
+  balance: number,
+  paymentsLeft: string,
+  splitType: ScheduleSplitType
+): Pick<ScheduleForm, "totalPaymentPerPayment" | "telesAmount" | "nicoleAmount"> {
+  const count = parseInt(paymentsLeft);
+  if (isNaN(balance) || balance <= 0 || isNaN(count) || count <= 0) {
+    return { totalPaymentPerPayment: "", telesAmount: "", nicoleAmount: "" };
+  }
+
+  const regular = computeRegularDebtPayment(balance, count);
+  const { teles, nicole } = split5149(regular);
+  return {
+    totalPaymentPerPayment: regular.toFixed(2),
+    telesAmount: splitType === "5149" ? teles.toFixed(2) : "",
+    nicoleAmount: splitType === "5149" ? nicole.toFixed(2) : "",
+  };
+}
+
 export function DebtPage() {
   const { household } = useAuth();
   const [debtAccounts, setDebtAccounts] = useState<DebtAccount[]>([]);
   const [debtPayments, setDebtPayments] = useState<DebtPayment[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAccountForm, setShowAccountForm] = useState(false);
+  const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pendingGenerateAccountId, setPendingGenerateAccountId] = useState<
+    string | null
+  >(null);
 
   const now = new Date();
   const currentMonth = now.getMonth() + 1;
@@ -82,6 +148,8 @@ export function DebtPage() {
     targetPayoffDate: "",
     notes: "",
   });
+
+  const [scheduleForm, setScheduleForm] = useState<ScheduleForm>(createDefaultScheduleForm);
 
   const [paymentForm, setPaymentForm] = useState({
     debtAccountId: "",
@@ -131,6 +199,109 @@ export function DebtPage() {
     }));
   };
 
+  const handleSchedulePaymentAmountChange = (value: string) => {
+    const amount = parseFloat(value) || 0;
+    if (scheduleForm.splitType === "5149") {
+      const { teles, nicole } = split5149(amount);
+      setScheduleForm((prev) => ({
+        ...prev,
+        totalPaymentPerPayment: value,
+        telesAmount: teles.toFixed(2),
+        nicoleAmount: nicole.toFixed(2),
+      }));
+      return;
+    }
+
+    setScheduleForm((prev) => ({ ...prev, totalPaymentPerPayment: value }));
+  };
+
+  const resetAccountForm = () => {
+    setAccountForm({
+      name: "",
+      originalAmount: "",
+      currentBalance: "",
+      targetPayoffDate: "",
+      notes: "",
+    });
+    setScheduleForm(createDefaultScheduleForm());
+    setEditingAccountId(null);
+    setShowAccountForm(false);
+  };
+
+  const startEditAccount = (account: DebtAccount) => {
+    setEditingAccountId(account.id);
+    setShowAccountForm(false);
+    setAccountForm({
+      name: account.name,
+      originalAmount: account.original_amount.toString(),
+      currentBalance: account.current_balance.toString(),
+      targetPayoffDate: account.target_payoff_date || "",
+      notes: account.notes || "",
+    });
+    setScheduleForm({
+      ...createDefaultScheduleForm(),
+      ...updateScheduleFromBalance(
+        account.current_balance,
+        createDefaultScheduleForm().paymentsLeft,
+        "5149"
+      ),
+    });
+  };
+
+  const insertDebtPaymentWithBill = async (params: {
+    debtAccountId: string;
+    debtAccountName: string;
+    paymentDate: string;
+    month: number;
+    year: number;
+    totalPayment: number;
+    telesAmount: number;
+    nicoleAmount: number;
+    remainingBalance: number | null;
+    paidStatus: boolean;
+  }) => {
+    if (!household) throw new Error("No household found");
+
+    const { data: billData, error: billError } = await supabase
+      .from("bill_instances")
+      .insert({
+        household_id: household.id,
+        bill_id: null,
+        year: params.year,
+        month: params.month,
+        period_bucket: "1_14",
+        name: debtBillInstanceName(params.debtAccountName),
+        amount: params.totalPayment,
+        teles_amount: params.telesAmount,
+        nicole_amount: params.nicoleAmount,
+        due_date: null,
+        is_paid: params.paidStatus,
+        notes: null,
+      })
+      .select("id")
+      .single();
+
+    if (billError) throw new Error(billError.message);
+    if (!billData) throw new Error("Failed to create bill instance");
+
+    const { error: paymentError } = await supabase.from("debt_payments").insert({
+      household_id: household.id,
+      debt_account_id: params.debtAccountId,
+      payment_date: params.paymentDate,
+      month: params.month,
+      year: params.year,
+      period_bucket: "1_14",
+      total_payment: params.totalPayment,
+      teles_amount: params.telesAmount,
+      nicole_amount: params.nicoleAmount,
+      remaining_balance_after_payment: params.remainingBalance,
+      paid_status: params.paidStatus,
+      linked_bill_instance_id: billData.id,
+    });
+
+    if (paymentError) throw new Error(paymentError.message);
+  };
+
   const createDebtAccount = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
@@ -171,7 +342,159 @@ export function DebtPage() {
         targetPayoffDate: "",
         notes: "",
       });
+      setScheduleForm(createDefaultScheduleForm());
       setShowAccountForm(false);
+      fetchData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const updateDebtAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+
+    if (!household || !editingAccountId) {
+      setError("No account selected for editing");
+      return;
+    }
+
+    const originalAmount = parseFloat(accountForm.originalAmount);
+    const currentBalance = parseFloat(accountForm.currentBalance);
+
+    if (isNaN(originalAmount) || isNaN(currentBalance)) {
+      setError("Please enter valid amounts");
+      return;
+    }
+
+    setSubmitting(true);
+
+    try {
+      const { error: updateError } = await supabase
+        .from("debt_accounts")
+        .update({
+          name: accountForm.name,
+          original_amount: originalAmount,
+          current_balance: currentBalance,
+          target_payoff_date: accountForm.targetPayoffDate || null,
+          notes: accountForm.notes || null,
+        })
+        .eq("id", editingAccountId);
+
+      if (updateError) throw new Error(updateError.message);
+
+      resetAccountForm();
+      fetchData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const generatePaymentSchedule = async (
+    account: DebtAccount,
+    confirmOverwrite = false
+  ) => {
+    setError(null);
+
+    if (!household) {
+      setError("No household found");
+      return;
+    }
+
+    const existingPayments = debtPayments.filter(
+      (payment) => payment.debt_account_id === account.id
+    );
+    if (existingPayments.length > 0 && !confirmOverwrite) {
+      setPendingGenerateAccountId(account.id);
+      return;
+    }
+
+    const paymentsLeft = parseInt(scheduleForm.paymentsLeft);
+    const regularPayment = parseFloat(scheduleForm.totalPaymentPerPayment);
+    const customTeles = parseFloat(scheduleForm.telesAmount);
+    const customNicole = parseFloat(scheduleForm.nicoleAmount);
+
+    if (isNaN(paymentsLeft) || paymentsLeft <= 0) {
+      setError("Please enter a valid number of payments");
+      return;
+    }
+
+    if (isNaN(regularPayment) || regularPayment <= 0) {
+      setError("Please enter a valid payment amount");
+      return;
+    }
+
+    if (scheduleForm.splitType === "custom") {
+      if (isNaN(customTeles) || isNaN(customNicole)) {
+        setError("Please enter valid custom split amounts");
+        return;
+      }
+      if (Math.abs(customTeles + customNicole - regularPayment) > 0.01) {
+        setError("Custom split amounts must add up to the payment amount");
+        return;
+      }
+    }
+
+    const paymentAmounts = computeDebtPaymentAmounts(
+      account.current_balance,
+      paymentsLeft,
+      regularPayment
+    );
+
+    if (paymentAmounts.length === 0) {
+      setError("Unable to generate payments for this balance");
+      return;
+    }
+
+    setSubmitting(true);
+    setPendingGenerateAccountId(null);
+
+    try {
+      const firstPaymentDate = parseISO(scheduleForm.firstPaymentDate);
+      let remainingBalance = account.current_balance;
+
+      for (let i = 0; i < paymentAmounts.length; i++) {
+        const totalPayment = paymentAmounts[i];
+        const { teles, nicole } = splitDebtPayment(
+          totalPayment,
+          scheduleForm.splitType,
+          customTeles,
+          customNicole,
+          regularPayment
+        );
+
+        remainingBalance = Math.max(
+          0,
+          Math.round((remainingBalance - totalPayment) * 100) / 100
+        );
+
+        const paymentDate = format(addMonths(firstPaymentDate, i), "yyyy-MM-dd");
+        const paymentDateParts = parseISO(paymentDate);
+
+        await insertDebtPaymentWithBill({
+          debtAccountId: account.id,
+          debtAccountName:
+            editingAccountId === account.id ? accountForm.name : account.name,
+          paymentDate,
+          month: paymentDateParts.getMonth() + 1,
+          year: paymentDateParts.getFullYear(),
+          totalPayment,
+          telesAmount: teles,
+          nicoleAmount: nicole,
+          remainingBalance,
+          paidStatus: false,
+        });
+      }
+
+      await supabase
+        .from("debt_accounts")
+        .update({ current_balance: remainingBalance })
+        .eq("id", account.id);
+
       fetchData();
     } catch (err) {
       setError(err instanceof Error ? err.message : "An error occurred");
@@ -214,64 +537,35 @@ export function DebtPage() {
       const month = parseInt(paymentForm.month);
       const year = parseInt(paymentForm.year);
 
-      // First create the bill_instance
-      const { data: billData, error: billError } = await supabase
-        .from("bill_instances")
-        .insert({
-          household_id: household.id,
-          bill_id: null,
-          year: year,
-          month: month,
-          period_bucket: "1_14",
-          name: "Credit Card Debt",
-          amount: totalPayment,
-          teles_amount: telesAmount,
-          nicole_amount: nicoleAmount,
-          due_date: null,
-          is_paid: paymentForm.paidStatus,
-          notes: null,
-        })
-        .select("id")
-        .single();
-
-      if (billError) throw new Error(billError.message);
-      if (!billData) throw new Error("Failed to create bill instance");
-
-      // Calculate remaining balance
       const selectedAccount = debtAccounts.find(
         (a) => a.id === paymentForm.debtAccountId
       );
-      const remainingBalance = selectedAccount
-        ? Math.max(0, selectedAccount.current_balance - totalPayment)
-        : null;
-
-      // Then create the debt_payment with linked_bill_instance_id
-      const { error: paymentError } = await supabase
-        .from("debt_payments")
-        .insert({
-          household_id: household.id,
-          debt_account_id: paymentForm.debtAccountId,
-          payment_date: paymentForm.paymentDate,
-          month: month,
-          year: year,
-          period_bucket: "1_14",
-          total_payment: totalPayment,
-          teles_amount: telesAmount,
-          nicole_amount: nicoleAmount,
-          remaining_balance_after_payment: remainingBalance,
-          paid_status: paymentForm.paidStatus,
-          linked_bill_instance_id: billData.id,
-        });
-
-      if (paymentError) throw new Error(paymentError.message);
-
-      // Update the debt account balance if we calculated it
-      if (selectedAccount && remainingBalance !== null) {
-        await supabase
-          .from("debt_accounts")
-          .update({ current_balance: remainingBalance })
-          .eq("id", selectedAccount.id);
+      if (!selectedAccount) {
+        throw new Error("Please select a debt account");
       }
+
+      const remainingBalance = Math.max(
+        0,
+        Math.round((selectedAccount.current_balance - totalPayment) * 100) / 100
+      );
+
+      await insertDebtPaymentWithBill({
+        debtAccountId: paymentForm.debtAccountId,
+        debtAccountName: selectedAccount.name,
+        paymentDate: paymentForm.paymentDate,
+        month,
+        year,
+        totalPayment,
+        telesAmount,
+        nicoleAmount,
+        remainingBalance,
+        paidStatus: paymentForm.paidStatus,
+      });
+
+      await supabase
+        .from("debt_accounts")
+        .update({ current_balance: remainingBalance })
+        .eq("id", selectedAccount.id);
 
       setPaymentForm({
         debtAccountId: "",
@@ -329,6 +623,158 @@ export function DebtPage() {
     return account?.name || "Unknown";
   };
 
+  const pendingGenerateAccount = pendingGenerateAccountId
+    ? debtAccounts.find((account) => account.id === pendingGenerateAccountId)
+    : null;
+
+  const renderPaymentScheduleSection = (account?: DebtAccount) => (
+    <div className="space-y-4 rounded-lg border border-dashed p-4">
+      <div>
+        <h3 className="text-sm font-medium">Payment Planning</h3>
+        <p className="text-sm text-muted-foreground">
+          Monthly payments on the 1st, assigned to period 1–14.
+        </p>
+      </div>
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="space-y-2">
+          <Label htmlFor="paymentsLeft">Payments Left</Label>
+          <Input
+            id="paymentsLeft"
+            type="number"
+            min="1"
+            step="1"
+            value={scheduleForm.paymentsLeft}
+            onChange={(e) => {
+              const paymentsLeft = e.target.value;
+              const balance = parseFloat(accountForm.currentBalance);
+              setScheduleForm((prev) => ({
+                ...prev,
+                paymentsLeft,
+                ...updateScheduleFromBalance(balance, paymentsLeft, prev.splitType),
+              }));
+            }}
+            disabled={submitting}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="firstPaymentDate">First Payment Date</Label>
+          <Input
+            id="firstPaymentDate"
+            type="date"
+            value={scheduleForm.firstPaymentDate}
+            onChange={(e) =>
+              setScheduleForm((prev) => ({
+                ...prev,
+                firstPaymentDate: e.target.value,
+              }))
+            }
+            disabled={submitting}
+          />
+        </div>
+      </div>
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="space-y-2">
+          <Label>Payment Frequency</Label>
+          <Input value="Monthly" disabled />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="scheduleTotalPayment">Total Payment Per Payment (CA$)</Label>
+          <Input
+            id="scheduleTotalPayment"
+            type="number"
+            step="0.01"
+            min="0"
+            value={scheduleForm.totalPaymentPerPayment}
+            onChange={(e) => handleSchedulePaymentAmountChange(e.target.value)}
+            disabled={submitting}
+          />
+        </div>
+      </div>
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="space-y-2">
+          <Label>Split Type</Label>
+          <Select
+            value={scheduleForm.splitType}
+            onValueChange={(value: ScheduleSplitType) => {
+              const balance = parseFloat(accountForm.currentBalance);
+              if (value === "5149") {
+                const regular = parseFloat(scheduleForm.totalPaymentPerPayment);
+                const amount = isNaN(regular)
+                  ? computeRegularDebtPayment(
+                      balance,
+                      parseInt(scheduleForm.paymentsLeft) || 0
+                    )
+                  : regular;
+                const { teles, nicole } = split5149(amount);
+                setScheduleForm((prev) => ({
+                  ...prev,
+                  splitType: value,
+                  telesAmount: teles.toFixed(2),
+                  nicoleAmount: nicole.toFixed(2),
+                }));
+                return;
+              }
+              setScheduleForm((prev) => ({ ...prev, splitType: value }));
+            }}
+          >
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="5149">51/49</SelectItem>
+              <SelectItem value="custom">Custom</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="scheduleTelesAmount">Teles Amount (CA$)</Label>
+          <Input
+            id="scheduleTelesAmount"
+            type="number"
+            step="0.01"
+            min="0"
+            value={scheduleForm.telesAmount}
+            onChange={(e) =>
+              setScheduleForm((prev) => ({ ...prev, telesAmount: e.target.value }))
+            }
+            disabled={submitting || scheduleForm.splitType === "5149"}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="scheduleNicoleAmount">Nicole Amount (CA$)</Label>
+          <Input
+            id="scheduleNicoleAmount"
+            type="number"
+            step="0.01"
+            min="0"
+            value={scheduleForm.nicoleAmount}
+            onChange={(e) =>
+              setScheduleForm((prev) => ({ ...prev, nicoleAmount: e.target.value }))
+            }
+            disabled={submitting || scheduleForm.splitType === "5149"}
+          />
+        </div>
+      </div>
+      {account ? (
+        <div className="flex justify-end">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => generatePaymentSchedule(account)}
+            disabled={submitting}
+          >
+            {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Generate Payment Schedule
+          </Button>
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          Save the account first, then edit it to generate scheduled payments.
+        </p>
+      )}
+    </div>
+  );
+
   if (!household) {
     return null;
   }
@@ -374,7 +820,24 @@ export function DebtPage() {
                 {debtAccounts.length} account{debtAccounts.length !== 1 ? "s" : ""}
               </CardDescription>
             </div>
-            <Button onClick={() => setShowAccountForm(!showAccountForm)}>
+            <Button
+              onClick={() => {
+                if (showAccountForm) {
+                  setShowAccountForm(false);
+                  return;
+                }
+                setEditingAccountId(null);
+                setAccountForm({
+                  name: "",
+                  originalAmount: "",
+                  currentBalance: "",
+                  targetPayoffDate: "",
+                  notes: "",
+                });
+                setScheduleForm(createDefaultScheduleForm());
+                setShowAccountForm(true);
+              }}
+            >
               <Plus className="mr-2 h-4 w-4" />
               Add Account
             </Button>
@@ -427,12 +890,19 @@ export function DebtPage() {
                       placeholder="0.00"
                       required
                       value={accountForm.currentBalance}
-                      onChange={(e) =>
-                        setAccountForm((prev) => ({
+                      onChange={(e) => {
+                        const currentBalance = e.target.value;
+                        setAccountForm((prev) => ({ ...prev, currentBalance }));
+                        const balance = parseFloat(currentBalance);
+                        setScheduleForm((prev) => ({
                           ...prev,
-                          currentBalance: e.target.value,
-                        }))
-                      }
+                          ...updateScheduleFromBalance(
+                            balance,
+                            prev.paymentsLeft,
+                            prev.splitType
+                          ),
+                        }));
+                      }}
                       disabled={submitting}
                     />
                   </div>
@@ -464,11 +934,12 @@ export function DebtPage() {
                     disabled={submitting}
                   />
                 </div>
+                {renderPaymentScheduleSection()}
                 <div className="flex justify-end gap-2">
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => setShowAccountForm(false)}
+                    onClick={resetAccountForm}
                     disabled={submitting}
                   >
                     Cancel
@@ -476,6 +947,116 @@ export function DebtPage() {
                   <Button type="submit" disabled={submitting}>
                     {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Create Account
+                  </Button>
+                </div>
+              </form>
+            )}
+
+            {editingAccountId && (
+              <form onSubmit={updateDebtAccount} className="mb-6 space-y-4 rounded-lg border p-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-medium">Edit Debt Account</h3>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="editAccountName">Account Name</Label>
+                    <Input
+                      id="editAccountName"
+                      required
+                      value={accountForm.name}
+                      onChange={(e) =>
+                        setAccountForm((prev) => ({ ...prev, name: e.target.value }))
+                      }
+                      disabled={submitting}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="editOriginalAmount">Original Amount (CA$)</Label>
+                    <Input
+                      id="editOriginalAmount"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      required
+                      value={accountForm.originalAmount}
+                      onChange={(e) =>
+                        setAccountForm((prev) => ({
+                          ...prev,
+                          originalAmount: e.target.value,
+                        }))
+                      }
+                      disabled={submitting}
+                    />
+                  </div>
+                </div>
+                <div className="grid gap-4 md:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="editCurrentBalance">Current Balance (CA$)</Label>
+                    <Input
+                      id="editCurrentBalance"
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      required
+                      value={accountForm.currentBalance}
+                      onChange={(e) => {
+                        const currentBalance = e.target.value;
+                        setAccountForm((prev) => ({ ...prev, currentBalance }));
+                        const balance = parseFloat(currentBalance);
+                        setScheduleForm((prev) => ({
+                          ...prev,
+                          ...updateScheduleFromBalance(
+                            balance,
+                            prev.paymentsLeft,
+                            prev.splitType
+                          ),
+                        }));
+                      }}
+                      disabled={submitting}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="editTargetPayoffDate">Target Payoff Date (Optional)</Label>
+                    <Input
+                      id="editTargetPayoffDate"
+                      type="date"
+                      value={accountForm.targetPayoffDate}
+                      onChange={(e) =>
+                        setAccountForm((prev) => ({
+                          ...prev,
+                          targetPayoffDate: e.target.value,
+                        }))
+                      }
+                      disabled={submitting}
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="editAccountNotes">Notes (Optional)</Label>
+                  <Textarea
+                    id="editAccountNotes"
+                    value={accountForm.notes}
+                    onChange={(e) =>
+                      setAccountForm((prev) => ({ ...prev, notes: e.target.value }))
+                    }
+                    disabled={submitting}
+                  />
+                </div>
+                {renderPaymentScheduleSection(
+                  debtAccounts.find((account) => account.id === editingAccountId)
+                )}
+                <div className="flex justify-end gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={resetAccountForm}
+                    disabled={submitting}
+                  >
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={submitting}>
+                    {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                    Save Changes
                   </Button>
                 </div>
               </form>
@@ -495,7 +1076,7 @@ export function DebtPage() {
                     <TableHead className="text-right">Original</TableHead>
                     <TableHead className="text-right">Current Balance</TableHead>
                     <TableHead>Target Payoff</TableHead>
-                    <TableHead className="w-12"></TableHead>
+                    <TableHead className="w-24"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -514,7 +1095,15 @@ export function DebtPage() {
                           : "-"}
                       </TableCell>
                       <TableCell>
-                        <AlertDialog>
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => startEditAccount(account)}
+                          >
+                            <Pencil className="h-4 w-4 text-muted-foreground" />
+                          </Button>
+                          <AlertDialog>
                           <AlertDialogTrigger asChild>
                             <Button variant="ghost" size="icon">
                               <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
@@ -539,6 +1128,7 @@ export function DebtPage() {
                             </AlertDialogFooter>
                           </AlertDialogContent>
                         </AlertDialog>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -822,6 +1412,36 @@ export function DebtPage() {
           </CardContent>
         </Card>
       </div>
+
+      <AlertDialog
+        open={pendingGenerateAccountId !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingGenerateAccountId(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Payments Already Exist</AlertDialogTitle>
+            <AlertDialogDescription>
+              {pendingGenerateAccount
+                ? `"${pendingGenerateAccount.name}" already has ${debtPayments.filter((payment) => payment.debt_account_id === pendingGenerateAccount.id).length} scheduled payment(s). Generating again will create duplicates. Continue anyway?`
+                : "This debt account already has scheduled payments. Generating again will create duplicates. Continue anyway?"}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (pendingGenerateAccount) {
+                  void generatePaymentSchedule(pendingGenerateAccount, true);
+                }
+              }}
+            >
+              Generate Anyway
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
