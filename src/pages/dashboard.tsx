@@ -33,6 +33,7 @@ import { format } from "date-fns";
 import { formatCurrency } from "@/lib/format";
 import {
   activePeriodView,
+  defaultPeriodViewForMonth,
   FUNDING_LABELS,
   paycheckIncome,
   PERIOD_LABELS,
@@ -56,7 +57,9 @@ export function DashboardPage() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [bills, setBills] = useState<BillInstance[]>([]);
   const [loading, setLoading] = useState(true);
-  const [periodView, setPeriodView] = useState<PeriodView>(activePeriodView());
+  const [periodView, setPeriodView] = useState<PeriodView>(() =>
+    defaultPeriodViewForMonth(new Date())
+  );
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth() + 1;
@@ -109,20 +112,25 @@ export function DashboardPage() {
     };
   };
 
+  const setViewedMonth = (newDate: Date) => {
+    setCurrentDate(newDate);
+    setPeriodView(defaultPeriodViewForMonth(newDate));
+  };
+
   const navigateMonth = (direction: "prev" | "next") => {
-    setCurrentDate((prev) => {
-      const newDate = new Date(prev);
-      if (direction === "prev") {
-        newDate.setMonth(newDate.getMonth() - 1);
-      } else {
-        newDate.setMonth(newDate.getMonth() + 1);
-      }
-      return newDate;
-    });
+    const newDate = new Date(currentDate);
+    if (direction === "prev") {
+      newDate.setMonth(newDate.getMonth() - 1);
+    } else {
+      newDate.setMonth(newDate.getMonth() + 1);
+    }
+    setViewedMonth(newDate);
   };
 
   const goToCurrentMonth = () => {
-    setCurrentDate(new Date());
+    const now = new Date();
+    setCurrentDate(now);
+    setPeriodView(activePeriodView(now));
   };
 
   const isFirstPeriod = () => {
@@ -206,7 +214,7 @@ export function DashboardPage() {
                 onValueChange={(value) => {
                   const newDate = new Date(currentDate);
                   newDate.setMonth(parseInt(value) - 1);
-                  setCurrentDate(newDate);
+                  setViewedMonth(newDate);
                 }}
               >
                 <SelectTrigger className="w-[140px]">
@@ -225,7 +233,7 @@ export function DashboardPage() {
                 onValueChange={(value) => {
                   const newDate = new Date(currentDate);
                   newDate.setFullYear(parseInt(value));
-                  setCurrentDate(newDate);
+                  setViewedMonth(newDate);
                 }}
               >
                 <SelectTrigger className="w-[100px]">
