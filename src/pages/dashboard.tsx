@@ -133,6 +133,38 @@ export function DashboardPage() {
   const period1 = getPeriodSummary("1_14");
   const period2 = getPeriodSummary("15_eom");
 
+  const showFirstPeriod = periodView === "1_14" || periodView === "full";
+  const showSecondPeriod = periodView === "15_eom" || periodView === "full";
+
+  const summaryTelesTotal =
+    periodView === "full"
+      ? period1.telesTotal + period2.telesTotal
+      : periodView === "1_14"
+        ? period1.telesTotal
+        : period2.telesTotal;
+  const summaryNicoleTotal =
+    periodView === "full"
+      ? period1.nicoleTotal + period2.nicoleTotal
+      : periodView === "1_14"
+        ? period1.nicoleTotal
+        : period2.nicoleTotal;
+  const summaryHouseholdTotal =
+    periodView === "full"
+      ? period1.householdTotal + period2.householdTotal
+      : periodView === "1_14"
+        ? period1.householdTotal
+        : period2.householdTotal;
+  const summaryIncome = paycheckIncome(periodView === "full" ? "full" : periodView);
+
+  const summaryTitle =
+    periodView === "full" ? "Monthly Summary" : `${PERIOD_LABELS[periodView]} Summary`;
+  const summaryDescription =
+    periodView === "full"
+      ? `Total bills for ${MONTHS[month - 1]} ${year}`
+      : `Bills for ${PERIOD_LABELS[periodView].toLowerCase()}, ${MONTHS[month - 1]} ${year}`;
+
+  const periodCardCount = periodView === "full" ? 2 : 1;
+
   if (!household) {
     return null;
   }
@@ -235,8 +267,8 @@ export function DashboardPage() {
         </div>
 
         {loading ? (
-          <div className="grid gap-6 md:grid-cols-2">
-            {[1, 2].map((i) => (
+          <div className={`grid gap-6 ${periodView === "full" ? "md:grid-cols-2" : "md:grid-cols-1"}`}>
+            {Array.from({ length: periodCardCount }, (_, i) => (
               <Card key={i}>
                 <CardHeader>
                   <Skeleton className="h-6 w-32" />
@@ -249,37 +281,39 @@ export function DashboardPage() {
             ))}
           </div>
         ) : (
-          <div className="grid gap-6 md:grid-cols-2">
-            <PeriodCard
-              title="1st - 14th"
-              period="1_14"
-              summary={period1}
-              formatCurrency={formatCurrency}
-              togglePaid={togglePaid}
-              isCurrentPeriod={year === new Date().getFullYear() && month === new Date().getMonth() + 1 && isFirstPeriod()}
-              paycheck={paycheckIncome("1_14")}
-              fundingLabel={FUNDING_LABELS["1_14"]}
-            />
-            <PeriodCard
-              title="15th - End of Month"
-              period="15_eom"
-              summary={period2}
-              formatCurrency={formatCurrency}
-              togglePaid={togglePaid}
-              isCurrentPeriod={year === new Date().getFullYear() && month === new Date().getMonth() + 1 && !isFirstPeriod()}
-              paycheck={paycheckIncome("15_eom")}
-              fundingLabel={FUNDING_LABELS["15_eom"]}
-            />
+          <div className={`grid gap-6 ${periodView === "full" ? "md:grid-cols-2" : "md:grid-cols-1"}`}>
+            {showFirstPeriod && (
+              <PeriodCard
+                title="1st - 14th"
+                period="1_14"
+                summary={period1}
+                formatCurrency={formatCurrency}
+                togglePaid={togglePaid}
+                isCurrentPeriod={year === new Date().getFullYear() && month === new Date().getMonth() + 1 && isFirstPeriod()}
+                paycheck={paycheckIncome("1_14")}
+                fundingLabel={FUNDING_LABELS["1_14"]}
+              />
+            )}
+            {showSecondPeriod && (
+              <PeriodCard
+                title="15th - End of Month"
+                period="15_eom"
+                summary={period2}
+                formatCurrency={formatCurrency}
+                togglePaid={togglePaid}
+                isCurrentPeriod={year === new Date().getFullYear() && month === new Date().getMonth() + 1 && !isFirstPeriod()}
+                paycheck={paycheckIncome("15_eom")}
+                fundingLabel={FUNDING_LABELS["15_eom"]}
+              />
+            )}
           </div>
         )}
 
         <div className="mt-6">
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Monthly Summary</CardTitle>
-              <CardDescription>
-                Total bills for {MONTHS[month - 1]} {year}
-              </CardDescription>
+              <CardTitle className="text-lg">{summaryTitle}</CardTitle>
+              <CardDescription>{summaryDescription}</CardDescription>
             </CardHeader>
             <CardContent>
               <div className="grid gap-4 md:grid-cols-3">
@@ -290,13 +324,13 @@ export function DashboardPage() {
                   <div>
                     <p className="text-sm font-medium text-muted-foreground">Teles Total</p>
                     <p className="text-2xl font-semibold text-blue-600 dark:text-blue-400">
-                      {formatCurrency(period1.telesTotal + period2.telesTotal)}
+                      {formatCurrency(summaryTelesTotal)}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      Income {formatCurrency(paycheckIncome("full").teles)}
+                      Income {formatCurrency(summaryIncome.teles)}
                     </p>
                     <p className="text-xs font-medium text-blue-600 dark:text-blue-400">
-                      Leftover {formatCurrency(paycheckIncome("full").teles - (period1.telesTotal + period2.telesTotal))}
+                      Leftover {formatCurrency(summaryIncome.teles - summaryTelesTotal)}
                     </p>
                   </div>
                 </div>
@@ -307,13 +341,13 @@ export function DashboardPage() {
                   <div>
                     <p className="text-sm font-medium text-muted-foreground">Nicole Total</p>
                     <p className="text-2xl font-semibold text-green-600 dark:text-green-400">
-                      {formatCurrency(period1.nicoleTotal + period2.nicoleTotal)}
+                      {formatCurrency(summaryNicoleTotal)}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      Income {formatCurrency(paycheckIncome("full").nicole)}
+                      Income {formatCurrency(summaryIncome.nicole)}
                     </p>
                     <p className="text-xs font-medium text-green-600 dark:text-green-400">
-                      Leftover {formatCurrency(paycheckIncome("full").nicole - (period1.nicoleTotal + period2.nicoleTotal))}
+                      Leftover {formatCurrency(summaryIncome.nicole - summaryNicoleTotal)}
                     </p>
                   </div>
                 </div>
@@ -324,13 +358,13 @@ export function DashboardPage() {
                   <div>
                     <p className="text-sm font-medium text-muted-foreground">Household Total</p>
                     <p className="text-2xl font-semibold">
-                      {formatCurrency(period1.householdTotal + period2.householdTotal)}
+                      {formatCurrency(summaryHouseholdTotal)}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      Income {formatCurrency(paycheckIncome("full").teles + paycheckIncome("full").nicole)}
+                      Income {formatCurrency(summaryIncome.teles + summaryIncome.nicole)}
                     </p>
                     <p className="text-xs font-medium">
-                      Leftover {formatCurrency(paycheckIncome("full").teles + paycheckIncome("full").nicole - (period1.householdTotal + period2.householdTotal))}
+                      Leftover {formatCurrency(summaryIncome.teles + summaryIncome.nicole - summaryHouseholdTotal)}
                     </p>
                   </div>
                 </div>
