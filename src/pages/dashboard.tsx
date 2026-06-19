@@ -31,6 +31,13 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { formatCurrency } from "@/lib/format";
+import {
+  activePeriodView,
+  FUNDING_LABELS,
+  paycheckIncome,
+  PERIOD_LABELS,
+  type PeriodView,
+} from "@/lib/periods";
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -49,6 +56,7 @@ export function DashboardPage() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [bills, setBills] = useState<BillInstance[]>([]);
   const [loading, setLoading] = useState(true);
+  const [periodView, setPeriodView] = useState<PeriodView>(activePeriodView());
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth() + 1;
@@ -209,6 +217,23 @@ export function DashboardPage() {
           </Button>
         </div>
 
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm font-medium text-muted-foreground">Period:</span>
+          {(["1_14", "15_eom", "full"] as PeriodView[]).map((view) => (
+            <Button
+              key={view}
+              size="sm"
+              variant={periodView === view ? "default" : "outline"}
+              onClick={() => setPeriodView(view)}
+            >
+              {view === "full" ? "Full month" : PERIOD_LABELS[view]}
+            </Button>
+          ))}
+          <span className="text-xs italic text-muted-foreground">
+            {FUNDING_LABELS[periodView]}
+          </span>
+        </div>
+
         {loading ? (
           <div className="grid gap-6 md:grid-cols-2">
             {[1, 2].map((i) => (
@@ -232,6 +257,8 @@ export function DashboardPage() {
               formatCurrency={formatCurrency}
               togglePaid={togglePaid}
               isCurrentPeriod={year === new Date().getFullYear() && month === new Date().getMonth() + 1 && isFirstPeriod()}
+              paycheck={paycheckIncome("1_14")}
+              fundingLabel={FUNDING_LABELS["1_14"]}
             />
             <PeriodCard
               title="15th - End of Month"
@@ -240,6 +267,8 @@ export function DashboardPage() {
               formatCurrency={formatCurrency}
               togglePaid={togglePaid}
               isCurrentPeriod={year === new Date().getFullYear() && month === new Date().getMonth() + 1 && !isFirstPeriod()}
+              paycheck={paycheckIncome("15_eom")}
+              fundingLabel={FUNDING_LABELS["15_eom"]}
             />
           </div>
         )}
@@ -263,6 +292,12 @@ export function DashboardPage() {
                     <p className="text-2xl font-semibold text-blue-600 dark:text-blue-400">
                       {formatCurrency(period1.telesTotal + period2.telesTotal)}
                     </p>
+                    <p className="text-xs text-muted-foreground">
+                      Income {formatCurrency(paycheckIncome("full").teles)}
+                    </p>
+                    <p className="text-xs font-medium text-blue-600 dark:text-blue-400">
+                      Leftover {formatCurrency(paycheckIncome("full").teles - (period1.telesTotal + period2.telesTotal))}
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3 rounded-lg border p-4">
@@ -274,6 +309,12 @@ export function DashboardPage() {
                     <p className="text-2xl font-semibold text-green-600 dark:text-green-400">
                       {formatCurrency(period1.nicoleTotal + period2.nicoleTotal)}
                     </p>
+                    <p className="text-xs text-muted-foreground">
+                      Income {formatCurrency(paycheckIncome("full").nicole)}
+                    </p>
+                    <p className="text-xs font-medium text-green-600 dark:text-green-400">
+                      Leftover {formatCurrency(paycheckIncome("full").nicole - (period1.nicoleTotal + period2.nicoleTotal))}
+                    </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3 rounded-lg border p-4">
@@ -284,6 +325,12 @@ export function DashboardPage() {
                     <p className="text-sm font-medium text-muted-foreground">Household Total</p>
                     <p className="text-2xl font-semibold">
                       {formatCurrency(period1.householdTotal + period2.householdTotal)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Income {formatCurrency(paycheckIncome("full").teles + paycheckIncome("full").nicole)}
+                    </p>
+                    <p className="text-xs font-medium">
+                      Leftover {formatCurrency(paycheckIncome("full").teles + paycheckIncome("full").nicole - (period1.householdTotal + period2.householdTotal))}
                     </p>
                   </div>
                 </div>
@@ -303,6 +350,8 @@ interface PeriodCardProps {
   formatCurrency: (amount: number) => string;
   togglePaid: (bill: BillInstance) => void;
   isCurrentPeriod: boolean;
+  paycheck: { teles: number; nicole: number };
+  fundingLabel: string;
 }
 
 function PeriodCard({
@@ -311,6 +360,8 @@ function PeriodCard({
   formatCurrency,
   togglePaid,
   isCurrentPeriod,
+  paycheck,
+  fundingLabel,
 }: PeriodCardProps) {
   return (
     <Card className={isCurrentPeriod ? "ring-2 ring-primary" : ""}>
@@ -328,18 +379,37 @@ function PeriodCard({
         </div>
       </CardHeader>
       <CardContent>
+        <p className="mb-3 text-xs text-muted-foreground italic">{fundingLabel}</p>
         <div className="mb-4 grid grid-cols-3 gap-2 rounded-lg bg-muted/50 p-3">
           <div className="text-center">
             <p className="text-xs font-medium text-blue-600 dark:text-blue-400">Teles</p>
             <p className="text-sm font-semibold">{formatCurrency(summary.telesTotal)}</p>
+            <p className="text-[10px] text-muted-foreground">
+              Income {formatCurrency(paycheck.teles)}
+            </p>
+            <p className="text-[10px] font-medium text-blue-600 dark:text-blue-400">
+              Leftover {formatCurrency(paycheck.teles - summary.telesTotal)}
+            </p>
           </div>
           <div className="text-center">
             <p className="text-xs font-medium text-green-600 dark:text-green-400">Nicole</p>
             <p className="text-sm font-semibold">{formatCurrency(summary.nicoleTotal)}</p>
+            <p className="text-[10px] text-muted-foreground">
+              Income {formatCurrency(paycheck.nicole)}
+            </p>
+            <p className="text-[10px] font-medium text-green-600 dark:text-green-400">
+              Leftover {formatCurrency(paycheck.nicole - summary.nicoleTotal)}
+            </p>
           </div>
           <div className="text-center">
             <p className="text-xs font-medium text-muted-foreground">Total</p>
             <p className="text-sm font-semibold">{formatCurrency(summary.householdTotal)}</p>
+            <p className="text-[10px] text-muted-foreground">
+              Income {formatCurrency(paycheck.teles + paycheck.nicole)}
+            </p>
+            <p className="text-[10px] font-medium">
+              Leftover {formatCurrency(paycheck.teles + paycheck.nicole - summary.householdTotal)}
+            </p>
           </div>
         </div>
 
