@@ -23,6 +23,25 @@ export function activePeriodView(date = new Date()): PeriodView {
   return activePeriodBucket(date);
 }
 
+export function isCurrentCalendarMonth(
+  viewedDate: Date,
+  today = new Date()
+): boolean {
+  return (
+    viewedDate.getFullYear() === today.getFullYear() &&
+    viewedDate.getMonth() === today.getMonth()
+  );
+}
+
+export function defaultPeriodViewForMonth(
+  viewedDate: Date,
+  today = new Date()
+): PeriodView {
+  return isCurrentCalendarMonth(viewedDate, today)
+    ? activePeriodView(today)
+    : "full";
+}
+
 export function paycheckIncome(view: PeriodView): { teles: number; nicole: number } {
   if (view === "full") {
     return { teles: TELES_PAYCHECK * 2, nicole: NICOLE_PAYCHECK * 2 };
