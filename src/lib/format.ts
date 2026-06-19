@@ -41,6 +41,18 @@ export function computeDebtPaymentAmounts(
   return amounts;
 }
 
+/** Projected balance after each payment if all were paid in order; does not mutate actual balance. */
+export function computeProjectedRemainingBalances(
+  startingBalance: number,
+  paymentAmounts: number[]
+): number[] {
+  let remaining = startingBalance;
+  return paymentAmounts.map((payment) => {
+    remaining = Math.max(0, Math.round((remaining - payment) * 100) / 100);
+    return remaining;
+  });
+}
+
 export function splitDebtPayment(
   totalPayment: number,
   splitType: "5149" | "custom",

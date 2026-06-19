@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   computeDebtPaymentAmounts,
+  computeProjectedRemainingBalances,
   computeRegularDebtPayment,
   debtBillInstanceName,
   formatCurrency,
@@ -53,6 +54,24 @@ describe("computeDebtPaymentAmounts", () => {
     const amounts = computeDebtPaymentAmounts(1502.13, 4);
     const total = amounts.reduce((sum, amount) => sum + amount, 0);
     expect(Math.round(total * 100) / 100).toBe(1502.13);
+  });
+});
+
+describe("computeProjectedRemainingBalances", () => {
+  it("projects remaining balance after each scheduled payment", () => {
+    const amounts = computeDebtPaymentAmounts(1502.13, 4);
+    expect(amounts).toEqual([375.53, 375.53, 375.53, 375.54]);
+    expect(computeProjectedRemainingBalances(1502.13, amounts)).toEqual([
+      1126.6, 751.07, 375.54, 0,
+    ]);
+  });
+
+  it("ends at zero on the final payment without changing actual balance", () => {
+    const balance = 1502.13;
+    const amounts = computeDebtPaymentAmounts(balance, 4);
+    const projected = computeProjectedRemainingBalances(balance, amounts);
+    expect(projected[projected.length - 1]).toBe(0);
+    expect(balance).toBe(1502.13);
   });
 });
 

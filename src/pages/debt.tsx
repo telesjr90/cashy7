@@ -46,6 +46,7 @@ import {
   debtBillInstanceName,
   computeRegularDebtPayment,
   computeDebtPaymentAmounts,
+  computeProjectedRemainingBalances,
   splitDebtPayment,
 } from "@/lib/format";
 import {
@@ -455,7 +456,10 @@ export function DebtPage() {
 
     try {
       const firstPaymentDate = parseISO(scheduleForm.firstPaymentDate);
-      let remainingBalance = account.current_balance;
+      const projectedRemaining = computeProjectedRemainingBalances(
+        account.current_balance,
+        paymentAmounts
+      );
 
       for (let i = 0; i < paymentAmounts.length; i++) {
         const totalPayment = paymentAmounts[i];
@@ -465,11 +469,6 @@ export function DebtPage() {
           customTeles,
           customNicole,
           regularPayment
-        );
-
-        remainingBalance = Math.max(
-          0,
-          Math.round((remainingBalance - totalPayment) * 100) / 100
         );
 
         const paymentDate = format(addMonths(firstPaymentDate, i), "yyyy-MM-dd");
@@ -485,15 +484,10 @@ export function DebtPage() {
           totalPayment,
           telesAmount: teles,
           nicoleAmount: nicole,
-          remainingBalance,
+          remainingBalance: projectedRemaining[i],
           paidStatus: false,
         });
       }
-
-      await supabase
-        .from("debt_accounts")
-        .update({ current_balance: remainingBalance })
-        .eq("id", account.id);
 
       fetchData();
     } catch (err) {
@@ -1345,7 +1339,9 @@ export function DebtPage() {
                     <TableHead className="text-right text-green-600 dark:text-green-400">
                       Nicole
                     </TableHead>
-                    <TableHead className="text-right">Remaining</TableHead>
+                    <TableHead className="text-right">
+                      Projected Remaining After Payment
+                    </TableHead>
                     <TableHead className="w-12"></TableHead>
                   </TableRow>
                 </TableHeader>
