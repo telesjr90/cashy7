@@ -8,9 +8,14 @@ export function split5149(total: number): { teles: number; nicole: number } {
   return { teles: t, nicole: n };
 }
 
+const CAD_SYMBOL = "CA" + String.fromCharCode(36);
+
 export function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat("en-CA", {
-    style: "currency",
-    currency: "CAD",
-  }).format(Number.isFinite(amount) ? amount : 0);
+  const value = Number.isFinite(amount) ? amount : 0;
+  const formatted = new Intl.NumberFormat("en-CA", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(Math.abs(value));
+  const body = CAD_SYMBOL + formatted;
+  return value < 0 ? "-" + body : body;
 }

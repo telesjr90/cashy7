@@ -268,7 +268,7 @@ export function AddBillPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="amount">Total Amount ($)</Label>
+                  <Label htmlFor="amount">Total Amount (CA$)</Label>
                   <Input
                     id="amount"
                     type="number"
@@ -285,7 +285,7 @@ export function AddBillPage() {
 
               <div className="grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="telesAmount">Teles Amount ($)</Label>
+                  <Label htmlFor="telesAmount">Teles Amount (CA$)</Label>
                   <Input
                     id="telesAmount"
                     type="number"
@@ -304,7 +304,7 @@ export function AddBillPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="nicoleAmount">Nicole Amount ($)</Label>
+                  <Label htmlFor="nicoleAmount">Nicole Amount (CA$)</Label>
                   <Input
                     id="nicoleAmount"
                     type="number"

@@ -397,7 +397,7 @@ export function DebtPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="originalAmount">Original Amount ($)</Label>
+                    <Label htmlFor="originalAmount">Original Amount (CA$)</Label>
                     <Input
                       id="originalAmount"
                       type="number"
@@ -418,7 +418,7 @@ export function DebtPage() {
                 </div>
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
-                    <Label htmlFor="currentBalance">Current Balance ($)</Label>
+                    <Label htmlFor="currentBalance">Current Balance (CA$)</Label>
                     <Input
                       id="currentBalance"
                       type="number"
@@ -611,7 +611,7 @@ export function DebtPage() {
                 </div>
                 <div className="grid gap-4 md:grid-cols-3">
                   <div className="space-y-2">
-                    <Label htmlFor="totalPayment">Total Payment ($)</Label>
+                    <Label htmlFor="totalPayment">Total Payment (CA$)</Label>
                     <Input
                       id="totalPayment"
                       type="number"
@@ -625,7 +625,7 @@ export function DebtPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="telesPayment">Teles Amount ($)</Label>
+                    <Label htmlFor="telesPayment">Teles Amount (CA$)</Label>
                     <Input
                       id="telesPayment"
                       type="number"
@@ -641,7 +641,7 @@ export function DebtPage() {
                     />
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="nicolePayment">Nicole Amount ($)</Label>
+                    <Label htmlFor="nicolePayment">Nicole Amount (CA$)</Label>
                     <Input
                       id="nicolePayment"
                       type="number"
