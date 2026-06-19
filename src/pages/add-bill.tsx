@@ -25,7 +25,7 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Switch } from "@/components/ui/switch";
 import { Loader as Loader2, ArrowLeft } from "lucide-react";
-import { split5149 } from "@/lib/format";
+import { split5149, formatCurrency } from "@/lib/format";
 
 const MONTHS = [
   { value: "1", label: "January" },
@@ -244,7 +244,8 @@ export function AddBillPage() {
                       {billTemplates.map((template) => (
                         <SelectItem key={template.id} value={template.id}>
                           {template.name} - {template.period_bucket === "1_14" ? "1st-14th" : "15th-EOM"}
-                          {template.default_amount && ` ($${template.default_amount})`}
+                          {template.default_amount != null &&
+                            ` (${formatCurrency(template.default_amount)})`}
                         </SelectItem>
                       ))}
                     </SelectContent>
