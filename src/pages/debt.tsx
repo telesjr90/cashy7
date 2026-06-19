@@ -31,8 +31,9 @@ import {
 } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { ArrowLeft, Plus, Loader2, CreditCard, Trash2 } from "lucide-react";
+import { ArrowLeft, Plus, Loader as Loader2, CreditCard, Trash2 } from "lucide-react";
 import { format } from "date-fns";
+import { split5149, formatCurrency } from "@/lib/format";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -119,21 +120,14 @@ export function DebtPage() {
     fetchData();
   }, [fetchData]);
 
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-    }).format(amount);
-  };
-
   const handlePaymentAmountChange = (value: string) => {
     const amount = parseFloat(value) || 0;
-    const halfAmount = (amount / 2).toFixed(2);
+    const { teles, nicole } = split5149(amount);
     setPaymentForm((prev) => ({
       ...prev,
       totalPayment: value,
-      telesAmount: halfAmount,
-      nicoleAmount: halfAmount,
+      telesAmount: teles.toFixed(2),
+      nicoleAmount: nicole.toFixed(2),
     }));
   };
 

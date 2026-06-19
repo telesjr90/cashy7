@@ -47,6 +47,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { formatCurrency } from "@/lib/format";
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -107,13 +108,6 @@ export function BillsPage() {
     if (!error) {
       setBills((prev) => prev.filter((b) => b.id !== billId));
     }
-  };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-    }).format(amount);
   };
 
   const navigateMonth = (direction: "prev" | "next") => {

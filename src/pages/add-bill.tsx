@@ -24,7 +24,8 @@ import {
 } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Switch } from "@/components/ui/switch";
-import { Loader2, ArrowLeft } from "lucide-react";
+import { Loader as Loader2, ArrowLeft } from "lucide-react";
+import { split5149 } from "@/lib/format";
 
 const MONTHS = [
   { value: "1", label: "January" },
@@ -97,20 +98,20 @@ export function AddBillPage() {
         name: template.name,
         amount: amount.toString(),
         periodBucket: template.period_bucket,
-        telesAmount: (amount / 2).toFixed(2),
-        nicoleAmount: (amount / 2).toFixed(2),
+        telesAmount: split5149(amount).teles.toFixed(2),
+        nicoleAmount: split5149(amount).nicole.toFixed(2),
       }));
     }
   }, [billTemplates]);
 
   const handleAmountChange = (value: string) => {
     const amount = parseFloat(value) || 0;
-    const halfAmount = (amount / 2).toFixed(2);
+    const { teles, nicole } = split5149(amount);
     setFormData((prev) => ({
       ...prev,
       amount: value,
-      telesAmount: halfAmount,
-      nicoleAmount: halfAmount,
+      telesAmount: teles.toFixed(2),
+      nicoleAmount: nicole.toFixed(2),
     }));
   };
 

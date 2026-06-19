@@ -30,6 +30,7 @@ import {
   Calendar,
 } from "lucide-react";
 import { format } from "date-fns";
+import { formatCurrency } from "@/lib/format";
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -98,13 +99,6 @@ export function DashboardPage() {
       nicoleTotal,
       householdTotal,
     };
-  };
-
-  const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-    }).format(amount);
   };
 
   const navigateMonth = (direction: "prev" | "next") => {
