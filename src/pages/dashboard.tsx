@@ -32,7 +32,8 @@ import {
 import { format, parseISO } from "date-fns";
 import { formatCurrency } from "@/lib/format";
 import { filterBillInstancesByCashflowStart } from "@/lib/cashflow-filter";
-import { getHouseholdSettings } from "@/lib/cashflow-settings";
+import { getHouseholdSettings, getMyLatestCashSnapshot } from "@/lib/cashflow-settings";
+import type { CashSnapshot } from "@/lib/types";
 import { syncBillPaidStatusWithDebt } from "@/lib/sync-bill-paid-status";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
@@ -57,19 +58,37 @@ interface PeriodSummary {
 }
 
 export function DashboardPage() {
-  const { household } = useAuth();
+  const { household, user } = useAuth();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [bills, setBills] = useState<BillInstance[]>([]);
   const [loading, setLoading] = useState(true);
   const [cashflowStartDate, setCashflowStartDate] = useState<string | null>(null);
   const [settingsError, setSettingsError] = useState<string | null>(null);
   const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [cashSnapshot, setCashSnapshot] = useState<CashSnapshot | null>(null);
+  const [cashSnapshotLoading, setCashSnapshotLoading] = useState(true);
+  const [cashSnapshotError, setCashSnapshotError] = useState<string | null>(null);
   const [periodView, setPeriodView] = useState<PeriodView>(() =>
     defaultPeriodViewForMonth(new Date())
   );
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth() + 1;
+
+  const fetchCashSnapshot = useCallback(async () => {
+    if (!household || !user) return;
+
+    setCashSnapshotLoading(true);
+    const { snapshot, error } = await getMyLatestCashSnapshot(household.id, user.id);
+    if (error) {
+      setCashSnapshotError(error);
+      setCashSnapshot(null);
+    } else {
+      setCashSnapshotError(null);
+      setCashSnapshot(snapshot);
+    }
+    setCashSnapshotLoading(false);
+  }, [household, user]);
 
   const fetchSettings = useCallback(async () => {
     if (!household) return;
@@ -109,6 +128,10 @@ export function DashboardPage() {
   useEffect(() => {
     fetchSettings();
   }, [fetchSettings]);
+
+  useEffect(() => {
+    fetchCashSnapshot();
+  }, [fetchCashSnapshot]);
 
   useEffect(() => {
     fetchBills();
@@ -248,6 +271,47 @@ export function DashboardPage() {
             Ignoring bills before {format(parseISO(cashflowStartDate), "MMM d, yyyy")}
           </p>
         )}
+
+        <Card className="mb-6">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Your current available amount</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {cashSnapshotError && (
+              <Alert variant="destructive" className="mb-3">
+                <AlertDescription>
+                  Could not load your current available amount. ({cashSnapshotError})
+                </AlertDescription>
+              </Alert>
+            )}
+            {cashSnapshotLoading ? (
+              <Skeleton className="h-8 w-48" />
+            ) : cashSnapshot ? (
+              <div className="space-y-1">
+                <p className="text-2xl font-semibold">
+                  {formatCurrency(Number(cashSnapshot.amount))}
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Snapshot date: {cashSnapshot.snapshot_date}
+                </p>
+                {cashSnapshot.notes && (
+                  <p className="text-sm text-muted-foreground">{cashSnapshot.notes}</p>
+                )}
+              </div>
+            ) : !cashSnapshotError ? (
+              <div className="space-y-2">
+                <p className="text-sm text-muted-foreground">
+                  No current amount recorded yet.
+                </p>
+                <Link to="/settings">
+                  <Button variant="link" className="h-auto p-0">
+                    Record it in Settings
+                  </Button>
+                </Link>
+              </div>
+            ) : null}
+          </CardContent>
+        </Card>
 
         <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-2">
