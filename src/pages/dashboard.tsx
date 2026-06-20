@@ -8,9 +8,22 @@ import {
 } from "@/lib/bill-share";
 import { getManualExpenses, sumMyManualExpenseShareForView } from "@/lib/expenses";
 import {
+  buildBillInstanceNameLookup,
+  buildDebtPaymentDescriptionLookup,
+  buildManualExpenseDescriptionLookup,
+  getBillInstancesByIds,
+  getDebtPaymentsByIds,
   getMyCashPaymentTransactions,
   getPaidManualExpenseSourceIds,
 } from "@/lib/payments";
+import { getMyCashAdjustmentTransactions } from "@/lib/cash-adjustments";
+import {
+  buildAdjustmentManualExpenseDescriptionLookup,
+  mapRecentCashActivityForDisplay,
+  RECENT_CASH_ACTIVITY_DISPLAY_LIMIT,
+  RECENT_CASH_ACTIVITY_FETCH_LIMIT,
+  type RecentCashActivityDisplayRow,
+} from "@/lib/cash-activity";
 import { getHouseholdPeople } from "@/lib/user-person";
 import type { Person } from "@/lib/types";
 import { useAuth } from "@/lib/auth-context";
@@ -72,6 +85,10 @@ const MONTHS = [
   "July", "August", "September", "October", "November", "December"
 ];
 
+function formatActivityDate(isoDate: string): string {
+  return format(parseISO(isoDate), "MMMM d, yyyy");
+}
+
 interface PeriodSummary {
   bills: BillInstance[];
   telesTotal: number;
@@ -107,6 +124,11 @@ export function DashboardPage() {
   const [paymentTransactions, setPaymentTransactions] = useState<CashPaymentTransaction[]>([]);
   const [paymentTransactionsLoading, setPaymentTransactionsLoading] = useState(true);
   const [paymentTransactionsError, setPaymentTransactionsError] = useState<string | null>(null);
+  const [recentCashActivityRows, setRecentCashActivityRows] = useState<
+    RecentCashActivityDisplayRow[]
+  >([]);
+  const [recentCashActivityLoading, setRecentCashActivityLoading] = useState(true);
+  const [recentCashActivityError, setRecentCashActivityError] = useState<string | null>(null);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth() + 1;
@@ -240,6 +262,103 @@ export function DashboardPage() {
     setPaymentTransactionsLoading(false);
   }, [household, user]);
 
+  const fetchRecentCashActivity = useCallback(
+    async (options?: { background?: boolean }) => {
+      if (!household || !user) return;
+
+      const background = options?.background ?? false;
+      if (!background) {
+        setRecentCashActivityLoading(true);
+      }
+
+      const [paymentResult, adjustmentResult, expensesResult] = await Promise.all([
+        getMyCashPaymentTransactions(
+          household.id,
+          user.id,
+          RECENT_CASH_ACTIVITY_FETCH_LIMIT
+        ),
+        getMyCashAdjustmentTransactions(
+          household.id,
+          user.id,
+          RECENT_CASH_ACTIVITY_FETCH_LIMIT
+        ),
+        getManualExpenses(household.id),
+      ]);
+
+      const errors = [
+        paymentResult.error,
+        adjustmentResult.error,
+        expensesResult.error,
+      ].filter(Boolean);
+
+      if (errors.length > 0) {
+        setRecentCashActivityError(
+          errors[0] ?? "Failed to load recent cash activity."
+        );
+        if (!background) {
+          setRecentCashActivityRows([]);
+        }
+        setRecentCashActivityLoading(false);
+        return;
+      }
+
+      const billInstanceIds = paymentResult.transactions
+        .filter((transaction) => transaction.source_type === "bill_instance")
+        .map((transaction) => transaction.source_id);
+      const uniqueBillInstanceIds = [...new Set(billInstanceIds)];
+
+      const debtPaymentIds = paymentResult.transactions
+        .filter((transaction) => transaction.source_type === "debt_payment")
+        .map((transaction) => transaction.source_id);
+      const uniqueDebtPaymentIds = [...new Set(debtPaymentIds)];
+
+      const [billInstancesResult, debtPaymentsResult] = await Promise.all([
+        getBillInstancesByIds(household.id, uniqueBillInstanceIds),
+        getDebtPaymentsByIds(household.id, uniqueDebtPaymentIds),
+      ]);
+
+      const lookupErrors = [
+        billInstancesResult.error,
+        debtPaymentsResult.error,
+      ].filter(Boolean);
+
+      if (lookupErrors.length > 0) {
+        setRecentCashActivityError(
+          lookupErrors[0] ?? "Failed to load recent cash activity."
+        );
+        if (!background) {
+          setRecentCashActivityRows([]);
+        }
+        setRecentCashActivityLoading(false);
+        return;
+      }
+
+      setRecentCashActivityError(null);
+      setRecentCashActivityRows(
+        mapRecentCashActivityForDisplay({
+          deductions: paymentResult.transactions,
+          credits: adjustmentResult.transactions,
+          lookups: {
+            billInstanceNameById: buildBillInstanceNameLookup(
+              billInstancesResult.billInstances
+            ),
+            debtPaymentDescriptionById: buildDebtPaymentDescriptionLookup(
+              debtPaymentsResult.debtPayments
+            ),
+            manualExpenseDescriptionById: buildManualExpenseDescriptionLookup(
+              expensesResult.expenses
+            ),
+            adjustmentManualExpenseDescriptionById:
+              buildAdjustmentManualExpenseDescriptionLookup(expensesResult.expenses),
+          },
+          limit: RECENT_CASH_ACTIVITY_DISPLAY_LIMIT,
+        })
+      );
+      setRecentCashActivityLoading(false);
+    },
+    [household, user]
+  );
+
   const refreshInFlightRef = useRef(false);
   const lastRefreshAtRef = useRef(0);
   const skipInitialFocusRef = useRef(true);
@@ -361,11 +480,13 @@ export function DashboardPage() {
           setSavingsContributionsError(null);
           setSavingsContributions(contributions);
         }
+
+        await fetchRecentCashActivity({ background: true });
       } finally {
         refreshInFlightRef.current = false;
       }
     },
-    [household, user, year, month, refreshHousehold]
+    [household, user, year, month, refreshHousehold, fetchRecentCashActivity]
   );
 
   useEffect(() => {
@@ -417,6 +538,10 @@ export function DashboardPage() {
   useEffect(() => {
     fetchPaymentTransactions();
   }, [fetchPaymentTransactions]);
+
+  useEffect(() => {
+    fetchRecentCashActivity();
+  }, [fetchRecentCashActivity]);
 
   useEffect(() => {
     fetchCashSnapshot();
@@ -669,6 +794,49 @@ export function DashboardPage() {
                 </Link>
               </div>
             ) : null}
+          </CardContent>
+        </Card>
+
+        <Card className="mb-6">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Recent cash activity</CardTitle>
+            <CardDescription>Recent changes to your current amount.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {recentCashActivityError && (
+              <Alert variant="destructive" className="mb-3">
+                <AlertDescription>
+                  Could not load recent cash activity. ({recentCashActivityError})
+                </AlertDescription>
+              </Alert>
+            )}
+            {recentCashActivityLoading ? (
+              <Skeleton className="h-24 w-full" />
+            ) : recentCashActivityRows.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No cash activity yet.</p>
+            ) : (
+              <ul className="space-y-2 text-sm">
+                {recentCashActivityRows.map((activity) => (
+                  <li
+                    key={activity.id}
+                    className="rounded-md bg-muted/40 px-3 py-2"
+                  >
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <span className="font-medium">{activity.amountLabel}</span>
+                      <span className="text-muted-foreground">
+                        {formatActivityDate(activity.date)}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-muted-foreground">
+                      {activity.typeLabel} · {activity.sourceLabel} · {activity.description}
+                    </p>
+                    {activity.notes && (
+                      <p className="mt-1 text-muted-foreground">{activity.notes}</p>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
           </CardContent>
         </Card>
 
