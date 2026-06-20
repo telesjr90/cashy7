@@ -29,9 +29,12 @@ import {
   User,
   Calendar,
 } from "lucide-react";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { formatCurrency } from "@/lib/format";
+import { filterBillInstancesByCashflowStart } from "@/lib/cashflow-filter";
+import { getHouseholdSettings } from "@/lib/cashflow-settings";
 import { syncBillPaidStatusWithDebt } from "@/lib/sync-bill-paid-status";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   activePeriodView,
   defaultPeriodViewForMonth,
@@ -58,6 +61,9 @@ export function DashboardPage() {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [bills, setBills] = useState<BillInstance[]>([]);
   const [loading, setLoading] = useState(true);
+  const [cashflowStartDate, setCashflowStartDate] = useState<string | null>(null);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [periodView, setPeriodView] = useState<PeriodView>(() =>
     defaultPeriodViewForMonth(new Date())
   );
@@ -65,8 +71,25 @@ export function DashboardPage() {
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth() + 1;
 
-  const fetchBills = useCallback(async () => {
+  const fetchSettings = useCallback(async () => {
     if (!household) return;
+
+    setSettingsLoaded(false);
+    const { settings, error } = await getHouseholdSettings(household.id);
+    if (error) {
+      setSettingsError(error);
+      setCashflowStartDate(null);
+      setSettingsLoaded(true);
+      return;
+    }
+
+    setSettingsError(null);
+    setCashflowStartDate(settings?.cashflow_start_date ?? null);
+    setSettingsLoaded(true);
+  }, [household]);
+
+  const fetchBills = useCallback(async () => {
+    if (!household || !settingsLoaded) return;
 
     setLoading(true);
     const { data, error } = await supabase
@@ -77,10 +100,15 @@ export function DashboardPage() {
       .eq("month", month);
 
     if (!error && data) {
-      setBills(data as BillInstance[]);
+      const fetchedBills = data as BillInstance[];
+      setBills(filterBillInstancesByCashflowStart(fetchedBills, cashflowStartDate));
     }
     setLoading(false);
-  }, [household, year, month]);
+  }, [household, year, month, cashflowStartDate, settingsLoaded]);
+
+  useEffect(() => {
+    fetchSettings();
+  }, [fetchSettings]);
 
   useEffect(() => {
     fetchBills();
@@ -206,6 +234,21 @@ export function DashboardPage() {
       </div>
 
       <div className="container mx-auto px-4 py-6">
+        {settingsError && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertDescription>
+              Could not load cashflow settings. Dashboard totals may include bills
+              before your cashflow start date. ({settingsError})
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {cashflowStartDate && (
+          <p className="mb-4 text-xs text-muted-foreground">
+            Ignoring bills before {format(parseISO(cashflowStartDate), "MMM d, yyyy")}
+          </p>
+        )}
+
         <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Button variant="outline" size="icon" onClick={() => navigateMonth("prev")}>
