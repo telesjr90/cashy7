@@ -49,6 +49,7 @@ import {
   computeProjectedRemainingBalances,
   splitDebtPayment,
   applyDebtPaymentBalanceChange,
+  applyPaidDebtPaymentAmountEdit,
 } from "@/lib/format";
 import {
   AlertDialog,
@@ -61,6 +62,14 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 const MONTHS = [
   { value: "1", label: "January" },
@@ -135,12 +144,19 @@ export function DebtPage() {
   const [showPaymentForm, setShowPaymentForm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
   const [pendingGenerateAccountId, setPendingGenerateAccountId] = useState<
     string | null
   >(null);
   const [togglingPaymentId, setTogglingPaymentId] = useState<string | null>(
     null
   );
+  const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null);
+  const [paymentEditForm, setPaymentEditForm] = useState({
+    totalPayment: "",
+    telesAmount: "",
+    nicoleAmount: "",
+  });
 
   const now = new Date();
   const currentMonth = now.getMonth() + 1;
@@ -202,6 +218,131 @@ export function DebtPage() {
       telesAmount: teles.toFixed(2),
       nicoleAmount: nicole.toFixed(2),
     }));
+  };
+
+  const handlePaymentEditAmountChange = (value: string) => {
+    const amount = parseFloat(value) || 0;
+    const { teles, nicole } = split5149(amount);
+    setPaymentEditForm({
+      totalPayment: value,
+      telesAmount: teles.toFixed(2),
+      nicoleAmount: nicole.toFixed(2),
+    });
+  };
+
+  const startEditPayment = (payment: DebtPayment) => {
+    setError(null);
+    setWarning(null);
+    setEditingPaymentId(payment.id);
+    setPaymentEditForm({
+      totalPayment: payment.total_payment.toString(),
+      telesAmount: payment.teles_amount.toString(),
+      nicoleAmount: payment.nicole_amount.toString(),
+    });
+  };
+
+  const updateDebtPayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    setWarning(null);
+
+    const payment = debtPayments.find((p) => p.id === editingPaymentId);
+    if (!payment) {
+      setError("No payment selected for editing");
+      return;
+    }
+
+    const totalPayment = parseFloat(paymentEditForm.totalPayment);
+    const telesAmount = parseFloat(paymentEditForm.telesAmount);
+    const nicoleAmount = parseFloat(paymentEditForm.nicoleAmount);
+
+    if (isNaN(totalPayment) || totalPayment <= 0) {
+      setError("Please enter a valid payment amount");
+      return;
+    }
+
+    if (isNaN(telesAmount) || isNaN(nicoleAmount)) {
+      setError("Please enter valid amounts for Teles and Nicole");
+      return;
+    }
+
+    if (Math.abs(telesAmount + nicoleAmount - totalPayment) > 0.01) {
+      setError("Teles and Nicole amounts must add up to the total payment");
+      return;
+    }
+
+    const account = debtAccounts.find((a) => a.id === payment.debt_account_id);
+    if (!account) {
+      setError("Debt account not found");
+      return;
+    }
+
+    setSubmitting(true);
+
+    try {
+      const oldTotal = Number(payment.total_payment);
+      const amountChanged = Math.abs(oldTotal - totalPayment) > 0.001;
+
+      let remainingBalance = payment.remaining_balance_after_payment;
+      if (!payment.paid_status) {
+        remainingBalance = Math.max(
+          0,
+          Math.round((account.current_balance - totalPayment) * 100) / 100
+        );
+      }
+
+      const { error: paymentError } = await supabase
+        .from("debt_payments")
+        .update({
+          total_payment: totalPayment,
+          teles_amount: telesAmount,
+          nicole_amount: nicoleAmount,
+          remaining_balance_after_payment: remainingBalance,
+        })
+        .eq("id", payment.id);
+
+      if (paymentError) throw new Error(paymentError.message);
+
+      if (payment.linked_bill_instance_id) {
+        const { error: billError } = await supabase
+          .from("bill_instances")
+          .update({
+            amount: totalPayment,
+            teles_amount: telesAmount,
+            nicole_amount: nicoleAmount,
+          })
+          .eq("id", payment.linked_bill_instance_id);
+
+        if (billError) throw new Error(billError.message);
+      } else {
+        setWarning(
+          "Payment saved, but no linked bill instance was found. Bills and Dashboard totals may be incorrect for this payment."
+        );
+      }
+
+      if (payment.paid_status && amountChanged) {
+        const newBalance = applyPaidDebtPaymentAmountEdit(
+          account.current_balance,
+          oldTotal,
+          totalPayment,
+          true
+        );
+
+        const { error: balanceError } = await supabase
+          .from("debt_accounts")
+          .update({ current_balance: newBalance })
+          .eq("id", account.id);
+
+        if (balanceError) throw new Error(balanceError.message);
+      }
+
+      setEditingPaymentId(null);
+      fetchData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const handleSchedulePaymentAmountChange = (value: string) => {
@@ -886,6 +1027,11 @@ export function DebtPage() {
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
+        {warning && (
+          <Alert>
+            <AlertDescription>{warning}</AlertDescription>
+          </Alert>
+        )}
 
         {/* Debt Accounts Section */}
         <Card>
@@ -1427,7 +1573,7 @@ export function DebtPage() {
                     <TableHead className="text-right">
                       Projected Remaining After Payment
                     </TableHead>
-                    <TableHead className="w-12"></TableHead>
+                    <TableHead className="w-24"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -1467,7 +1613,16 @@ export function DebtPage() {
                           : "-"}
                       </TableCell>
                       <TableCell>
-                        <AlertDialog>
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => startEditPayment(payment)}
+                            disabled={submitting || togglingPaymentId === payment.id}
+                          >
+                            <Pencil className="h-4 w-4 text-muted-foreground" />
+                          </Button>
+                          <AlertDialog>
                           <AlertDialogTrigger asChild>
                             <Button variant="ghost" size="icon">
                               <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
@@ -1492,6 +1647,7 @@ export function DebtPage() {
                             </AlertDialogFooter>
                           </AlertDialogContent>
                         </AlertDialog>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}
@@ -1501,6 +1657,90 @@ export function DebtPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Dialog
+        open={editingPaymentId !== null}
+        onOpenChange={(open) => {
+          if (!open) setEditingPaymentId(null);
+        }}
+      >
+        <DialogContent>
+          <form onSubmit={updateDebtPayment}>
+            <DialogHeader>
+              <DialogTitle>Edit Payment</DialogTitle>
+              <DialogDescription>
+                Update the payment amount and Teles/Nicole split. Linked bill
+                instances stay in sync.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="editTotalPayment">Total Payment (CA$)</Label>
+                <Input
+                  id="editTotalPayment"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={paymentEditForm.totalPayment}
+                  onChange={(e) => handlePaymentEditAmountChange(e.target.value)}
+                  disabled={submitting}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="editTelesAmount">Teles Amount (CA$)</Label>
+                <Input
+                  id="editTelesAmount"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={paymentEditForm.telesAmount}
+                  onChange={(e) =>
+                    setPaymentEditForm((prev) => ({
+                      ...prev,
+                      telesAmount: e.target.value,
+                    }))
+                  }
+                  disabled={submitting}
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="editNicoleAmount">Nicole Amount (CA$)</Label>
+                <Input
+                  id="editNicoleAmount"
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={paymentEditForm.nicoleAmount}
+                  onChange={(e) =>
+                    setPaymentEditForm((prev) => ({
+                      ...prev,
+                      nicoleAmount: e.target.value,
+                    }))
+                  }
+                  disabled={submitting}
+                  required
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setEditingPaymentId(null)}
+                disabled={submitting}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={submitting}>
+                {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Save Changes
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog
         open={pendingGenerateAccountId !== null}

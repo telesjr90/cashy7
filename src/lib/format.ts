@@ -55,6 +55,20 @@ export function applyDebtPaymentBalanceChange(
   return Math.round((currentBalance + paymentAmount) * 100) / 100;
 }
 
+/** Adjust current balance when an already-paid payment amount changes. */
+export function applyPaidDebtPaymentAmountEdit(
+  currentBalance: number,
+  oldPaymentAmount: number,
+  newPaymentAmount: number,
+  isPaid: boolean
+): number {
+  if (!isPaid || oldPaymentAmount === newPaymentAmount) {
+    return currentBalance;
+  }
+  const difference = newPaymentAmount - oldPaymentAmount;
+  return Math.max(0, Math.round((currentBalance - difference) * 100) / 100);
+}
+
 /** Projected balance after each payment if all were paid in order; does not mutate actual balance. */
 export function computeProjectedRemainingBalances(
   startingBalance: number,

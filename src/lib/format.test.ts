@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   applyDebtPaymentBalanceChange,
+  applyPaidDebtPaymentAmountEdit,
   computeDebtPaymentAmounts,
   computeProjectedRemainingBalances,
   computeRegularDebtPayment,
@@ -92,6 +93,28 @@ describe("applyDebtPaymentBalanceChange", () => {
   it("keeps cent rounding stable", () => {
     expect(applyDebtPaymentBalanceChange(0.01, 0.01, "pay")).toBe(0);
     expect(applyDebtPaymentBalanceChange(0, 0.01, "unpay")).toBe(0.01);
+  });
+});
+
+describe("applyPaidDebtPaymentAmountEdit", () => {
+  it("decreases current balance when an already-paid payment increases", () => {
+    expect(applyPaidDebtPaymentAmountEdit(500, 100, 120, true)).toBe(480);
+  });
+
+  it("increases current balance when an already-paid payment decreases", () => {
+    expect(applyPaidDebtPaymentAmountEdit(500, 120, 100, true)).toBe(520);
+  });
+
+  it("does not change current balance for unpaid payment edits", () => {
+    expect(applyPaidDebtPaymentAmountEdit(500, 100, 120, false)).toBe(500);
+  });
+
+  it("does not change current balance for split-only edits", () => {
+    expect(applyPaidDebtPaymentAmountEdit(500, 100, 100, true)).toBe(500);
+  });
+
+  it("does not reduce balance below zero", () => {
+    expect(applyPaidDebtPaymentAmountEdit(10, 100, 120, true)).toBe(0);
   });
 });
 
