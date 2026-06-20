@@ -7,9 +7,10 @@ import { DashboardPage } from "@/pages/dashboard";
 import { BillsPage } from "@/pages/bills";
 import { AddBillPage } from "@/pages/add-bill";
 import { DebtPage } from "@/pages/debt";
+import { SettingsPage } from "@/pages/settings";
 import { ModeToggle } from "@/components/mode-toggle";
 import { Button } from "@/components/ui/button";
-import { LogOut, Home, FileText, LayoutDashboard, CreditCard } from "lucide-react";
+import { LogOut, Home, FileText, LayoutDashboard, CreditCard, Settings } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 
 function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
@@ -54,6 +55,12 @@ function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
                 <Button variant={location.pathname === "/debt" ? "secondary" : "ghost"} size="sm">
                   <CreditCard className="mr-2 h-4 w-4" />
                   Debt
+                </Button>
+              </Link>
+              <Link to="/settings">
+                <Button variant={location.pathname === "/settings" ? "secondary" : "ghost"} size="sm">
+                  <Settings className="mr-2 h-4 w-4" />
+                  Settings
                 </Button>
               </Link>
             </nav>
@@ -158,6 +165,14 @@ function AppRoutes() {
         element={
           <AuthenticatedLayout>
             <DebtPage />
+          </AuthenticatedLayout>
+        }
+      />
+      <Route
+        path="/settings"
+        element={
+          <AuthenticatedLayout>
+            <SettingsPage />
           </AuthenticatedLayout>
         }
       />
