@@ -12,6 +12,66 @@ function toSafeNumber(value: number | string): number | null {
   return Number.isFinite(num) ? num : null;
 }
 
+function parseContributionDateOnly(
+  contributionDate: string | null | undefined
+): string | null {
+  if (!contributionDate) {
+    return null;
+  }
+
+  const match = contributionDate.match(/^(\d{4}-\d{2}-\d{2})/);
+  return match ? match[1] : null;
+}
+
+/** ISO date range for the Dashboard's selected month and period view. */
+export function getDashboardViewDateRange(
+  periodView: PeriodView,
+  selectedYear: number,
+  selectedMonth: number
+): { start: string; end: string } {
+  const monthStr = String(selectedMonth).padStart(2, "0");
+  const lastDay = new Date(selectedYear, selectedMonth, 0).getDate();
+  const endDayStr = String(lastDay).padStart(2, "0");
+
+  if (periodView === "1_14") {
+    return {
+      start: `${selectedYear}-${monthStr}-01`,
+      end: `${selectedYear}-${monthStr}-14`,
+    };
+  }
+
+  if (periodView === "15_eom") {
+    return {
+      start: `${selectedYear}-${monthStr}-15`,
+      end: `${selectedYear}-${monthStr}-${endDayStr}`,
+    };
+  }
+
+  return {
+    start: `${selectedYear}-${monthStr}-01`,
+    end: `${selectedYear}-${monthStr}-${endDayStr}`,
+  };
+}
+
+function contributionDateInViewRange(
+  contributionDate: string | null | undefined,
+  periodView: PeriodView,
+  selectedYear: number,
+  selectedMonth: number
+): boolean {
+  const dateOnly = parseContributionDateOnly(contributionDate);
+  if (!dateOnly) {
+    return false;
+  }
+
+  const { start, end } = getDashboardViewDateRange(
+    periodView,
+    selectedYear,
+    selectedMonth
+  );
+  return dateOnly >= start && dateOnly <= end;
+}
+
 function participantMatchesView(
   contributionPeriod: SavingsGoalParticipant["contribution_period"],
   periodView: PeriodView
@@ -46,7 +106,9 @@ export function sumMySavingsTargetForView(
 export function sumMySavingsContributionsForView(
   contributions: SavingsContribution[],
   participants: SavingsGoalParticipant[],
-  periodView: PeriodView
+  periodView: PeriodView,
+  selectedYear: number,
+  selectedMonth: number
 ): number {
   const matchingGoalIds = new Set(
     participants
@@ -58,6 +120,17 @@ export function sumMySavingsContributionsForView(
 
   return contributions.reduce((sum, contribution) => {
     if (!matchingGoalIds.has(contribution.savings_goal_id)) {
+      return sum;
+    }
+
+    if (
+      !contributionDateInViewRange(
+        contribution.contribution_date,
+        periodView,
+        selectedYear,
+        selectedMonth
+      )
+    ) {
       return sum;
     }
 

@@ -332,7 +332,9 @@ export function DashboardPage() {
   const myContributionsForView = sumMySavingsContributionsForView(
     savingsContributions,
     savingsParticipants,
-    periodView
+    periodView,
+    year,
+    month
   );
   const remainingSavingsObligationForView = calculateRemainingSavingsObligation(
     mySavingsTargetForView,

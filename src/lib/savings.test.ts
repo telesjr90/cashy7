@@ -4,6 +4,7 @@ import {
   calculateRemainingSavingsObligation,
   calculateSafeToSpendAfterSavings,
   filterMyContributionsForGoal,
+  getDashboardViewDateRange,
   sumMyContributionsForGoal,
   sumMySavingsContributionsForView,
   sumMySavingsTargetForView,
@@ -156,73 +157,237 @@ describe("sumMySavingsTargetForView", () => {
   });
 });
 
+describe("getDashboardViewDateRange", () => {
+  it("returns day 1 through 14 for 1_14 view", () => {
+    expect(getDashboardViewDateRange("1_14", 2026, 1)).toEqual({
+      start: "2026-01-01",
+      end: "2026-01-14",
+    });
+  });
+
+  it("returns day 15 through month end for 15_eom view", () => {
+    expect(getDashboardViewDateRange("15_eom", 2026, 1)).toEqual({
+      start: "2026-01-15",
+      end: "2026-01-31",
+    });
+  });
+
+  it("returns full month for full view", () => {
+    expect(getDashboardViewDateRange("full", 2026, 1)).toEqual({
+      start: "2026-01-01",
+      end: "2026-01-31",
+    });
+  });
+
+  it("handles leap-year February month end", () => {
+    expect(getDashboardViewDateRange("15_eom", 2024, 2)).toEqual({
+      start: "2024-02-15",
+      end: "2024-02-29",
+    });
+    expect(getDashboardViewDateRange("full", 2024, 2)).toEqual({
+      start: "2024-02-01",
+      end: "2024-02-29",
+    });
+  });
+});
+
 describe("sumMySavingsContributionsForView", () => {
+  const selectedYear = 2026;
+  const selectedMonth = 1;
+
   const participants = [
     participant({ id: "1", savings_goal_id: goalA, contribution_period: "1_14", target_contribution_amount: 100 }),
     participant({ id: "2", savings_goal_id: goalB, contribution_period: "15_eom", target_contribution_amount: 200 }),
     participant({ id: "3", savings_goal_id: "goal-c", contribution_period: "monthly", target_contribution_amount: 300 }),
   ];
 
-  it("counts contributions for 1_14 view", () => {
+  it("1_14 counts only contributions dated day 1-14 in selected month", () => {
     const contributions = [
-      contribution({ savings_goal_id: goalA, amount: 40 }),
-      contribution({ id: "2", savings_goal_id: goalB, amount: 999 }),
+      contribution({ savings_goal_id: goalA, amount: 40, contribution_date: "2026-01-10" }),
+      contribution({ id: "2", savings_goal_id: goalA, amount: 25, contribution_date: "2026-01-14" }),
     ];
 
-    expect(sumMySavingsContributionsForView(contributions, participants, "1_14")).toBe(40);
+    expect(
+      sumMySavingsContributionsForView(
+        contributions,
+        participants,
+        "1_14",
+        selectedYear,
+        selectedMonth
+      )
+    ).toBe(65);
   });
 
-  it("counts contributions for 15_eom view", () => {
+  it("1_14 ignores day 15+ contributions", () => {
     const contributions = [
-      contribution({ savings_goal_id: goalA, amount: 40 }),
-      contribution({ id: "2", savings_goal_id: goalB, amount: 75 }),
+      contribution({ savings_goal_id: goalA, amount: 40, contribution_date: "2026-01-15" }),
+      contribution({ id: "2", savings_goal_id: goalA, amount: 25, contribution_date: "2026-01-31" }),
     ];
 
-    expect(sumMySavingsContributionsForView(contributions, participants, "15_eom")).toBe(75);
+    expect(
+      sumMySavingsContributionsForView(
+        contributions,
+        participants,
+        "1_14",
+        selectedYear,
+        selectedMonth
+      )
+    ).toBe(0);
   });
 
-  it("includes 1_14, 15_eom, and monthly contributions in full view", () => {
+  it("15_eom counts only contributions dated day 15-end of selected month", () => {
     const contributions = [
-      contribution({ savings_goal_id: goalA, amount: 10 }),
-      contribution({ id: "2", savings_goal_id: goalB, amount: 20 }),
-      contribution({ id: "3", savings_goal_id: "goal-c", amount: 30 }),
+      contribution({ savings_goal_id: goalB, amount: 75, contribution_date: "2026-01-15" }),
+      contribution({ id: "2", savings_goal_id: goalB, amount: 25, contribution_date: "2026-01-31" }),
     ];
 
-    expect(sumMySavingsContributionsForView(contributions, participants, "full")).toBe(60);
+    expect(
+      sumMySavingsContributionsForView(
+        contributions,
+        participants,
+        "15_eom",
+        selectedYear,
+        selectedMonth
+      )
+    ).toBe(100);
+  });
+
+  it("15_eom ignores day 1-14 contributions", () => {
+    const contributions = [
+      contribution({ savings_goal_id: goalB, amount: 75, contribution_date: "2026-01-14" }),
+      contribution({ id: "2", savings_goal_id: goalB, amount: 25, contribution_date: "2026-01-01" }),
+    ];
+
+    expect(
+      sumMySavingsContributionsForView(
+        contributions,
+        participants,
+        "15_eom",
+        selectedYear,
+        selectedMonth
+      )
+    ).toBe(0);
+  });
+
+  it("full counts all selected-month contributions for 1_14, 15_eom, and monthly participant periods", () => {
+    const contributions = [
+      contribution({ savings_goal_id: goalA, amount: 10, contribution_date: "2026-01-05" }),
+      contribution({ id: "2", savings_goal_id: goalB, amount: 20, contribution_date: "2026-01-20" }),
+      contribution({ id: "3", savings_goal_id: "goal-c", amount: 30, contribution_date: "2026-01-25" }),
+    ];
+
+    expect(
+      sumMySavingsContributionsForView(
+        contributions,
+        participants,
+        "full",
+        selectedYear,
+        selectedMonth
+      )
+    ).toBe(60);
+  });
+
+  it("full ignores previous-month contributions", () => {
+    const contributions = [
+      contribution({ savings_goal_id: goalA, amount: 50, contribution_date: "2025-12-31" }),
+      contribution({ id: "2", savings_goal_id: goalB, amount: 40, contribution_date: "2026-01-10" }),
+    ];
+
+    expect(
+      sumMySavingsContributionsForView(
+        contributions,
+        participants,
+        "full",
+        selectedYear,
+        selectedMonth
+      )
+    ).toBe(40);
+  });
+
+  it("full ignores next-month contributions", () => {
+    const contributions = [
+      contribution({ savings_goal_id: goalA, amount: 50, contribution_date: "2026-02-01" }),
+      contribution({ id: "2", savings_goal_id: goalB, amount: 40, contribution_date: "2026-01-20" }),
+    ];
+
+    expect(
+      sumMySavingsContributionsForView(
+        contributions,
+        participants,
+        "full",
+        selectedYear,
+        selectedMonth
+      )
+    ).toBe(40);
   });
 
   it("excludes monthly contributions from single-period views", () => {
     const contributions = [
-      contribution({ savings_goal_id: "goal-c", amount: 50 }),
+      contribution({ savings_goal_id: "goal-c", amount: 50, contribution_date: "2026-01-10" }),
     ];
 
-    expect(sumMySavingsContributionsForView(contributions, participants, "1_14")).toBe(0);
-    expect(sumMySavingsContributionsForView(contributions, participants, "15_eom")).toBe(0);
+    expect(
+      sumMySavingsContributionsForView(
+        contributions,
+        participants,
+        "1_14",
+        selectedYear,
+        selectedMonth
+      )
+    ).toBe(0);
+    expect(
+      sumMySavingsContributionsForView(
+        contributions,
+        participants,
+        "15_eom",
+        selectedYear,
+        selectedMonth
+      )
+    ).toBe(0);
   });
 
   it("ignores contributions without a matching participant", () => {
     const contributions = [
-      contribution({ savings_goal_id: "unknown-goal", amount: 100 }),
+      contribution({ savings_goal_id: "unknown-goal", amount: 100, contribution_date: "2026-01-10" }),
     ];
 
-    expect(sumMySavingsContributionsForView(contributions, participants, "full")).toBe(0);
+    expect(
+      sumMySavingsContributionsForView(
+        contributions,
+        participants,
+        "full",
+        selectedYear,
+        selectedMonth
+      )
+    ).toBe(0);
   });
 
   it("skips invalid amounts", () => {
     const contributions = [
-      contribution({ savings_goal_id: goalA, amount: 25 }),
+      contribution({ savings_goal_id: goalA, amount: 25, contribution_date: "2026-01-10" }),
       contribution({
         id: "bad",
         savings_goal_id: goalA,
         amount: "invalid" as unknown as number,
+        contribution_date: "2026-01-11",
       }),
     ];
 
-    expect(sumMySavingsContributionsForView(contributions, participants, "1_14")).toBe(25);
+    expect(
+      sumMySavingsContributionsForView(
+        contributions,
+        participants,
+        "1_14",
+        selectedYear,
+        selectedMonth
+      )
+    ).toBe(25);
   });
 
   it("returns zero when contributions is empty", () => {
-    expect(sumMySavingsContributionsForView([], participants, "full")).toBe(0);
+    expect(
+      sumMySavingsContributionsForView([], participants, "full", selectedYear, selectedMonth)
+    ).toBe(0);
   });
 
   it("coerces string amounts from the database", () => {
@@ -230,10 +395,37 @@ describe("sumMySavingsContributionsForView", () => {
       contribution({
         savings_goal_id: goalA,
         amount: "12.50" as unknown as number,
+        contribution_date: "2026-01-10",
       }),
     ];
 
-    expect(sumMySavingsContributionsForView(contributions, participants, "1_14")).toBe(12.5);
+    expect(
+      sumMySavingsContributionsForView(
+        contributions,
+        participants,
+        "1_14",
+        selectedYear,
+        selectedMonth
+      )
+    ).toBe(12.5);
+  });
+
+  it("counts leap-year February contributions through month end in 15_eom view", () => {
+    const febParticipants = [
+      participant({
+        savings_goal_id: goalA,
+        contribution_period: "15_eom",
+        target_contribution_amount: 100,
+      }),
+    ];
+    const contributions = [
+      contribution({ savings_goal_id: goalA, amount: 30, contribution_date: "2024-02-29" }),
+      contribution({ id: "2", savings_goal_id: goalA, amount: 20, contribution_date: "2024-02-14" }),
+    ];
+
+    expect(
+      sumMySavingsContributionsForView(contributions, febParticipants, "15_eom", 2024, 2)
+    ).toBe(30);
   });
 });
 
