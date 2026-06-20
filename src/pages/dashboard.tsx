@@ -515,6 +515,51 @@ export function DashboardPage() {
 
         <Card className="mb-6">
           <CardHeader className="pb-2">
+            <CardTitle className="text-base">My manual expenses for this view</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {manualExpensesError && (
+              <Alert variant="destructive" className="mb-3">
+                <AlertDescription>
+                  Could not load manual expenses. ({manualExpensesError})
+                </AlertDescription>
+              </Alert>
+            )}
+            {shareKey === null ? (
+              <p className="text-sm text-muted-foreground">
+                Choose your budget profile in{" "}
+                <Link to="/settings" className="font-medium underline underline-offset-4">
+                  Settings
+                </Link>{" "}
+                to see your manual expense total.
+              </p>
+            ) : !cashSnapshot ? (
+              <p className="text-sm text-muted-foreground">
+                Record your current amount in{" "}
+                <Link to="/settings" className="font-medium underline underline-offset-4">
+                  Settings
+                </Link>{" "}
+                to calculate expense-adjusted safe-to-spend.
+              </p>
+            ) : cashSnapshotLoading || manualExpensesLoading ? (
+              <Skeleton className="h-8 w-48" />
+            ) : (
+              <div className="space-y-1">
+                <p className="text-2xl font-semibold">
+                  {formatCurrency(myManualExpenseTotalForView ?? 0)}
+                </p>
+                <p className="text-sm text-muted-foreground">{myBillTotalViewLabel}</p>
+                <p className="text-xs text-muted-foreground">
+                  Only your share of manual expenses after your latest current-amount snapshot
+                  is counted.
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="mb-6">
+          <CardHeader className="pb-2">
             <CardTitle className="text-base">Safe to spend before savings</CardTitle>
           </CardHeader>
           <CardContent>
