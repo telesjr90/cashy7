@@ -6,11 +6,12 @@ import {
   sumMyBillShareTotal,
   sumMyUnpaidBillShareTotal,
 } from "@/lib/bill-share";
+import { getManualExpenses, sumMyManualExpenseShareForView } from "@/lib/expenses";
 import { getHouseholdPeople } from "@/lib/user-person";
 import type { Person } from "@/lib/types";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/lib/supabase";
-import type { BillInstance } from "@/lib/types";
+import type { BillInstance, ManualExpense } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -96,6 +97,9 @@ export function DashboardPage() {
   const [savingsContributions, setSavingsContributions] = useState<SavingsContribution[]>([]);
   const [savingsContributionsLoading, setSavingsContributionsLoading] = useState(true);
   const [savingsContributionsError, setSavingsContributionsError] = useState<string | null>(null);
+  const [manualExpenses, setManualExpenses] = useState<ManualExpense[]>([]);
+  const [manualExpensesLoading, setManualExpensesLoading] = useState(true);
+  const [manualExpensesError, setManualExpensesError] = useState<string | null>(null);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth() + 1;
@@ -196,6 +200,21 @@ export function DashboardPage() {
     setSavingsContributionsLoading(false);
   }, [household, user]);
 
+  const fetchManualExpenses = useCallback(async () => {
+    if (!household) return;
+
+    setManualExpensesLoading(true);
+    const { expenses, error } = await getManualExpenses(household.id);
+    if (error) {
+      setManualExpensesError(error);
+      setManualExpenses([]);
+    } else {
+      setManualExpensesError(null);
+      setManualExpenses(expenses);
+    }
+    setManualExpensesLoading(false);
+  }, [household]);
+
   useEffect(() => {
     fetchSettings();
   }, [fetchSettings]);
@@ -211,6 +230,10 @@ export function DashboardPage() {
   useEffect(() => {
     fetchSavingsContributions();
   }, [fetchSavingsContributions]);
+
+  useEffect(() => {
+    fetchManualExpenses();
+  }, [fetchManualExpenses]);
 
   useEffect(() => {
     fetchCashSnapshot();
@@ -320,11 +343,23 @@ export function DashboardPage() {
   const myBillTotalViewLabel =
     periodView === "full" ? "Full Month" : PERIOD_LABELS[periodView];
   const myUnpaidBillTotal = sumMyUnpaidBillShareTotal(bills, shareKey, periodView);
+  const myManualExpenseTotalForView = sumMyManualExpenseShareForView(
+    manualExpenses,
+    shareKey,
+    periodView,
+    year,
+    month,
+    cashSnapshot?.snapshot_date ?? null
+  );
   const safeToSpendBeforeSavings =
-    cashSnapshot && shareKey !== null && myUnpaidBillTotal !== null
+    cashSnapshot &&
+    shareKey !== null &&
+    myUnpaidBillTotal !== null &&
+    myManualExpenseTotalForView !== null
       ? calculateSafeToSpendBeforeSavings(
           Number(cashSnapshot.amount),
-          myUnpaidBillTotal
+          myUnpaidBillTotal,
+          myManualExpenseTotalForView
         )
       : null;
   const safeToSpendViewLabel = myBillTotalViewLabel;
@@ -483,6 +518,13 @@ export function DashboardPage() {
             <CardTitle className="text-base">Safe to spend before savings</CardTitle>
           </CardHeader>
           <CardContent>
+            {manualExpensesError && (
+              <Alert variant="destructive" className="mb-3">
+                <AlertDescription>
+                  Could not load manual expenses. ({manualExpensesError})
+                </AlertDescription>
+              </Alert>
+            )}
             {!cashSnapshot && shareKey === null ? (
               <p className="text-sm text-muted-foreground">
                 Record your current amount and choose your budget profile in{" "}
@@ -507,7 +549,7 @@ export function DashboardPage() {
                 </Link>{" "}
                 to see safe-to-spend.
               </p>
-            ) : cashSnapshotLoading || loading ? (
+            ) : cashSnapshotLoading || loading || manualExpensesLoading ? (
               <Skeleton className="h-8 w-48" />
             ) : (
               <div className="space-y-4">
@@ -532,6 +574,12 @@ export function DashboardPage() {
                         {formatCurrency(myUnpaidBillTotal ?? 0)}
                       </dd>
                     </div>
+                    <div className="flex items-baseline justify-between gap-4">
+                      <dt className="text-muted-foreground">Your manual expenses in this view</dt>
+                      <dd className="font-medium tabular-nums">
+                        {formatCurrency(myManualExpenseTotalForView ?? 0)}
+                      </dd>
+                    </div>
                     <div className="flex items-baseline justify-between gap-4 border-t pt-1.5">
                       <dt className="font-medium">Safe to spend before savings</dt>
                       <dd className="font-semibold tabular-nums">
@@ -540,7 +588,8 @@ export function DashboardPage() {
                     </div>
                   </dl>
                   <p className="mt-2 text-xs text-muted-foreground">
-                    Savings goals, expenses, and future paychecks are not included yet.
+                    Only expenses after your latest current-amount snapshot are counted, to avoid
+                    double-counting. Savings goals and future paychecks are not included yet.
                   </p>
                 </div>
               </div>
@@ -591,7 +640,7 @@ export function DashboardPage() {
                 </Link>{" "}
                 to see safe-to-spend after savings.
               </p>
-            ) : cashSnapshotLoading || loading || savingsParticipantsLoading || savingsContributionsLoading ? (
+            ) : cashSnapshotLoading || loading || savingsParticipantsLoading || savingsContributionsLoading || manualExpensesLoading ? (
               <Skeleton className="h-8 w-48" />
             ) : (
               <div className="space-y-4">

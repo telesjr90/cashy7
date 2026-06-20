@@ -158,4 +158,8 @@ describe("calculateSafeToSpendBeforeSavings", () => {
   it("returns negative safe-to-spend", () => {
     expect(calculateSafeToSpendBeforeSavings(200, 350)).toBe(-150);
   });
+
+  it("subtracts manual expenses from safe-to-spend", () => {
+    expect(calculateSafeToSpendBeforeSavings(1000, 300, 125)).toBe(575);
+  });
 });

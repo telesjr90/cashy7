@@ -93,7 +93,8 @@ export function sumMyUnpaidBillShareTotal(
 
 export function calculateSafeToSpendBeforeSavings(
   currentAmount: number,
-  unpaidBillTotal: number
+  unpaidBillTotal: number,
+  manualExpenseTotal: number = 0
 ): number {
-  return currentAmount - unpaidBillTotal;
+  return currentAmount - unpaidBillTotal - manualExpenseTotal;
 }

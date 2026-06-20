@@ -1,5 +1,8 @@
-import { split5149 } from "@/lib/format";
+import type { BillShareKey } from "@/lib/bill-share";
 import { resolveBillShareKeyForPerson } from "@/lib/bill-share";
+import { split5149 } from "@/lib/format";
+import type { PeriodView } from "@/lib/periods";
+import { getDashboardViewDateRange } from "@/lib/savings";
 import { supabase } from "@/lib/supabase";
 import type {
   InsertManualExpense,
@@ -28,6 +31,81 @@ function roundCents(value: number): number {
 function parseDateOnly(expenseDate: string): string | null {
   const match = expenseDate.match(/^(\d{4}-\d{2}-\d{2})/);
   return match ? match[1] : null;
+}
+
+function toSafeNumber(value: number | string): number | null {
+  const num = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(num) ? num : null;
+}
+
+export function getMyExpenseShareAmount(
+  expense: { teles_amount: number | string; nicole_amount: number | string },
+  shareKey: BillShareKey | null
+): number | null {
+  if (!shareKey) {
+    return null;
+  }
+
+  return toSafeNumber(expense[shareKey]);
+}
+
+function expenseDateInViewRange(
+  expenseDate: string,
+  periodView: PeriodView,
+  selectedYear: number,
+  selectedMonth: number
+): boolean {
+  const dateOnly = parseDateOnly(expenseDate);
+  if (!dateOnly) {
+    return false;
+  }
+
+  const { start, end } = getDashboardViewDateRange(
+    periodView,
+    selectedYear,
+    selectedMonth
+  );
+  return dateOnly >= start && dateOnly <= end;
+}
+
+/** Sum the signed-in user's manual expense share for the selected dashboard view. */
+export function sumMyManualExpenseShareForView(
+  expenses: { expense_date: string; teles_amount: number | string; nicole_amount: number | string }[],
+  shareKey: BillShareKey | null,
+  periodView: PeriodView,
+  selectedYear: number,
+  selectedMonth: number,
+  snapshotDate: string | null | undefined
+): number | null {
+  if (!shareKey) {
+    return null;
+  }
+
+  const snapshotDateOnly = parseDateOnly(snapshotDate ?? "");
+  if (!snapshotDateOnly) {
+    return null;
+  }
+
+  return expenses.reduce((sum, expense) => {
+    if (
+      !expenseDateInViewRange(
+        expense.expense_date,
+        periodView,
+        selectedYear,
+        selectedMonth
+      )
+    ) {
+      return sum;
+    }
+
+    const expenseDateOnly = parseDateOnly(expense.expense_date);
+    if (!expenseDateOnly || expenseDateOnly <= snapshotDateOnly) {
+      return sum;
+    }
+
+    const amount = getMyExpenseShareAmount(expense, shareKey);
+    return amount === null ? sum : sum + amount;
+  }, 0);
 }
 
 /** Day 1–14 → 1_14; day 15+ → 15_eom. */
