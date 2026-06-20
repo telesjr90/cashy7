@@ -42,11 +42,44 @@ export function sumMySavingsTargetForView(
   }, 0);
 }
 
+/** Sum the signed-in user's savings contributions for the selected dashboard period view. */
+export function sumMySavingsContributionsForView(
+  contributions: SavingsContribution[],
+  participants: SavingsGoalParticipant[],
+  periodView: PeriodView
+): number {
+  const matchingGoalIds = new Set(
+    participants
+      .filter((participant) =>
+        participantMatchesView(participant.contribution_period, periodView)
+      )
+      .map((participant) => participant.savings_goal_id)
+  );
+
+  return contributions.reduce((sum, contribution) => {
+    if (!matchingGoalIds.has(contribution.savings_goal_id)) {
+      return sum;
+    }
+
+    const amount = toSafeNumber(contribution.amount);
+    return amount === null ? sum : sum + amount;
+  }, 0);
+}
+
+export function calculateRemainingSavingsObligation(
+  targetAmount: number | string,
+  contributedAmount: number | string
+): number {
+  const target = toSafeNumber(targetAmount) ?? 0;
+  const contributed = toSafeNumber(contributedAmount) ?? 0;
+  return Math.max(0, target - contributed);
+}
+
 export function calculateSafeToSpendAfterSavings(
   beforeSavings: number,
-  savingsTarget: number
+  remainingSavingsObligation: number
 ): number {
-  return beforeSavings - savingsTarget;
+  return beforeSavings - remainingSavingsObligation;
 }
 
 export async function getSavingsGoals(householdId: string): Promise<{

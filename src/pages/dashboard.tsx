@@ -40,11 +40,14 @@ import {
 import { format, parseISO } from "date-fns";
 import { formatCurrency } from "@/lib/format";
 import {
+  calculateRemainingSavingsObligation,
   calculateSafeToSpendAfterSavings,
+  getMySavingsContributions,
   getMySavingsGoalParticipants,
+  sumMySavingsContributionsForView,
   sumMySavingsTargetForView,
 } from "@/lib/savings";
-import type { SavingsGoalParticipant } from "@/lib/types";
+import type { SavingsContribution, SavingsGoalParticipant } from "@/lib/types";
 import { filterBillInstancesByCashflowStart } from "@/lib/cashflow-filter";
 import { getHouseholdSettings, getMyLatestCashSnapshot } from "@/lib/cashflow-settings";
 import type { CashSnapshot } from "@/lib/types";
@@ -90,6 +93,9 @@ export function DashboardPage() {
   const [savingsParticipants, setSavingsParticipants] = useState<SavingsGoalParticipant[]>([]);
   const [savingsParticipantsLoading, setSavingsParticipantsLoading] = useState(true);
   const [savingsParticipantsError, setSavingsParticipantsError] = useState<string | null>(null);
+  const [savingsContributions, setSavingsContributions] = useState<SavingsContribution[]>([]);
+  const [savingsContributionsLoading, setSavingsContributionsLoading] = useState(true);
+  const [savingsContributionsError, setSavingsContributionsError] = useState<string | null>(null);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth() + 1;
@@ -172,6 +178,24 @@ export function DashboardPage() {
     setSavingsParticipantsLoading(false);
   }, [household, user]);
 
+  const fetchSavingsContributions = useCallback(async () => {
+    if (!household || !user) return;
+
+    setSavingsContributionsLoading(true);
+    const { contributions, error } = await getMySavingsContributions(
+      household.id,
+      user.id
+    );
+    if (error) {
+      setSavingsContributionsError(error);
+      setSavingsContributions([]);
+    } else {
+      setSavingsContributionsError(null);
+      setSavingsContributions(contributions);
+    }
+    setSavingsContributionsLoading(false);
+  }, [household, user]);
+
   useEffect(() => {
     fetchSettings();
   }, [fetchSettings]);
@@ -183,6 +207,10 @@ export function DashboardPage() {
   useEffect(() => {
     fetchSavingsParticipants();
   }, [fetchSavingsParticipants]);
+
+  useEffect(() => {
+    fetchSavingsContributions();
+  }, [fetchSavingsContributions]);
 
   useEffect(() => {
     fetchCashSnapshot();
@@ -301,11 +329,20 @@ export function DashboardPage() {
       : null;
   const safeToSpendViewLabel = myBillTotalViewLabel;
   const mySavingsTargetForView = sumMySavingsTargetForView(savingsParticipants, periodView);
+  const myContributionsForView = sumMySavingsContributionsForView(
+    savingsContributions,
+    savingsParticipants,
+    periodView
+  );
+  const remainingSavingsObligationForView = calculateRemainingSavingsObligation(
+    mySavingsTargetForView,
+    myContributionsForView
+  );
   const safeToSpendAfterSavings =
     safeToSpendBeforeSavings !== null
       ? calculateSafeToSpendAfterSavings(
           safeToSpendBeforeSavings,
-          mySavingsTargetForView
+          remainingSavingsObligationForView
         )
       : null;
   const hasSavingsParticipants = savingsParticipants.length > 0;
@@ -516,6 +553,13 @@ export function DashboardPage() {
                 </AlertDescription>
               </Alert>
             )}
+            {savingsContributionsError && (
+              <Alert variant="destructive" className="mb-3">
+                <AlertDescription>
+                  Could not load your savings contributions. ({savingsContributionsError})
+                </AlertDescription>
+              </Alert>
+            )}
             {!cashSnapshot && shareKey === null ? (
               <p className="text-sm text-muted-foreground">
                 Record your current amount and choose your budget profile in{" "}
@@ -540,7 +584,7 @@ export function DashboardPage() {
                 </Link>{" "}
                 to see safe-to-spend after savings.
               </p>
-            ) : cashSnapshotLoading || loading || savingsParticipantsLoading ? (
+            ) : cashSnapshotLoading || loading || savingsParticipantsLoading || savingsContributionsLoading ? (
               <Skeleton className="h-8 w-48" />
             ) : (
               <div className="space-y-4">
@@ -549,10 +593,6 @@ export function DashboardPage() {
                     {formatCurrency(safeToSpendAfterSavings ?? 0)}
                   </p>
                   <p className="text-sm text-muted-foreground">{safeToSpendViewLabel}</p>
-                  <p className="text-sm text-muted-foreground">
-                    Savings target reserved for this view:{" "}
-                    {formatCurrency(mySavingsTargetForView)}
-                  </p>
                   {!hasSavingsParticipants && (
                     <p className="text-sm text-muted-foreground">
                       <Link to="/settings" className="font-medium underline underline-offset-4">
@@ -562,8 +602,8 @@ export function DashboardPage() {
                     </p>
                   )}
                   <p className="text-xs text-muted-foreground">
-                    Based on safe-to-spend before savings minus your own savings target for this
-                    view.
+                    Based on safe-to-spend before savings minus your remaining savings obligation
+                    for this view.
                   </p>
                 </div>
                 <div className="rounded-lg border bg-muted/30 p-3 text-sm">
@@ -579,6 +619,18 @@ export function DashboardPage() {
                       <dt className="text-muted-foreground">Your savings target in this view</dt>
                       <dd className="font-medium tabular-nums">
                         {formatCurrency(mySavingsTargetForView)}
+                      </dd>
+                    </div>
+                    <div className="flex items-baseline justify-between gap-4">
+                      <dt className="text-muted-foreground">Your contributions counted in this view</dt>
+                      <dd className="font-medium tabular-nums">
+                        {formatCurrency(myContributionsForView)}
+                      </dd>
+                    </div>
+                    <div className="flex items-baseline justify-between gap-4">
+                      <dt className="text-muted-foreground">Remaining savings obligation in this view</dt>
+                      <dd className="font-medium tabular-nums">
+                        {formatCurrency(remainingSavingsObligationForView)}
                       </dd>
                     </div>
                     <div className="flex items-baseline justify-between gap-4 border-t pt-1.5">

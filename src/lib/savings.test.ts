@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { SavingsContribution, SavingsGoalParticipant } from "@/lib/types";
 import {
+  calculateRemainingSavingsObligation,
   calculateSafeToSpendAfterSavings,
   filterMyContributionsForGoal,
   sumMyContributionsForGoal,
+  sumMySavingsContributionsForView,
   sumMySavingsTargetForView,
 } from "@/lib/savings";
 
@@ -154,6 +156,109 @@ describe("sumMySavingsTargetForView", () => {
   });
 });
 
+describe("sumMySavingsContributionsForView", () => {
+  const participants = [
+    participant({ id: "1", savings_goal_id: goalA, contribution_period: "1_14", target_contribution_amount: 100 }),
+    participant({ id: "2", savings_goal_id: goalB, contribution_period: "15_eom", target_contribution_amount: 200 }),
+    participant({ id: "3", savings_goal_id: "goal-c", contribution_period: "monthly", target_contribution_amount: 300 }),
+  ];
+
+  it("counts contributions for 1_14 view", () => {
+    const contributions = [
+      contribution({ savings_goal_id: goalA, amount: 40 }),
+      contribution({ id: "2", savings_goal_id: goalB, amount: 999 }),
+    ];
+
+    expect(sumMySavingsContributionsForView(contributions, participants, "1_14")).toBe(40);
+  });
+
+  it("counts contributions for 15_eom view", () => {
+    const contributions = [
+      contribution({ savings_goal_id: goalA, amount: 40 }),
+      contribution({ id: "2", savings_goal_id: goalB, amount: 75 }),
+    ];
+
+    expect(sumMySavingsContributionsForView(contributions, participants, "15_eom")).toBe(75);
+  });
+
+  it("includes 1_14, 15_eom, and monthly contributions in full view", () => {
+    const contributions = [
+      contribution({ savings_goal_id: goalA, amount: 10 }),
+      contribution({ id: "2", savings_goal_id: goalB, amount: 20 }),
+      contribution({ id: "3", savings_goal_id: "goal-c", amount: 30 }),
+    ];
+
+    expect(sumMySavingsContributionsForView(contributions, participants, "full")).toBe(60);
+  });
+
+  it("excludes monthly contributions from single-period views", () => {
+    const contributions = [
+      contribution({ savings_goal_id: "goal-c", amount: 50 }),
+    ];
+
+    expect(sumMySavingsContributionsForView(contributions, participants, "1_14")).toBe(0);
+    expect(sumMySavingsContributionsForView(contributions, participants, "15_eom")).toBe(0);
+  });
+
+  it("ignores contributions without a matching participant", () => {
+    const contributions = [
+      contribution({ savings_goal_id: "unknown-goal", amount: 100 }),
+    ];
+
+    expect(sumMySavingsContributionsForView(contributions, participants, "full")).toBe(0);
+  });
+
+  it("skips invalid amounts", () => {
+    const contributions = [
+      contribution({ savings_goal_id: goalA, amount: 25 }),
+      contribution({
+        id: "bad",
+        savings_goal_id: goalA,
+        amount: "invalid" as unknown as number,
+      }),
+    ];
+
+    expect(sumMySavingsContributionsForView(contributions, participants, "1_14")).toBe(25);
+  });
+
+  it("returns zero when contributions is empty", () => {
+    expect(sumMySavingsContributionsForView([], participants, "full")).toBe(0);
+  });
+
+  it("coerces string amounts from the database", () => {
+    const contributions = [
+      contribution({
+        savings_goal_id: goalA,
+        amount: "12.50" as unknown as number,
+      }),
+    ];
+
+    expect(sumMySavingsContributionsForView(contributions, participants, "1_14")).toBe(12.5);
+  });
+});
+
+describe("calculateRemainingSavingsObligation", () => {
+  it("returns target minus contributions", () => {
+    expect(calculateRemainingSavingsObligation(300, 100)).toBe(200);
+  });
+
+  it("returns zero when target equals contributions", () => {
+    expect(calculateRemainingSavingsObligation(500, 500)).toBe(0);
+  });
+
+  it("returns zero on over-contribution", () => {
+    expect(calculateRemainingSavingsObligation(200, 350)).toBe(0);
+  });
+
+  it("handles zero target", () => {
+    expect(calculateRemainingSavingsObligation(0, 50)).toBe(0);
+  });
+
+  it("coerces numeric strings", () => {
+    expect(calculateRemainingSavingsObligation("300", "100")).toBe(200);
+  });
+});
+
 describe("calculateSafeToSpendAfterSavings", () => {
   it("returns positive safe-to-spend after savings", () => {
     expect(calculateSafeToSpendAfterSavings(1000, 300)).toBe(700);
@@ -165,5 +270,15 @@ describe("calculateSafeToSpendAfterSavings", () => {
 
   it("returns negative safe-to-spend after savings", () => {
     expect(calculateSafeToSpendAfterSavings(200, 350)).toBe(-150);
+  });
+
+  it("subtracts remaining obligation, not full target", () => {
+    const beforeSavings = 1000;
+    const target = 500;
+    const contributed = 200;
+    const remaining = calculateRemainingSavingsObligation(target, contributed);
+
+    expect(calculateSafeToSpendAfterSavings(beforeSavings, remaining)).toBe(700);
+    expect(calculateSafeToSpendAfterSavings(beforeSavings, target)).toBe(500);
   });
 });
