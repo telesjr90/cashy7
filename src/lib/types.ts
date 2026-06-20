@@ -37,6 +37,7 @@ export interface Database {
           id: string;
           household_id: string;
           user_id: string;
+          person_id: string | null;
           email: string | null;
           display_name: string | null;
           role: "owner" | "member";
@@ -49,6 +50,7 @@ export interface Database {
           id?: string;
           household_id: string;
           user_id: string;
+          person_id?: string | null;
           email?: string | null;
           display_name?: string | null;
           role?: "owner" | "member";
@@ -61,6 +63,7 @@ export interface Database {
           id?: string;
           household_id?: string;
           user_id?: string;
+          person_id?: string | null;
           email?: string | null;
           display_name?: string | null;
           role?: "owner" | "member";

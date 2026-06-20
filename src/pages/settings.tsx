@@ -6,12 +6,24 @@ import {
   getMyLatestCashSnapshot,
   addMyCashSnapshot,
 } from "@/lib/cashflow-settings";
-import type { CashSnapshot, HouseholdSettings } from "@/lib/types";
+import {
+  getHouseholdPeople,
+  getMyHouseholdMemberProfile,
+  updateMyPersonMapping,
+} from "@/lib/user-person";
+import type { CashSnapshot, HouseholdSettings, Person } from "@/lib/types";
 import { formatCurrency } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Card,
   CardContent,
@@ -32,7 +44,7 @@ function formatDisplayDate(isoDate: string): string {
 }
 
 export function SettingsPage() {
-  const { user, household } = useAuth();
+  const { user, household, refreshHousehold } = useAuth();
 
   const [settings, setSettings] = useState<HouseholdSettings | null>(null);
   const [settingsLoading, setSettingsLoading] = useState(true);
@@ -41,6 +53,14 @@ export function SettingsPage() {
   const [cashflowSaving, setCashflowSaving] = useState(false);
   const [cashflowSaveError, setCashflowSaveError] = useState<string | null>(null);
   const [cashflowSuccess, setCashflowSuccess] = useState<string | null>(null);
+
+  const [people, setPeople] = useState<Person[]>([]);
+  const [peopleLoading, setPeopleLoading] = useState(true);
+  const [peopleError, setPeopleError] = useState<string | null>(null);
+  const [selectedPersonId, setSelectedPersonId] = useState("");
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileSaveError, setProfileSaveError] = useState<string | null>(null);
+  const [profileSuccess, setProfileSuccess] = useState<string | null>(null);
 
   const [latestSnapshot, setLatestSnapshot] = useState<CashSnapshot | null>(null);
   const [snapshotLoading, setSnapshotLoading] = useState(true);
@@ -73,6 +93,33 @@ export function SettingsPage() {
     setSettingsLoading(false);
   }, [household]);
 
+  const loadBudgetProfile = useCallback(async () => {
+    if (!household || !user) return;
+
+    setPeopleLoading(true);
+    setPeopleError(null);
+
+    const [peopleResult, membershipResult] = await Promise.all([
+      getHouseholdPeople(household.id),
+      getMyHouseholdMemberProfile(household.id, user.id),
+    ]);
+
+    if (peopleResult.error) {
+      setPeopleError(peopleResult.error);
+      setPeople([]);
+    } else {
+      setPeople(peopleResult.people);
+    }
+
+    if (membershipResult.error) {
+      setPeopleError((current) => current ?? membershipResult.error);
+    } else {
+      setSelectedPersonId(membershipResult.membership?.person_id ?? "");
+    }
+
+    setPeopleLoading(false);
+  }, [household, user]);
+
   const loadLatestSnapshot = useCallback(async () => {
     if (!household || !user) return;
 
@@ -94,6 +141,10 @@ export function SettingsPage() {
   useEffect(() => {
     loadSettings();
   }, [loadSettings]);
+
+  useEffect(() => {
+    loadBudgetProfile();
+  }, [loadBudgetProfile]);
 
   useEffect(() => {
     loadLatestSnapshot();
@@ -126,6 +177,37 @@ export function SettingsPage() {
 
     setSettings(updated);
     setCashflowSuccess("Cashflow start date saved.");
+  };
+
+  const handleSaveBudgetProfile = async () => {
+    if (!household || !user) return;
+
+    setProfileSaveError(null);
+    setProfileSuccess(null);
+
+    if (!selectedPersonId.trim()) {
+      setProfileSaveError("Please select a budget profile.");
+      return;
+    }
+
+    setProfileSaving(true);
+
+    const { membership, error } = await updateMyPersonMapping(
+      household.id,
+      user.id,
+      selectedPersonId
+    );
+
+    setProfileSaving(false);
+
+    if (error) {
+      setProfileSaveError(error);
+      return;
+    }
+
+    setSelectedPersonId(membership?.person_id ?? selectedPersonId);
+    await refreshHousehold();
+    setProfileSuccess("Budget profile saved.");
   };
 
   const handleSaveCashSnapshot = async () => {
@@ -267,6 +349,71 @@ export function SettingsPage() {
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                   )}
                   Save start date
+                </Button>
+              </>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Your budget profile</CardTitle>
+            <CardDescription>
+              This determines which bill share is used for your private calculations.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {peopleLoading ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading budget profiles...
+              </div>
+            ) : peopleError ? (
+              <Alert variant="destructive">
+                <AlertDescription>{peopleError}</AlertDescription>
+              </Alert>
+            ) : people.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No household budget profiles found yet. Add Teles and Nicole in setup
+                before choosing your profile.
+              </p>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="budget-profile">Profile</Label>
+                  <Select
+                    value={selectedPersonId || undefined}
+                    onValueChange={setSelectedPersonId}
+                  >
+                    <SelectTrigger id="budget-profile" className="w-full">
+                      <SelectValue placeholder="Select your budget profile" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {people.map((person) => (
+                        <SelectItem key={person.id} value={person.id}>
+                          {person.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {profileSaveError && (
+                  <Alert variant="destructive">
+                    <AlertDescription>{profileSaveError}</AlertDescription>
+                  </Alert>
+                )}
+                {profileSuccess && (
+                  <Alert>
+                    <AlertDescription>{profileSuccess}</AlertDescription>
+                  </Alert>
+                )}
+
+                <Button onClick={handleSaveBudgetProfile} disabled={profileSaving}>
+                  {profileSaving && (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  )}
+                  Save budget profile
                 </Button>
               </>
             )}
