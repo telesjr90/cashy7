@@ -8,6 +8,67 @@ import type {
 export const DUPLICATE_PAYMENT_MESSAGE =
   "This item has already been deducted from your current amount.";
 
+export const PAYMENT_UX_EXPLANATION =
+  "Mark paid only updates status. Pay & deduct cash also subtracts your share from your current amount.";
+
+export type CashDeductionStatus =
+  | "unpaid"
+  | "marked_paid_only"
+  | "deducted_from_cash";
+
+export function getCashDeductionStatus({
+  isMarkedPaid,
+  hasPaymentTransaction,
+}: {
+  isMarkedPaid: boolean;
+  hasPaymentTransaction: boolean;
+}): CashDeductionStatus {
+  if (hasPaymentTransaction) {
+    return "deducted_from_cash";
+  }
+
+  if (isMarkedPaid) {
+    return "marked_paid_only";
+  }
+
+  return "unpaid";
+}
+
+export function cashDeductionStatusLabel(status: CashDeductionStatus): string {
+  switch (status) {
+    case "unpaid":
+      return "Unpaid";
+    case "marked_paid_only":
+      return "Marked paid — cash not deducted";
+    case "deducted_from_cash":
+      return "Deducted from cash";
+  }
+}
+
+/** Whether the signed-in user has a cash deduction for this bill (direct or via linked debt payment). */
+export function hasCashDeductionForBill(
+  billId: string,
+  {
+    billPaymentSourceIds,
+    debtPaymentIdByBillId,
+    debtPaymentTransactionSourceIds,
+  }: {
+    billPaymentSourceIds: ReadonlySet<string> | ReadonlyMap<string, unknown>;
+    debtPaymentIdByBillId: ReadonlyMap<string, string>;
+    debtPaymentTransactionSourceIds: ReadonlySet<string> | ReadonlyMap<string, unknown>;
+  }
+): boolean {
+  if (billPaymentSourceIds.has(billId)) {
+    return true;
+  }
+
+  const linkedDebtPaymentId = debtPaymentIdByBillId.get(billId);
+  return (
+    linkedDebtPaymentId !== undefined &&
+    debtPaymentTransactionSourceIds.has(linkedDebtPaymentId)
+  );
+}
+
 export const NO_CASH_SNAPSHOT_MESSAGE =
   "Add a current available amount in Settings before paying from cash.";
 

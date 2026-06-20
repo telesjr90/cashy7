@@ -10,27 +10,44 @@ export const DEBT_LINKED_BILL_DELETE_MESSAGE =
 export async function fetchDebtLinkedBillInstanceIds(
   billInstanceIds: string[]
 ): Promise<{ linkedIds: Set<string>; error: string | null }> {
+  const { linkedIds, error } = await fetchDebtLinkedBillContext(billInstanceIds);
+  return { linkedIds, error };
+}
+
+export async function fetchDebtLinkedBillContext(
+  billInstanceIds: string[]
+): Promise<{
+  linkedIds: Set<string>;
+  debtPaymentIdByBillId: Map<string, string>;
+  error: string | null;
+}> {
   if (billInstanceIds.length === 0) {
-    return { linkedIds: new Set(), error: null };
+    return { linkedIds: new Set(), debtPaymentIdByBillId: new Map(), error: null };
   }
 
   const { data, error } = await supabase
     .from("debt_payments")
-    .select("linked_bill_instance_id")
+    .select("id, linked_bill_instance_id")
     .in("linked_bill_instance_id", billInstanceIds);
 
   if (error) {
-    return { linkedIds: new Set(), error: error.message };
+    return {
+      linkedIds: new Set(),
+      debtPaymentIdByBillId: new Map(),
+      error: error.message,
+    };
   }
 
   const linkedIds = new Set<string>();
+  const debtPaymentIdByBillId = new Map<string, string>();
   for (const row of data ?? []) {
     if (row.linked_bill_instance_id) {
       linkedIds.add(row.linked_bill_instance_id);
+      debtPaymentIdByBillId.set(row.linked_bill_instance_id, row.id);
     }
   }
 
-  return { linkedIds, error: null };
+  return { linkedIds, debtPaymentIdByBillId, error: null };
 }
 
 export async function syncBillPaidStatusWithDebt(

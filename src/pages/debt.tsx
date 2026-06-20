@@ -11,6 +11,9 @@ import { getHouseholdPeople } from "@/lib/user-person";
 import {
   getMyCashPaymentTransactions,
   paySourceFromCurrentCash,
+  getCashDeductionStatus,
+  cashDeductionStatusLabel,
+  PAYMENT_UX_EXPLANATION,
 } from "@/lib/payments";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -1467,7 +1470,8 @@ export function DebtPage() {
             <div>
               <CardTitle>Debt Payments</CardTitle>
               <CardDescription>
-                {debtPayments.length} payment{debtPayments.length !== 1 ? "s" : ""}
+                {debtPayments.length} payment{debtPayments.length !== 1 ? "s" : ""}.{" "}
+                {PAYMENT_UX_EXPLANATION}
               </CardDescription>
             </div>
             <Button
@@ -1625,7 +1629,7 @@ export function DebtPage() {
                         disabled={submitting}
                       />
                       <Label htmlFor="paidStatus" className="font-normal">
-                        Mark as paid
+                        Mark paid
                       </Label>
                     </div>
                   </div>
@@ -1657,7 +1661,7 @@ export function DebtPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-12">Paid</TableHead>
+                    <TableHead className="w-12">Mark paid</TableHead>
                     <TableHead>Account</TableHead>
                     <TableHead>Date</TableHead>
                     <TableHead>Month</TableHead>
@@ -1671,12 +1675,19 @@ export function DebtPage() {
                     <TableHead className="text-right">
                       Projected Remaining After Payment
                     </TableHead>
-                    <TableHead className="w-36">Pay</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="w-44">Pay & deduct cash</TableHead>
                     <TableHead className="w-24"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {debtPayments.map((payment) => (
+                  {debtPayments.map((payment) => {
+                    const cashStatus = getCashDeductionStatus({
+                      isMarkedPaid: payment.paid_status,
+                      hasPaymentTransaction: paymentByDebtPaymentId.has(payment.id),
+                    });
+
+                    return (
                     <TableRow key={payment.id}>
                       <TableCell>
                         <Checkbox
@@ -1687,6 +1698,7 @@ export function DebtPage() {
                           disabled={
                             submitting || togglingPaymentId === payment.id
                           }
+                          aria-label="Mark paid"
                         />
                       </TableCell>
                       <TableCell>{getAccountName(payment.debt_account_id)}</TableCell>
@@ -1712,15 +1724,12 @@ export function DebtPage() {
                           : "-"}
                       </TableCell>
                       <TableCell>
-                        {paymentByDebtPaymentId.has(payment.id) ? (
-                          <span className="text-xs text-muted-foreground">
-                            Deducted from cash
-                          </span>
-                        ) : payment.paid_status ? (
-                          <span className="text-xs text-muted-foreground">
-                            Already marked paid
-                          </span>
-                        ) : (
+                        <span className="text-xs text-muted-foreground">
+                          {cashDeductionStatusLabel(cashStatus)}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        {cashStatus === "unpaid" ? (
                           <Button
                             variant="secondary"
                             size="sm"
@@ -1730,9 +1739,9 @@ export function DebtPage() {
                             }
                             onClick={() => void payDebtPayment(payment)}
                           >
-                            Pay
+                            Pay & deduct cash
                           </Button>
-                        )}
+                        ) : null}
                       </TableCell>
                       <TableCell>
                         <div className="flex justify-end gap-1">
@@ -1772,7 +1781,8 @@ export function DebtPage() {
                         </div>
                       </TableCell>
                     </TableRow>
-                  ))}
+                    );
+                  })}
                 </TableBody>
               </Table>
             )}

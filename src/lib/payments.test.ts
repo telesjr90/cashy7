@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
   calculateCashAfterPayment,
+  cashDeductionStatusLabel,
+  getCashDeductionStatus,
   getPaidManualExpenseSourceIds,
+  hasCashDeductionForBill,
   isDuplicatePaymentError,
   parsePaymentAmount,
   paymentSourceLabel,
@@ -90,5 +93,178 @@ describe("isDuplicatePaymentError", () => {
     expect(isDuplicatePaymentError(new Error("DUPLICATE_PAYMENT"))).toBe(true);
     expect(isDuplicatePaymentError({ message: "DUPLICATE_PAYMENT" })).toBe(true);
     expect(isDuplicatePaymentError(new Error("other"))).toBe(false);
+  });
+});
+
+describe("getCashDeductionStatus", () => {
+  it("returns unpaid when not marked paid and no transaction", () => {
+    expect(
+      getCashDeductionStatus({ isMarkedPaid: false, hasPaymentTransaction: false })
+    ).toBe("unpaid");
+  });
+
+  it("returns marked_paid_only when marked paid without transaction", () => {
+    expect(
+      getCashDeductionStatus({ isMarkedPaid: true, hasPaymentTransaction: false })
+    ).toBe("marked_paid_only");
+  });
+
+  it("returns deducted_from_cash when marked paid with transaction", () => {
+    expect(
+      getCashDeductionStatus({ isMarkedPaid: true, hasPaymentTransaction: true })
+    ).toBe("deducted_from_cash");
+  });
+
+  it("returns deducted_from_cash when unpaid but transaction exists", () => {
+    expect(
+      getCashDeductionStatus({ isMarkedPaid: false, hasPaymentTransaction: true })
+    ).toBe("deducted_from_cash");
+  });
+});
+
+describe("cashDeductionStatusLabel", () => {
+  it("returns clear labels for each status", () => {
+    expect(cashDeductionStatusLabel("unpaid")).toBe("Unpaid");
+    expect(cashDeductionStatusLabel("marked_paid_only")).toBe(
+      "Marked paid — cash not deducted"
+    );
+    expect(cashDeductionStatusLabel("deducted_from_cash")).toBe(
+      "Deducted from cash"
+    );
+  });
+});
+
+function billCashDeductionContext(
+  overrides: Partial<{
+    billPaymentSourceIds: Set<string>;
+    debtPaymentIdByBillId: Map<string, string>;
+    debtPaymentTransactionSourceIds: Set<string>;
+  }> = {}
+) {
+  return {
+    billPaymentSourceIds: overrides.billPaymentSourceIds ?? new Set<string>(),
+    debtPaymentIdByBillId: overrides.debtPaymentIdByBillId ?? new Map<string, string>(),
+    debtPaymentTransactionSourceIds:
+      overrides.debtPaymentTransactionSourceIds ?? new Set<string>(),
+  };
+}
+
+function resolveBillCashDeductionStatus(
+  billId: string,
+  isMarkedPaid: boolean,
+  context: ReturnType<typeof billCashDeductionContext>
+) {
+  return getCashDeductionStatus({
+    isMarkedPaid,
+    hasPaymentTransaction: hasCashDeductionForBill(billId, context),
+  });
+}
+
+describe("hasCashDeductionForBill", () => {
+  it("returns true when a direct bill_instance payment transaction exists", () => {
+    const context = billCashDeductionContext({
+      billPaymentSourceIds: new Set(["bill-1"]),
+    });
+
+    expect(hasCashDeductionForBill("bill-1", context)).toBe(true);
+  });
+
+  it("returns true when a linked debt_payment transaction exists", () => {
+    const context = billCashDeductionContext({
+      debtPaymentIdByBillId: new Map([["bill-1", "debt-pay-1"]]),
+      debtPaymentTransactionSourceIds: new Set(["debt-pay-1"]),
+    });
+
+    expect(hasCashDeductionForBill("bill-1", context)).toBe(true);
+  });
+
+  it("returns false for a debt-linked bill without a matching debt payment transaction", () => {
+    const context = billCashDeductionContext({
+      debtPaymentIdByBillId: new Map([["bill-1", "debt-pay-1"]]),
+    });
+
+    expect(hasCashDeductionForBill("bill-1", context)).toBe(false);
+  });
+
+  it("returns false when no direct or linked payment transaction exists", () => {
+    expect(hasCashDeductionForBill("bill-1", billCashDeductionContext())).toBe(false);
+  });
+
+  it("prefers direct bill payment when both direct and linked debt transactions exist", () => {
+    const context = billCashDeductionContext({
+      billPaymentSourceIds: new Set(["bill-1"]),
+      debtPaymentIdByBillId: new Map([["bill-1", "debt-pay-1"]]),
+      debtPaymentTransactionSourceIds: new Set(["debt-pay-1"]),
+    });
+
+    expect(hasCashDeductionForBill("bill-1", context)).toBe(true);
+  });
+});
+
+describe("bill cash deduction status (regression: debt-linked bills)", () => {
+  it("shows deducted from cash for a direct bill payment transaction", () => {
+    const status = resolveBillCashDeductionStatus(
+      "bill-1",
+      true,
+      billCashDeductionContext({ billPaymentSourceIds: new Set(["bill-1"]) })
+    );
+
+    expect(status).toBe("deducted_from_cash");
+    expect(cashDeductionStatusLabel(status)).toBe("Deducted from cash");
+  });
+
+  it("shows deducted from cash for a linked debt payment transaction", () => {
+    const status = resolveBillCashDeductionStatus(
+      "bill-1",
+      true,
+      billCashDeductionContext({
+        debtPaymentIdByBillId: new Map([["bill-1", "debt-pay-1"]]),
+        debtPaymentTransactionSourceIds: new Set(["debt-pay-1"]),
+      })
+    );
+
+    expect(status).toBe("deducted_from_cash");
+    expect(cashDeductionStatusLabel(status)).toBe("Deducted from cash");
+  });
+
+  it("shows marked paid only when marked paid without any payment transaction", () => {
+    const status = resolveBillCashDeductionStatus("bill-1", true, billCashDeductionContext());
+
+    expect(status).toBe("marked_paid_only");
+    expect(cashDeductionStatusLabel(status)).toBe("Marked paid — cash not deducted");
+  });
+
+  it("shows unpaid when not marked paid and no payment transaction", () => {
+    const status = resolveBillCashDeductionStatus("bill-1", false, billCashDeductionContext());
+
+    expect(status).toBe("unpaid");
+    expect(cashDeductionStatusLabel(status)).toBe("Unpaid");
+  });
+
+  it("does not falsely show deducted from cash for debt-linked bill without matching transaction", () => {
+    const status = resolveBillCashDeductionStatus(
+      "bill-1",
+      true,
+      billCashDeductionContext({
+        debtPaymentIdByBillId: new Map([["bill-1", "debt-pay-1"]]),
+      })
+    );
+
+    expect(status).toBe("marked_paid_only");
+    expect(cashDeductionStatusLabel(status)).not.toBe("Deducted from cash");
+  });
+
+  it("keeps direct bill transaction authoritative when linked debt transaction also exists", () => {
+    const status = resolveBillCashDeductionStatus(
+      "bill-1",
+      true,
+      billCashDeductionContext({
+        billPaymentSourceIds: new Set(["bill-1"]),
+        debtPaymentIdByBillId: new Map([["bill-1", "debt-pay-1"]]),
+        debtPaymentTransactionSourceIds: new Set(["debt-pay-other"]),
+      })
+    );
+
+    expect(status).toBe("deducted_from_cash");
   });
 });

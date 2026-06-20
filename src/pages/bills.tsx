@@ -11,6 +11,10 @@ import { getHouseholdPeople } from "@/lib/user-person";
 import {
   getMyCashPaymentTransactions,
   paySourceFromCurrentCash,
+  getCashDeductionStatus,
+  hasCashDeductionForBill,
+  cashDeductionStatusLabel,
+  PAYMENT_UX_EXPLANATION,
 } from "@/lib/payments";
 import { Button } from "@/components/ui/button";
 import {
@@ -72,7 +76,7 @@ import { formatCurrency } from "@/lib/format";
 import {
   DEBT_LINKED_BILL_DELETE_MESSAGE,
   DEBT_LINKED_BILL_EDIT_MESSAGE,
-  fetchDebtLinkedBillInstanceIds,
+  fetchDebtLinkedBillContext,
   syncBillPaidStatusWithDebt,
 } from "@/lib/sync-bill-paid-status";
 
@@ -92,6 +96,9 @@ export function BillsPage() {
   const [debtLinkedBillIds, setDebtLinkedBillIds] = useState<Set<string>>(
     () => new Set()
   );
+  const [debtPaymentIdByBillId, setDebtPaymentIdByBillId] = useState<
+    Map<string, string>
+  >(() => new Map());
   const [loading, setLoading] = useState(true);
   const [payingBillId, setPayingBillId] = useState<string | null>(null);
   const [payError, setPayError] = useState<string | null>(null);
@@ -127,6 +134,26 @@ export function BillsPage() {
     return map;
   }, [paymentTransactions]);
 
+  const paymentByDebtPaymentId = useMemo(() => {
+    const map = new Map<string, CashPaymentTransaction>();
+    for (const tx of paymentTransactions) {
+      if (tx.source_type === "debt_payment") {
+        map.set(tx.source_id, tx);
+      }
+    }
+    return map;
+  }, [paymentTransactions]);
+
+  const billHasCashDeduction = useCallback(
+    (billId: string) =>
+      hasCashDeductionForBill(billId, {
+        billPaymentSourceIds: paymentByBillId,
+        debtPaymentIdByBillId,
+        debtPaymentTransactionSourceIds: paymentByDebtPaymentId,
+      }),
+    [paymentByBillId, debtPaymentIdByBillId, paymentByDebtPaymentId]
+  );
+
   const fetchBills = useCallback(async () => {
     if (!household || !user) return;
 
@@ -150,11 +177,12 @@ export function BillsPage() {
       const billRows = billsRes.data as BillInstance[];
       setBills(billRows);
 
-      const { linkedIds, error: linkedError } =
-        await fetchDebtLinkedBillInstanceIds(billRows.map((bill) => bill.id));
+      const { linkedIds, debtPaymentIdByBillId, error: linkedError } =
+        await fetchDebtLinkedBillContext(billRows.map((bill) => bill.id));
 
       if (!linkedError) {
         setDebtLinkedBillIds(linkedIds);
+        setDebtPaymentIdByBillId(debtPaymentIdByBillId);
       }
     }
 
@@ -206,7 +234,7 @@ export function BillsPage() {
       return;
     }
 
-    if (paymentByBillId.has(bill.id)) {
+    if (billHasCashDeduction(bill.id)) {
       setPayError("This item has already been deducted from your current amount.");
       return;
     }
@@ -424,7 +452,8 @@ export function BillsPage() {
           <CardHeader>
             <CardTitle>Bills for {MONTHS[month - 1]} {year}</CardTitle>
             <CardDescription>
-              {bills.length} bill{bills.length !== 1 ? "s" : ""} total
+              {bills.length} bill{bills.length !== 1 ? "s" : ""} total.{" "}
+              {PAYMENT_UX_EXPLANATION}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -447,20 +476,25 @@ export function BillsPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-12">Paid</TableHead>
+                    <TableHead className="w-12">Mark paid</TableHead>
                     <TableHead>Bill Name</TableHead>
                     <TableHead>Period</TableHead>
                     <TableHead>Due Date</TableHead>
                     <TableHead className="text-right">Total</TableHead>
                     <TableHead className="text-right text-blue-600 dark:text-blue-400">Teles</TableHead>
                     <TableHead className="text-right text-green-600 dark:text-green-400">Nicole</TableHead>
-                    <TableHead className="w-36">Pay</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="w-44">Pay & deduct cash</TableHead>
                     <TableHead className="w-24"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {bills.map((bill) => {
                     const debtLinked = isDebtLinkedBill(bill.id);
+                    const cashStatus = getCashDeductionStatus({
+                      isMarkedPaid: bill.is_paid,
+                      hasPaymentTransaction: billHasCashDeduction(bill.id),
+                    });
 
                     return (
                     <TableRow key={bill.id}>
@@ -468,6 +502,7 @@ export function BillsPage() {
                         <Checkbox
                           checked={bill.is_paid}
                           onCheckedChange={() => togglePaid(bill)}
+                          aria-label="Mark paid"
                         />
                       </TableCell>
                       <TableCell className={bill.is_paid ? "line-through text-muted-foreground" : ""}>
@@ -502,24 +537,21 @@ export function BillsPage() {
                         {formatCurrency(Number(bill.nicole_amount))}
                       </TableCell>
                       <TableCell>
-                        {paymentByBillId.has(bill.id) ? (
-                          <span className="text-xs text-muted-foreground">
-                            Deducted from cash
-                          </span>
-                        ) : bill.is_paid ? (
-                          <span className="text-xs text-muted-foreground">
-                            Already marked paid
-                          </span>
-                        ) : (
+                        <span className="text-xs text-muted-foreground">
+                          {cashDeductionStatusLabel(cashStatus)}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        {cashStatus === "unpaid" ? (
                           <Button
                             variant="secondary"
                             size="sm"
                             disabled={payingBillId === bill.id}
                             onClick={() => void payBill(bill)}
                           >
-                            Pay
+                            Pay & deduct cash
                           </Button>
-                        )}
+                        ) : null}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center justify-end gap-1">

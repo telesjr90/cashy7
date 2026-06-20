@@ -20,6 +20,9 @@ import { getHouseholdPeople } from "@/lib/user-person";
 import {
   getMyCashPaymentTransactions,
   paySourceFromCurrentCash,
+  getCashDeductionStatus,
+  cashDeductionStatusLabel,
+  PAYMENT_UX_EXPLANATION,
 } from "@/lib/payments";
 import type {
   CashPaymentTransaction,
@@ -585,7 +588,8 @@ export function ExpensesPage() {
           <CardHeader>
             <CardTitle>Recorded expenses</CardTitle>
             <CardDescription>
-              Showing expenses visible to you under household privacy rules.
+              Showing expenses visible to you under household privacy rules.{" "}
+              {PAYMENT_UX_EXPLANATION}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -601,25 +605,32 @@ export function ExpensesPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-12">Paid</TableHead>
+                    <TableHead className="w-12">Mark paid</TableHead>
                     <TableHead>Description</TableHead>
                     <TableHead>Scope</TableHead>
                     <TableHead>Amount</TableHead>
                     <TableHead>Date</TableHead>
                     <TableHead>Split</TableHead>
-                    <TableHead className="w-36">Pay</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="w-44">Pay & deduct cash</TableHead>
                     <TableHead className="w-[70px]" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {expenses.map((expense) => (
+                  {expenses.map((expense) => {
+                    const cashStatus = getCashDeductionStatus({
+                      isMarkedPaid: expense.is_paid,
+                      hasPaymentTransaction: paymentByExpenseId.has(expense.id),
+                    });
+
+                    return (
                     <TableRow key={expense.id}>
                       <TableCell>
                         <Checkbox
                           checked={expense.is_paid}
                           disabled={markingPaidId === expense.id || expense.is_paid}
                           onCheckedChange={() => void handleMarkPaid(expense)}
-                          aria-label={`Mark ${expense.description} as paid`}
+                          aria-label="Mark paid"
                         />
                       </TableCell>
                       <TableCell>
@@ -657,24 +668,21 @@ export function ExpensesPage() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        {paymentByExpenseId.has(expense.id) ? (
-                          <span className="text-xs text-muted-foreground">
-                            Deducted from cash
-                          </span>
-                        ) : expense.is_paid ? (
-                          <span className="text-xs text-muted-foreground">
-                            Already marked paid
-                          </span>
-                        ) : (
+                        <span className="text-xs text-muted-foreground">
+                          {cashDeductionStatusLabel(cashStatus)}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        {cashStatus === "unpaid" ? (
                           <Button
                             variant="secondary"
                             size="sm"
                             disabled={payingExpenseId === expense.id}
                             onClick={() => void handlePay(expense)}
                           >
-                            Pay
+                            Pay & deduct cash
                           </Button>
-                        )}
+                        ) : null}
                       </TableCell>
                       <TableCell>
                         {expense.created_by_user_id === user.id && (
@@ -705,7 +713,8 @@ export function ExpensesPage() {
                         )}
                       </TableCell>
                     </TableRow>
-                  ))}
+                    );
+                  })}
                 </TableBody>
               </Table>
             )}
