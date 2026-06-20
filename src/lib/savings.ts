@@ -392,3 +392,86 @@ export function sumMyContributionsForGoal(
     0
   );
 }
+
+function contributionPeriodToView(
+  contributionPeriod: SavingsGoalParticipant["contribution_period"]
+): PeriodView {
+  if (contributionPeriod === "monthly") {
+    return "full";
+  }
+  return contributionPeriod;
+}
+
+/** Month used for Settings target-period summaries: period_start month, else reference month. */
+export function getParticipantSummaryMonth(
+  participant: SavingsGoalParticipant,
+  referenceDate: Date = new Date()
+): { year: number; month: number } {
+  const periodStart = parseDateOnly(participant.period_start);
+  if (periodStart) {
+    const [yearStr, monthStr] = periodStart.split("-");
+    return { year: Number(yearStr), month: Number(monthStr) };
+  }
+
+  return {
+    year: referenceDate.getFullYear(),
+    month: referenceDate.getMonth() + 1,
+  };
+}
+
+export interface MySavingsGoalTargetPeriodSummary {
+  contributionPeriod: SavingsGoalParticipant["contribution_period"];
+  periodView: PeriodView;
+  targetAmount: number;
+  contributedAmount: number;
+  remainingObligation: number;
+  periodStart: string | null;
+  periodEnd: string | null;
+  summaryYear: number;
+  summaryMonth: number;
+  viewDateRange: { start: string; end: string };
+}
+
+/**
+ * Scoped contribution summary for one participant row in Settings.
+ * Uses the month of period_start when set, otherwise the reference month (default: today).
+ * Applies the same view, date-range, and contribution-date rules as the Dashboard.
+ */
+export function getMySavingsGoalTargetPeriodSummary(
+  participant: SavingsGoalParticipant,
+  contributions: SavingsContribution[],
+  referenceDate: Date = new Date()
+): MySavingsGoalTargetPeriodSummary {
+  const { year, month } = getParticipantSummaryMonth(participant, referenceDate);
+  const periodView = contributionPeriodToView(participant.contribution_period);
+  const participants = [participant];
+  const goalContributions = filterMyContributionsForGoal(
+    contributions,
+    participant.savings_goal_id
+  );
+
+  const targetAmount = sumMySavingsTargetForView(participants, periodView, year, month);
+  const contributedAmount = sumMySavingsContributionsForView(
+    goalContributions,
+    participants,
+    periodView,
+    year,
+    month
+  );
+
+  return {
+    contributionPeriod: participant.contribution_period,
+    periodView,
+    targetAmount,
+    contributedAmount,
+    remainingObligation: calculateRemainingSavingsObligation(
+      targetAmount,
+      contributedAmount
+    ),
+    periodStart: parseDateOnly(participant.period_start),
+    periodEnd: parseDateOnly(participant.period_end),
+    summaryYear: year,
+    summaryMonth: month,
+    viewDateRange: getDashboardViewDateRange(periodView, year, month),
+  };
+}

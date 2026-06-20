@@ -17,6 +17,7 @@ import {
   filterMyContributionsForGoal,
   getMySavingsContributions,
   getMySavingsGoalParticipants,
+  getMySavingsGoalTargetPeriodSummary,
   getSavingsGoals,
   sumMyContributionsForGoal,
   upsertMySavingsGoalParticipant,
@@ -132,6 +133,13 @@ function SavingsGoalPanel({
   const myTotalContributed = useMemo(
     () => sumMyContributionsForGoal(contributions, goal.id),
     [contributions, goal.id]
+  );
+  const targetPeriodSummary = useMemo(
+    () =>
+      participant
+        ? getMySavingsGoalTargetPeriodSummary(participant, contributions)
+        : null,
+    [participant, contributions]
   );
   const recentContributions = goalContributions.slice(0, 5);
 
@@ -370,6 +378,56 @@ function SavingsGoalPanel({
         </Button>
       </div>
 
+      {participant && targetPeriodSummary && (
+        <div className="space-y-2 border-t pt-4">
+          <h4 className="text-sm font-medium">
+            Your contributions for this target period
+          </h4>
+          <div className="grid gap-1 rounded-md bg-muted/40 px-3 py-2 text-sm">
+            <p>
+              Contribution period:{" "}
+              <span className="font-medium">
+                {CONTRIBUTION_PERIOD_LABELS[targetPeriodSummary.contributionPeriod]}
+              </span>
+            </p>
+            <p>
+              Target amount:{" "}
+              <span className="font-medium">
+                {formatCurrency(targetPeriodSummary.targetAmount)}
+              </span>
+            </p>
+            {targetPeriodSummary.periodStart && (
+              <p>
+                Period start:{" "}
+                <span className="font-medium">
+                  {formatDisplayDate(targetPeriodSummary.periodStart)}
+                </span>
+              </p>
+            )}
+            {targetPeriodSummary.periodEnd && (
+              <p>
+                Period end:{" "}
+                <span className="font-medium">
+                  {formatDisplayDate(targetPeriodSummary.periodEnd)}
+                </span>
+              </p>
+            )}
+            <p>
+              Your contributions in this period:{" "}
+              <span className="font-medium">
+                {formatCurrency(targetPeriodSummary.contributedAmount)}
+              </span>
+            </p>
+            <p>
+              Remaining for this period:{" "}
+              <span className="font-medium">
+                {formatCurrency(targetPeriodSummary.remainingObligation)}
+              </span>
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="space-y-3 border-t pt-4">
         <div>
           <h4 className="text-sm font-medium">
@@ -381,7 +439,7 @@ function SavingsGoalPanel({
             </p>
           ) : (
             <p className="mt-1 text-sm">
-              My total contributed:{" "}
+              My all-time contributions:{" "}
               <span className="font-medium">{formatCurrency(myTotalContributed)}</span>
             </p>
           )}

@@ -5,6 +5,8 @@ import {
   calculateSafeToSpendAfterSavings,
   filterMyContributionsForGoal,
   getDashboardViewDateRange,
+  getMySavingsGoalTargetPeriodSummary,
+  getParticipantSummaryMonth,
   sumMyContributionsForGoal,
   sumMySavingsContributionsForView,
   sumMySavingsTargetForView,
@@ -908,5 +910,252 @@ describe("calculateSafeToSpendAfterSavings", () => {
 
     expect(calculateSafeToSpendAfterSavings(beforeSavings, remaining)).toBe(700);
     expect(calculateSafeToSpendAfterSavings(beforeSavings, target)).toBe(500);
+  });
+});
+
+describe("getParticipantSummaryMonth", () => {
+  it("uses period_start month when set", () => {
+    const row = participant({
+      contribution_period: "1_14",
+      target_contribution_amount: 100,
+      period_start: "2026-03-15",
+    });
+
+    expect(getParticipantSummaryMonth(row, new Date("2026-06-19"))).toEqual({
+      year: 2026,
+      month: 3,
+    });
+  });
+
+  it("falls back to reference date month when period_start is null", () => {
+    const row = participant({
+      contribution_period: "monthly",
+      target_contribution_amount: 100,
+      period_start: null,
+    });
+
+    expect(getParticipantSummaryMonth(row, new Date("2026-06-19"))).toEqual({
+      year: 2026,
+      month: 6,
+    });
+  });
+});
+
+describe("getMySavingsGoalTargetPeriodSummary", () => {
+  const referenceDate = new Date("2026-06-19");
+
+  it("returns 1_14 scoped summary using period_start month", () => {
+    const row = participant({
+      savings_goal_id: goalA,
+      contribution_period: "1_14",
+      target_contribution_amount: 200,
+      period_start: "2026-01-01",
+      period_end: "2026-06-30",
+    });
+    const contributions = [
+      contribution({
+        savings_goal_id: goalA,
+        amount: 50,
+        contribution_date: "2026-01-10",
+      }),
+      contribution({
+        id: "2",
+        savings_goal_id: goalA,
+        amount: 999,
+        contribution_date: "2026-01-20",
+      }),
+    ];
+
+    const summary = getMySavingsGoalTargetPeriodSummary(
+      row,
+      contributions,
+      referenceDate
+    );
+
+    expect(summary.contributionPeriod).toBe("1_14");
+    expect(summary.periodView).toBe("1_14");
+    expect(summary.summaryYear).toBe(2026);
+    expect(summary.summaryMonth).toBe(1);
+    expect(summary.targetAmount).toBe(200);
+    expect(summary.contributedAmount).toBe(50);
+    expect(summary.remainingObligation).toBe(150);
+    expect(summary.viewDateRange).toEqual({
+      start: "2026-01-01",
+      end: "2026-01-14",
+    });
+  });
+
+  it("returns 15_eom scoped summary using period_start month", () => {
+    const row = participant({
+      savings_goal_id: goalB,
+      contribution_period: "15_eom",
+      target_contribution_amount: 300,
+      period_start: "2026-02-01",
+    });
+    const contributions = [
+      contribution({
+        savings_goal_id: goalB,
+        amount: 75,
+        contribution_date: "2026-02-15",
+      }),
+      contribution({
+        id: "2",
+        savings_goal_id: goalB,
+        amount: 40,
+        contribution_date: "2026-02-10",
+      }),
+    ];
+
+    const summary = getMySavingsGoalTargetPeriodSummary(
+      row,
+      contributions,
+      referenceDate
+    );
+
+    expect(summary.contributionPeriod).toBe("15_eom");
+    expect(summary.periodView).toBe("15_eom");
+    expect(summary.summaryMonth).toBe(2);
+    expect(summary.contributedAmount).toBe(75);
+    expect(summary.remainingObligation).toBe(225);
+    expect(summary.viewDateRange).toEqual({
+      start: "2026-02-15",
+      end: "2026-02-28",
+    });
+  });
+
+  it("returns monthly scoped summary as full-month view", () => {
+    const row = participant({
+      savings_goal_id: goalA,
+      contribution_period: "monthly",
+      target_contribution_amount: 500,
+      period_start: "2026-03-01",
+    });
+    const contributions = [
+      contribution({
+        savings_goal_id: goalA,
+        amount: 100,
+        contribution_date: "2026-03-05",
+      }),
+      contribution({
+        id: "2",
+        savings_goal_id: goalA,
+        amount: 150,
+        contribution_date: "2026-03-20",
+      }),
+    ];
+
+    const summary = getMySavingsGoalTargetPeriodSummary(
+      row,
+      contributions,
+      referenceDate
+    );
+
+    expect(summary.contributionPeriod).toBe("monthly");
+    expect(summary.periodView).toBe("full");
+    expect(summary.summaryMonth).toBe(3);
+    expect(summary.contributedAmount).toBe(250);
+    expect(summary.remainingObligation).toBe(250);
+    expect(summary.viewDateRange).toEqual({
+      start: "2026-03-01",
+      end: "2026-03-31",
+    });
+  });
+
+  it("uses current month when period_start is null", () => {
+    const row = participant({
+      savings_goal_id: goalA,
+      contribution_period: "1_14",
+      target_contribution_amount: 100,
+      period_start: null,
+    });
+    const contributions = [
+      contribution({
+        savings_goal_id: goalA,
+        amount: 30,
+        contribution_date: "2026-06-10",
+      }),
+    ];
+
+    const summary = getMySavingsGoalTargetPeriodSummary(
+      row,
+      contributions,
+      referenceDate
+    );
+
+    expect(summary.summaryYear).toBe(2026);
+    expect(summary.summaryMonth).toBe(6);
+    expect(summary.contributedAmount).toBe(30);
+    expect(summary.remainingObligation).toBe(70);
+  });
+
+  it("floors remaining obligation at zero on over-contribution", () => {
+    const row = participant({
+      savings_goal_id: goalA,
+      contribution_period: "monthly",
+      target_contribution_amount: 100,
+      period_start: "2026-04-01",
+    });
+    const contributions = [
+      contribution({
+        savings_goal_id: goalA,
+        amount: 150,
+        contribution_date: "2026-04-10",
+      }),
+    ];
+
+    const summary = getMySavingsGoalTargetPeriodSummary(
+      row,
+      contributions,
+      referenceDate
+    );
+
+    expect(summary.contributedAmount).toBe(150);
+    expect(summary.remainingObligation).toBe(0);
+  });
+
+  it("skips invalid contribution amounts", () => {
+    const row = participant({
+      savings_goal_id: goalA,
+      contribution_period: "1_14",
+      target_contribution_amount: 100,
+      period_start: "2026-01-01",
+    });
+    const contributions = [
+      contribution({
+        savings_goal_id: goalA,
+        amount: 25,
+        contribution_date: "2026-01-05",
+      }),
+      contribution({
+        id: "bad",
+        savings_goal_id: goalA,
+        amount: "invalid" as unknown as number,
+        contribution_date: "2026-01-06",
+      }),
+    ];
+
+    const summary = getMySavingsGoalTargetPeriodSummary(
+      row,
+      contributions,
+      referenceDate
+    );
+
+    expect(summary.contributedAmount).toBe(25);
+    expect(summary.remainingObligation).toBe(75);
+  });
+
+  it("includes period_start and period_end in the summary", () => {
+    const row = participant({
+      savings_goal_id: goalA,
+      contribution_period: "monthly",
+      target_contribution_amount: 100,
+      period_start: "2026-05-01",
+      period_end: "2026-08-31",
+    });
+
+    const summary = getMySavingsGoalTargetPeriodSummary(row, [], referenceDate);
+
+    expect(summary.periodStart).toBe("2026-05-01");
+    expect(summary.periodEnd).toBe("2026-08-31");
   });
 });
