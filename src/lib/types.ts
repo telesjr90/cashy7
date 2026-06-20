@@ -480,6 +480,9 @@ export interface Database {
           is_paid: boolean;
           paid_at: string | null;
           notes: string | null;
+          adjusts_manual_expense_id: string | null;
+          adjustment_direction: "increase" | "decrease" | null;
+          adjustment_reason: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -500,6 +503,9 @@ export interface Database {
           is_paid?: boolean;
           paid_at?: string | null;
           notes?: string | null;
+          adjusts_manual_expense_id?: string | null;
+          adjustment_direction?: "increase" | "decrease" | null;
+          adjustment_reason?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -520,6 +526,9 @@ export interface Database {
           is_paid?: boolean;
           paid_at?: string | null;
           notes?: string | null;
+          adjusts_manual_expense_id?: string | null;
+          adjustment_direction?: "increase" | "decrease" | null;
+          adjustment_reason?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -615,5 +624,8 @@ export type InsertManualExpense = InsertTables<"manual_expenses">;
 export type UpdateManualExpense = UpdateTables<"manual_expenses">;
 export type ManualExpenseScope = ManualExpense["expense_scope"];
 export type ManualExpenseSplitType = ManualExpense["split_type"];
+export type ManualExpenseAdjustmentDirection = NonNullable<
+  ManualExpense["adjustment_direction"]
+>;
 export type CashPaymentTransaction = Tables<"cash_payment_transactions">;
 export type PaymentSourceType = CashPaymentTransaction["source_type"];

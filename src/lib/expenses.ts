@@ -7,6 +7,7 @@ import { supabase } from "@/lib/supabase";
 import type {
   InsertManualExpense,
   ManualExpense,
+  ManualExpenseAdjustmentDirection,
   ManualExpenseScope,
   ManualExpenseSplitType,
   UpdateManualExpense,
@@ -49,6 +50,45 @@ export function getMyExpenseShareAmount(
   return toSafeNumber(expense[shareKey]);
 }
 
+export function isManualExpenseAdjustment(
+  expense: { adjusts_manual_expense_id?: string | null }
+): boolean {
+  return expense.adjusts_manual_expense_id != null;
+}
+
+export function calculateSignedExpenseAmount(
+  amount: number,
+  adjustmentDirection: ManualExpenseAdjustmentDirection | null | undefined
+): number {
+  if (adjustmentDirection === "decrease") {
+    return -amount;
+  }
+
+  return amount;
+}
+
+export function getManualExpenseSignedShareAmount(
+  expense: {
+    teles_amount: number | string;
+    nicole_amount: number | string;
+    adjustment_direction?: ManualExpenseAdjustmentDirection | null;
+  },
+  shareKey: BillShareKey | null
+): number | null {
+  const shareAmount = getMyExpenseShareAmount(expense, shareKey);
+  if (shareAmount === null) {
+    return null;
+  }
+
+  return calculateSignedExpenseAmount(shareAmount, expense.adjustment_direction);
+}
+
+export function adjustmentDirectionLabel(
+  direction: ManualExpenseAdjustmentDirection
+): string {
+  return direction === "increase" ? "Increase" : "Decrease";
+}
+
 function expenseDateInViewRange(
   expenseDate: string,
   periodView: PeriodView,
@@ -75,6 +115,7 @@ export function sumMyManualExpenseShareForView(
     expense_date: string;
     teles_amount: number | string;
     nicole_amount: number | string;
+    adjustment_direction?: ManualExpenseAdjustmentDirection | null;
   }[],
   shareKey: BillShareKey | null,
   periodView: PeriodView,
@@ -116,7 +157,7 @@ export function sumMyManualExpenseShareForView(
       return sum;
     }
 
-    const amount = getMyExpenseShareAmount(expense, shareKey);
+    const amount = getManualExpenseSignedShareAmount(expense, shareKey);
     return amount === null ? sum : sum + amount;
   }, 0);
 }
@@ -262,6 +303,115 @@ export async function getManualExpenses(householdId: string): Promise<{
   }
 
   return { expenses: (data as ManualExpense[]) ?? [], error: null };
+}
+
+export interface ValidateManualExpenseAdjustmentInput {
+  originalExpenseId: string;
+  originalDescription: string;
+  adjustmentDirection: ManualExpenseAdjustmentDirection | string;
+  amount: number | string;
+  expenseDate: string;
+  splitType: ManualExpenseSplitType;
+  adjustmentReason: string;
+  description?: string;
+  customTelesAmount?: number;
+  customNicoleAmount?: number;
+  person?: { name: string } | null;
+  expenseScope: ManualExpenseScope;
+  category?: string | null;
+  notes?: string | null;
+}
+
+export type ManualExpenseAdjustmentPayload = Pick<
+  InsertManualExpense,
+  | "adjusts_manual_expense_id"
+  | "adjustment_direction"
+  | "adjustment_reason"
+  | "description"
+  | "amount"
+  | "expense_date"
+  | "period_bucket"
+  | "split_type"
+  | "teles_amount"
+  | "nicole_amount"
+  | "expense_scope"
+  | "category"
+  | "notes"
+>;
+
+export function validateManualExpenseAdjustmentInput(
+  input: ValidateManualExpenseAdjustmentInput
+): { payload: ManualExpenseAdjustmentPayload; error: null } | { payload: null; error: string } {
+  const originalExpenseId = input.originalExpenseId.trim();
+  if (!originalExpenseId) {
+    return { payload: null, error: "Original expense reference is required." };
+  }
+
+  if (
+    input.adjustmentDirection !== "increase" &&
+    input.adjustmentDirection !== "decrease"
+  ) {
+    return { payload: null, error: "Adjustment direction must be increase or decrease." };
+  }
+
+  const trimmedReason = input.adjustmentReason.trim();
+  if (!trimmedReason) {
+    return { payload: null, error: "Adjustment reason is required." };
+  }
+
+  const amount =
+    typeof input.amount === "number" ? input.amount : Number(input.amount);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return { payload: null, error: "Enter a valid adjustment amount greater than zero." };
+  }
+
+  const dateOnly = parseDateOnly(input.expenseDate);
+  if (!dateOnly) {
+    return { payload: null, error: "Adjustment date is required." };
+  }
+
+  const splitOptions =
+    input.splitType === "custom"
+      ? {
+          customTelesAmount: input.customTelesAmount,
+          customNicoleAmount: input.customNicoleAmount,
+        }
+      : { person: input.person };
+
+  const splitResult = calculateExpenseSplit(amount, input.splitType, splitOptions);
+  if (splitResult.error) {
+    return { payload: null, error: splitResult.error };
+  }
+
+  const trimmedDescription = (input.description ?? "").trim();
+  const description =
+    trimmedDescription ||
+    `Adjustment for: ${input.originalDescription.trim() || "manual expense"}`;
+
+  const adjustmentDirection = input.adjustmentDirection;
+  const payload: ManualExpenseAdjustmentPayload = {
+    adjusts_manual_expense_id: originalExpenseId,
+    adjustment_direction: adjustmentDirection,
+    adjustment_reason: trimmedReason,
+    description,
+    amount,
+    expense_date: dateOnly,
+    period_bucket: getExpensePeriodBucket(dateOnly),
+    split_type: input.splitType,
+    teles_amount: splitResult.amounts.telesAmount,
+    nicole_amount: splitResult.amounts.nicoleAmount,
+    expense_scope: input.expenseScope,
+  };
+
+  if (input.category !== undefined) {
+    payload.category = (input.category ?? "").trim() || null;
+  }
+
+  if (input.notes !== undefined) {
+    payload.notes = (input.notes ?? "").trim() || null;
+  }
+
+  return { payload, error: null };
 }
 
 export async function createManualExpense(input: InsertManualExpense): Promise<{

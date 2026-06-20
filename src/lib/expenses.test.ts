@@ -1,14 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
+  adjustmentDirectionLabel,
   calculateExpenseSplit,
+  calculateSignedExpenseAmount,
   canDeleteManualExpense,
   canEditManualExpenseFinancialFields,
   getExpensePeriodBucket,
+  getManualExpenseSignedShareAmount,
   getMyExpenseShareAmount,
+  isManualExpenseAdjustment,
   isManualExpensePaidThroughApp,
   isPaidExpenseDeleteBlockedError,
   sumMyManualExpenseShareForView,
   validateCustomExpenseSplit,
+  validateManualExpenseAdjustmentInput,
   validateManualExpenseUpdate,
 } from "@/lib/expenses";
 import { calculateSafeToSpendAfterSavings } from "@/lib/savings";
@@ -424,6 +429,323 @@ describe("sumMyManualExpenseShareForView", () => {
         new Set()
       )
     ).toBe(50);
+  });
+});
+
+describe("manual expense adjustment helpers", () => {
+  const baseExpense = {
+    teles_amount: 40,
+    nicole_amount: 10,
+    adjusts_manual_expense_id: null,
+    adjustment_direction: null,
+  };
+
+  it("detects adjustment expenses", () => {
+    expect(isManualExpenseAdjustment({ adjusts_manual_expense_id: null })).toBe(false);
+    expect(
+      isManualExpenseAdjustment({ adjusts_manual_expense_id: "orig-1" })
+    ).toBe(true);
+  });
+
+  it("returns positive signed share for normal expenses", () => {
+    expect(getManualExpenseSignedShareAmount(baseExpense, "teles_amount")).toBe(40);
+  });
+
+  it("returns positive signed share for increase adjustments", () => {
+    expect(
+      getManualExpenseSignedShareAmount(
+        {
+          teles_amount: 40,
+          nicole_amount: 10,
+          adjustment_direction: "increase",
+        },
+        "teles_amount"
+      )
+    ).toBe(40);
+  });
+
+  it("returns negative signed share for decrease adjustments", () => {
+    expect(
+      getManualExpenseSignedShareAmount(
+        {
+          teles_amount: 40,
+          nicole_amount: 10,
+          adjustment_direction: "decrease",
+        },
+        "teles_amount"
+      )
+    ).toBe(-40);
+  });
+
+  it("calculates signed amounts by direction", () => {
+    expect(calculateSignedExpenseAmount(25, null)).toBe(25);
+    expect(calculateSignedExpenseAmount(25, "increase")).toBe(25);
+    expect(calculateSignedExpenseAmount(25, "decrease")).toBe(-25);
+  });
+
+  it("labels adjustment directions", () => {
+    expect(adjustmentDirectionLabel("increase")).toBe("Increase");
+    expect(adjustmentDirectionLabel("decrease")).toBe("Decrease");
+  });
+});
+
+describe("sumMyManualExpenseShareForView adjustments", () => {
+  const snapshotDate = "2026-06-10";
+
+  it("includes increase adjustments in totals", () => {
+    const expenses = [
+      {
+        id: "exp-base",
+        expense_date: "2026-06-15",
+        teles_amount: 50,
+        nicole_amount: 0,
+      },
+      {
+        id: "adj-increase",
+        expense_date: "2026-06-16",
+        teles_amount: 20,
+        nicole_amount: 0,
+        adjusts_manual_expense_id: "exp-base",
+        adjustment_direction: "increase" as const,
+      },
+    ];
+    expect(
+      sumMyManualExpenseShareForView(
+        expenses,
+        "teles_amount",
+        "full",
+        2026,
+        6,
+        snapshotDate,
+        new Set()
+      )
+    ).toBe(70);
+  });
+
+  it("subtracts decrease adjustments from totals", () => {
+    const expenses = [
+      {
+        id: "exp-base",
+        expense_date: "2026-06-15",
+        teles_amount: 50,
+        nicole_amount: 0,
+      },
+      {
+        id: "adj-decrease",
+        expense_date: "2026-06-16",
+        teles_amount: 15,
+        nicole_amount: 0,
+        adjusts_manual_expense_id: "exp-base",
+        adjustment_direction: "decrease" as const,
+      },
+    ];
+    expect(
+      sumMyManualExpenseShareForView(
+        expenses,
+        "teles_amount",
+        "full",
+        2026,
+        6,
+        snapshotDate,
+        new Set()
+      )
+    ).toBe(35);
+  });
+
+  it("applies snapshot cutoff to adjustments", () => {
+    const expenses = [
+      {
+        id: "adj-after",
+        expense_date: "2026-06-15",
+        teles_amount: 30,
+        nicole_amount: 0,
+        adjusts_manual_expense_id: "orig",
+        adjustment_direction: "increase" as const,
+      },
+      {
+        id: "adj-before",
+        expense_date: "2026-06-08",
+        teles_amount: 40,
+        nicole_amount: 0,
+        adjusts_manual_expense_id: "orig",
+        adjustment_direction: "increase" as const,
+      },
+    ];
+    expect(
+      sumMyManualExpenseShareForView(
+        expenses,
+        "teles_amount",
+        "full",
+        2026,
+        6,
+        snapshotDate,
+        new Set()
+      )
+    ).toBe(30);
+  });
+
+  it("applies period filtering to adjustments", () => {
+    const expenses = [
+      {
+        id: "adj-1-14",
+        expense_date: "2026-06-12",
+        teles_amount: 10,
+        nicole_amount: 0,
+        adjusts_manual_expense_id: "orig",
+        adjustment_direction: "increase" as const,
+      },
+      {
+        id: "adj-15-eom",
+        expense_date: "2026-06-20",
+        teles_amount: 25,
+        nicole_amount: 0,
+        adjusts_manual_expense_id: "orig",
+        adjustment_direction: "increase" as const,
+      },
+    ];
+    expect(
+      sumMyManualExpenseShareForView(
+        expenses,
+        "teles_amount",
+        "1_14",
+        2026,
+        6,
+        "2026-06-01",
+        new Set()
+      )
+    ).toBe(10);
+    expect(
+      sumMyManualExpenseShareForView(
+        expenses,
+        "teles_amount",
+        "15_eom",
+        2026,
+        6,
+        "2026-06-01",
+        new Set()
+      )
+    ).toBe(25);
+  });
+
+  it("still excludes paid-through-app expenses but counts their adjustments", () => {
+    const expenses = [
+      {
+        id: "exp-paid-app",
+        expense_date: "2026-06-15",
+        teles_amount: 60,
+        nicole_amount: 0,
+      },
+      {
+        id: "adj-for-paid",
+        expense_date: "2026-06-16",
+        teles_amount: 20,
+        nicole_amount: 0,
+        adjusts_manual_expense_id: "exp-paid-app",
+        adjustment_direction: "decrease" as const,
+      },
+    ];
+    expect(
+      sumMyManualExpenseShareForView(
+        expenses,
+        "teles_amount",
+        "full",
+        2026,
+        6,
+        snapshotDate,
+        new Set(["exp-paid-app"])
+      )
+    ).toBe(-20);
+  });
+});
+
+describe("validateManualExpenseAdjustmentInput", () => {
+  const validBase = {
+    originalExpenseId: "orig-1",
+    originalDescription: "Groceries",
+    adjustmentDirection: "increase" as const,
+    amount: 25,
+    expenseDate: "2026-06-15",
+    splitType: "equal" as const,
+    adjustmentReason: "Forgot part of the bill",
+    expenseScope: "private" as const,
+  };
+
+  it("returns a valid adjustment payload", () => {
+    const result = validateManualExpenseAdjustmentInput(validBase);
+    expect(result.error).toBeNull();
+    expect(result.payload).toMatchObject({
+      adjusts_manual_expense_id: "orig-1",
+      adjustment_direction: "increase",
+      adjustment_reason: "Forgot part of the bill",
+      amount: 25,
+      expense_date: "2026-06-15",
+      teles_amount: 12.5,
+      nicole_amount: 12.5,
+    });
+  });
+
+  it("rejects invalid adjustment direction", () => {
+    expect(
+      validateManualExpenseAdjustmentInput({
+        ...validBase,
+        adjustmentDirection: "invalid",
+      })
+    ).toEqual({
+      payload: null,
+      error: "Adjustment direction must be increase or decrease.",
+    });
+  });
+
+  it("rejects zero adjustment amount", () => {
+    expect(
+      validateManualExpenseAdjustmentInput({
+        ...validBase,
+        amount: 0,
+      })
+    ).toEqual({
+      payload: null,
+      error: "Enter a valid adjustment amount greater than zero.",
+    });
+  });
+
+  it("rejects negative adjustment amount", () => {
+    expect(
+      validateManualExpenseAdjustmentInput({
+        ...validBase,
+        amount: -5,
+      })
+    ).toEqual({
+      payload: null,
+      error: "Enter a valid adjustment amount greater than zero.",
+    });
+  });
+
+  it("rejects invalid custom split for adjustments", () => {
+    expect(
+      validateManualExpenseAdjustmentInput({
+        ...validBase,
+        amount: 100,
+        splitType: "custom",
+        customTelesAmount: 60,
+        customNicoleAmount: 30,
+      })
+    ).toEqual({
+      payload: null,
+      error: "Teles and Nicole amounts must sum to 100.00.",
+    });
+  });
+
+  it("accepts valid custom split for adjustments", () => {
+    const result = validateManualExpenseAdjustmentInput({
+      ...validBase,
+      amount: 80,
+      splitType: "custom",
+      customTelesAmount: 48,
+      customNicoleAmount: 32,
+    });
+    expect(result.error).toBeNull();
+    expect(result.payload?.teles_amount).toBe(48);
+    expect(result.payload?.nicole_amount).toBe(32);
   });
 });
 

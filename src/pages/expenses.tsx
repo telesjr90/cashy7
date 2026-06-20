@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
 import {
+  adjustmentDirectionLabel,
   calculateExpenseSplit,
   canDeleteManualExpense,
   createManualExpense,
@@ -11,10 +12,12 @@ import {
   getExpensePeriodBucket,
   getManualExpenses,
   getMyExpenseShareAmount,
+  isManualExpenseAdjustment,
   isManualExpensePaidThroughApp,
   markManualExpensePaid,
   updateManualExpense,
   validateCustomExpenseSplit,
+  validateManualExpenseAdjustmentInput,
   validateManualExpenseUpdate,
 } from "@/lib/expenses";
 import {
@@ -32,6 +35,7 @@ import {
 import type {
   CashPaymentTransaction,
   ManualExpense,
+  ManualExpenseAdjustmentDirection,
   ManualExpenseScope,
   ManualExpenseSplitType,
   Person,
@@ -93,6 +97,9 @@ const PAID_THROUGH_APP_EDIT_MESSAGE =
 const PAID_THROUGH_APP_DELETE_MESSAGE =
   "Already deducted from cash. Create an adjustment instead of deleting.";
 
+const ADJUSTMENT_PAY_DISABLED_MESSAGE =
+  "Adjustment affects planning totals only.";
+
 function todayIsoDate(): string {
   return format(new Date(), "yyyy-MM-dd");
 }
@@ -129,6 +136,21 @@ export function ExpensesPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
+  const [adjustingOriginalExpense, setAdjustingOriginalExpense] =
+    useState<ManualExpense | null>(null);
+  const [adjustmentFormError, setAdjustmentFormError] = useState<string | null>(null);
+  const [submittingAdjustment, setSubmittingAdjustment] = useState(false);
+  const [adjustmentForm, setAdjustmentForm] = useState({
+    adjustmentDirection: "increase" as ManualExpenseAdjustmentDirection,
+    amountInput: "",
+    expenseDate: todayIsoDate(),
+    splitType: "personal" as ManualExpenseSplitType,
+    customTelesInput: "",
+    customNicoleInput: "",
+    adjustmentReason: "",
+    description: "",
+    notes: "",
+  });
 
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("");
@@ -207,6 +229,11 @@ export function ExpensesPage() {
     [paymentTransactions]
   );
 
+  const expenseById = useMemo(
+    () => new Map(expenses.map((expense) => [expense.id, expense])),
+    [expenses]
+  );
+
   const editingExpense =
     expenses.find((expense) => expense.id === editingExpenseId) ?? null;
 
@@ -250,6 +277,48 @@ export function ExpensesPage() {
   const editPeriodBucket = useMemo(
     () => getExpensePeriodBucket(editForm.expenseDate),
     [editForm.expenseDate]
+  );
+
+  const adjustmentPreviewSplit = useMemo(() => {
+    const amount = Number(adjustmentForm.amountInput);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      return null;
+    }
+
+    if (adjustmentForm.splitType === "custom") {
+      const telesAmount = Number(adjustmentForm.customTelesInput);
+      const nicoleAmount = Number(adjustmentForm.customNicoleInput);
+      if (!Number.isFinite(telesAmount) || !Number.isFinite(nicoleAmount)) {
+        return null;
+      }
+      const validationError = validateCustomExpenseSplit(
+        amount,
+        telesAmount,
+        nicoleAmount
+      );
+      if (validationError) {
+        return { amounts: null, error: validationError };
+      }
+      return {
+        amounts: { telesAmount, nicoleAmount },
+        error: null,
+      };
+    }
+
+    return calculateExpenseSplit(amount, adjustmentForm.splitType, {
+      person: mappedPerson,
+    });
+  }, [
+    adjustmentForm.amountInput,
+    adjustmentForm.splitType,
+    adjustmentForm.customTelesInput,
+    adjustmentForm.customNicoleInput,
+    mappedPerson,
+  ]);
+
+  const adjustmentPeriodBucket = useMemo(
+    () => getExpensePeriodBucket(adjustmentForm.expenseDate),
+    [adjustmentForm.expenseDate]
   );
 
   const fetchData = useCallback(async () => {
@@ -453,6 +522,79 @@ export function ExpensesPage() {
     await fetchData();
   };
 
+  const startCreateAdjustment = (expense: ManualExpense) => {
+    setAdjustingOriginalExpense(expense);
+    setAdjustmentFormError(null);
+    setAdjustmentForm({
+      adjustmentDirection: "increase",
+      amountInput: "",
+      expenseDate: todayIsoDate(),
+      splitType: expense.split_type,
+      customTelesInput: String(expense.teles_amount),
+      customNicoleInput: String(expense.nicole_amount),
+      adjustmentReason: "",
+      description: `Adjustment for: ${expense.description}`,
+      notes: "",
+    });
+  };
+
+  const handleCreateAdjustment = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setAdjustmentFormError(null);
+
+    if (!household || !user || !adjustingOriginalExpense) {
+      return;
+    }
+
+    const validation = validateManualExpenseAdjustmentInput({
+      originalExpenseId: adjustingOriginalExpense.id,
+      originalDescription: adjustingOriginalExpense.description,
+      adjustmentDirection: adjustmentForm.adjustmentDirection,
+      amount: adjustmentForm.amountInput,
+      expenseDate: adjustmentForm.expenseDate,
+      splitType: adjustmentForm.splitType,
+      adjustmentReason: adjustmentForm.adjustmentReason,
+      description: adjustmentForm.description,
+      customTelesAmount:
+        adjustmentForm.splitType === "custom"
+          ? Number(adjustmentForm.customTelesInput)
+          : undefined,
+      customNicoleAmount:
+        adjustmentForm.splitType === "custom"
+          ? Number(adjustmentForm.customNicoleInput)
+          : undefined,
+      person: mappedPerson,
+      expenseScope: adjustingOriginalExpense.expense_scope,
+      notes: adjustmentForm.notes,
+    });
+
+    if (validation.error || !validation.payload) {
+      setAdjustmentFormError(
+        validation.error ?? "Could not validate adjustment."
+      );
+      return;
+    }
+
+    setSubmittingAdjustment(true);
+
+    const { expense, error: createError } = await createManualExpense({
+      household_id: household.id,
+      created_by_user_id: user.id,
+      person_id: membership?.person_id ?? null,
+      ...validation.payload,
+    });
+
+    setSubmittingAdjustment(false);
+
+    if (createError || !expense) {
+      setAdjustmentFormError(createError ?? "Could not create adjustment.");
+      return;
+    }
+
+    setAdjustingOriginalExpense(null);
+    await fetchData();
+  };
+
   const handleMarkPaid = async (expense: ManualExpense) => {
     if (expense.is_paid) {
       return;
@@ -479,6 +621,11 @@ export function ExpensesPage() {
 
   const handlePay = async (expense: ManualExpense) => {
     if (!household || !user) {
+      return;
+    }
+
+    if (isManualExpenseAdjustment(expense)) {
+      setActionError(ADJUSTMENT_PAY_DISABLED_MESSAGE);
       return;
     }
 
@@ -774,6 +921,7 @@ export function ExpensesPage() {
                 </TableHeader>
                 <TableBody>
                   {expenses.map((expense) => {
+                    const isAdjustment = isManualExpenseAdjustment(expense);
                     const hasPaymentTransaction = paymentByExpenseId.has(expense.id);
                     const cashStatus = getCashDeductionStatus({
                       isMarkedPaid: expense.is_paid,
@@ -788,26 +936,51 @@ export function ExpensesPage() {
                       userId: user.id,
                       hasPaymentTransaction,
                     });
+                    const originalExpense =
+                      expense.adjusts_manual_expense_id
+                        ? expenseById.get(expense.adjusts_manual_expense_id)
+                        : null;
 
                     return (
                     <TableRow key={expense.id}>
                       <TableCell>
-                        <Checkbox
-                          checked={expense.is_paid}
-                          disabled={markingPaidId === expense.id || expense.is_paid}
-                          onCheckedChange={() => void handleMarkPaid(expense)}
-                          aria-label="Mark paid"
-                        />
+                        {!isAdjustment ? (
+                          <Checkbox
+                            checked={expense.is_paid}
+                            disabled={markingPaidId === expense.id || expense.is_paid}
+                            onCheckedChange={() => void handleMarkPaid(expense)}
+                            aria-label="Mark paid"
+                          />
+                        ) : null}
                       </TableCell>
                       <TableCell>
                         <div className="space-y-1">
+                          {isAdjustment && expense.adjustment_direction && (
+                            <p className="text-xs font-medium text-primary">
+                              Adjustment ·{" "}
+                              {adjustmentDirectionLabel(expense.adjustment_direction)}
+                            </p>
+                          )}
                           <p
                             className={`font-medium ${
-                              expense.is_paid ? "line-through text-muted-foreground" : ""
+                              expense.is_paid && !isAdjustment
+                                ? "line-through text-muted-foreground"
+                                : ""
                             }`}
                           >
                             {expense.description}
                           </p>
+                          {isAdjustment && originalExpense && (
+                            <p className="text-xs text-muted-foreground">
+                              For: {originalExpense.description} (
+                              {formatCurrency(Number(originalExpense.amount))})
+                            </p>
+                          )}
+                          {isAdjustment && expense.adjustment_reason && (
+                            <p className="text-xs text-muted-foreground">
+                              Reason: {expense.adjustment_reason}
+                            </p>
+                          )}
                           {expense.category && (
                             <p className="text-xs text-muted-foreground">
                               {expense.category}
@@ -834,12 +1007,22 @@ export function ExpensesPage() {
                         </div>
                       </TableCell>
                       <TableCell>
-                        <span className="text-xs text-muted-foreground">
-                          {cashDeductionStatusLabel(cashStatus)}
-                        </span>
+                        {isAdjustment ? (
+                          <span className="text-xs text-muted-foreground">
+                            Planning only
+                          </span>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">
+                            {cashDeductionStatusLabel(cashStatus)}
+                          </span>
+                        )}
                       </TableCell>
                       <TableCell>
-                        {cashStatus === "unpaid" ? (
+                        {isAdjustment ? (
+                          <p className="text-xs text-muted-foreground">
+                            {ADJUSTMENT_PAY_DISABLED_MESSAGE}
+                          </p>
+                        ) : cashStatus === "unpaid" ? (
                           <Button
                             variant="secondary"
                             size="sm"
@@ -855,9 +1038,18 @@ export function ExpensesPage() {
                           <div className="flex flex-col items-end gap-1">
                             <div className="flex items-center justify-end gap-1">
                               {paidThroughApp ? (
-                                <p className="max-w-[10rem] text-right text-xs text-muted-foreground">
-                                  {PAID_THROUGH_APP_EDIT_MESSAGE}
-                                </p>
+                                <div className="flex flex-col items-end gap-1">
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => startCreateAdjustment(expense)}
+                                  >
+                                    Create adjustment
+                                  </Button>
+                                  <p className="max-w-[10rem] text-right text-xs text-muted-foreground">
+                                    {PAID_THROUGH_APP_EDIT_MESSAGE}
+                                  </p>
+                                </div>
                               ) : (
                                 <Button
                                   variant="ghost"
@@ -1158,6 +1350,282 @@ export function ExpensesPage() {
               <Button type="submit" disabled={savingEdit}>
                 {savingEdit && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Save changes
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={adjustingOriginalExpense !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setAdjustingOriginalExpense(null);
+            setAdjustmentFormError(null);
+          }
+        }}
+      >
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+          <form onSubmit={handleCreateAdjustment}>
+            <DialogHeader>
+              <DialogTitle>Create adjustment</DialogTitle>
+              <DialogDescription>
+                {adjustingOriginalExpense
+                  ? `Correct planning totals for "${adjustingOriginalExpense.description}" without editing the original paid expense.`
+                  : "Create an adjustment for a paid expense."}
+              </DialogDescription>
+            </DialogHeader>
+
+            {adjustingOriginalExpense && (
+              <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
+                <p className="font-medium">{adjustingOriginalExpense.description}</p>
+                <p>
+                  Original amount:{" "}
+                  {formatCurrency(Number(adjustingOriginalExpense.amount))}
+                </p>
+                <p>
+                  Original date:{" "}
+                  {formatDisplayDate(adjustingOriginalExpense.expense_date)}
+                </p>
+              </div>
+            )}
+
+            <div className="grid gap-4 py-4">
+              {adjustmentFormError && (
+                <Alert variant="destructive">
+                  <AlertDescription>{adjustmentFormError}</AlertDescription>
+                </Alert>
+              )}
+
+              <div className="space-y-2">
+                <Label htmlFor="adjustment-direction">Adjustment direction</Label>
+                <Select
+                  value={adjustmentForm.adjustmentDirection}
+                  onValueChange={(value) =>
+                    setAdjustmentForm((prev) => ({
+                      ...prev,
+                      adjustmentDirection: value as ManualExpenseAdjustmentDirection,
+                    }))
+                  }
+                  disabled={submittingAdjustment}
+                >
+                  <SelectTrigger id="adjustment-direction">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="increase">
+                      Increase (more planning impact)
+                    </SelectItem>
+                    <SelectItem value="decrease">
+                      Decrease (less planning impact)
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="adjustment-description">Description</Label>
+                <Input
+                  id="adjustment-description"
+                  value={adjustmentForm.description}
+                  onChange={(event) =>
+                    setAdjustmentForm((prev) => ({
+                      ...prev,
+                      description: event.target.value,
+                    }))
+                  }
+                  disabled={submittingAdjustment}
+                />
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="adjustment-amount">Adjustment amount</Label>
+                  <Input
+                    id="adjustment-amount"
+                    type="number"
+                    min="0.01"
+                    step="0.01"
+                    value={adjustmentForm.amountInput}
+                    onChange={(event) =>
+                      setAdjustmentForm((prev) => ({
+                        ...prev,
+                        amountInput: event.target.value,
+                      }))
+                    }
+                    placeholder="0.00"
+                    required
+                    disabled={submittingAdjustment}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="adjustment-date">Adjustment date</Label>
+                  <Input
+                    id="adjustment-date"
+                    type="date"
+                    value={adjustmentForm.expenseDate}
+                    onChange={(event) =>
+                      setAdjustmentForm((prev) => ({
+                        ...prev,
+                        expenseDate: event.target.value,
+                      }))
+                    }
+                    required
+                    disabled={submittingAdjustment}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Period bucket</Label>
+                <p className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
+                  {formatExpensePeriodBucket(adjustmentPeriodBucket)}
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="adjustment-split-type">Split type</Label>
+                <Select
+                  value={adjustmentForm.splitType}
+                  onValueChange={(value) =>
+                    setAdjustmentForm((prev) => ({
+                      ...prev,
+                      splitType: value as ManualExpenseSplitType,
+                    }))
+                  }
+                  disabled={submittingAdjustment}
+                >
+                  <SelectTrigger id="adjustment-split-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="personal">Personal</SelectItem>
+                    <SelectItem value="equal">Equal (50/50)</SelectItem>
+                    <SelectItem value="51_49">51/49</SelectItem>
+                    <SelectItem value="custom">Custom</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {adjustmentForm.splitType === "personal" && !mappedPerson && (
+                <Alert>
+                  <AlertDescription>
+                    Choose your budget profile in Settings before recording a
+                    personal expense.
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {adjustmentForm.splitType === "custom" && (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="adjustment-custom-teles">Teles amount</Label>
+                    <Input
+                      id="adjustment-custom-teles"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={adjustmentForm.customTelesInput}
+                      onChange={(event) =>
+                        setAdjustmentForm((prev) => ({
+                          ...prev,
+                          customTelesInput: event.target.value,
+                        }))
+                      }
+                      disabled={submittingAdjustment}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="adjustment-custom-nicole">Nicole amount</Label>
+                    <Input
+                      id="adjustment-custom-nicole"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={adjustmentForm.customNicoleInput}
+                      onChange={(event) =>
+                        setAdjustmentForm((prev) => ({
+                          ...prev,
+                          customNicoleInput: event.target.value,
+                        }))
+                      }
+                      disabled={submittingAdjustment}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {adjustmentPreviewSplit?.amounts && (
+                <p className="text-sm text-muted-foreground">
+                  Split preview: Teles{" "}
+                  {formatCurrency(adjustmentPreviewSplit.amounts.telesAmount)}
+                  {" / "}
+                  Nicole {formatCurrency(adjustmentPreviewSplit.amounts.nicoleAmount)}
+                </p>
+              )}
+
+              {adjustmentPreviewSplit?.error &&
+                adjustmentForm.splitType === "custom" && (
+                  <p className="text-sm text-destructive">
+                    {adjustmentPreviewSplit.error}
+                  </p>
+                )}
+
+              <div className="space-y-2">
+                <Label htmlFor="adjustment-reason">Reason</Label>
+                <Textarea
+                  id="adjustment-reason"
+                  value={adjustmentForm.adjustmentReason}
+                  onChange={(event) =>
+                    setAdjustmentForm((prev) => ({
+                      ...prev,
+                      adjustmentReason: event.target.value,
+                    }))
+                  }
+                  placeholder="Why is this adjustment needed?"
+                  rows={2}
+                  required
+                  disabled={submittingAdjustment}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="adjustment-notes">Notes (optional)</Label>
+                <Textarea
+                  id="adjustment-notes"
+                  value={adjustmentForm.notes}
+                  onChange={(event) =>
+                    setAdjustmentForm((prev) => ({
+                      ...prev,
+                      notes: event.target.value,
+                    }))
+                  }
+                  rows={2}
+                  disabled={submittingAdjustment}
+                />
+              </div>
+
+              <p className="text-xs text-muted-foreground">
+                Adjustments affect planning totals only. They do not change cash
+                snapshots or payment transactions.
+              </p>
+            </div>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setAdjustingOriginalExpense(null)}
+                disabled={submittingAdjustment}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={submittingAdjustment}>
+                {submittingAdjustment && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                Create adjustment
               </Button>
             </DialogFooter>
           </form>
