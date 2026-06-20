@@ -31,6 +31,7 @@ import {
 } from "lucide-react";
 import { format } from "date-fns";
 import { formatCurrency } from "@/lib/format";
+import { syncBillPaidStatusWithDebt } from "@/lib/sync-bill-paid-status";
 import {
   activePeriodView,
   defaultPeriodViewForMonth,
@@ -86,14 +87,16 @@ export function DashboardPage() {
   }, [fetchBills]);
 
   const togglePaid = async (bill: BillInstance) => {
-    const { error } = await supabase
-      .from("bill_instances")
-      .update({ is_paid: !bill.is_paid })
-      .eq("id", bill.id);
+    const newPaidStatus = !bill.is_paid;
+    const { error } = await syncBillPaidStatusWithDebt(
+      bill.id,
+      bill.is_paid,
+      newPaidStatus
+    );
 
     if (!error) {
       setBills((prev) =>
-        prev.map((b) => (b.id === bill.id ? { ...b, is_paid: !b.is_paid } : b))
+        prev.map((b) => (b.id === bill.id ? { ...b, is_paid: newPaidStatus } : b))
       );
     }
   };
