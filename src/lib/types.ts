@@ -296,6 +296,58 @@ export interface Database {
           created_at?: string;
         };
       };
+      household_settings: {
+        Row: {
+          household_id: string;
+          cashflow_start_date: string;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          household_id: string;
+          cashflow_start_date: string;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          household_id?: string;
+          cashflow_start_date?: string;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      cash_snapshots: {
+        Row: {
+          id: string;
+          household_id: string;
+          user_id: string;
+          amount: number;
+          snapshot_date: string;
+          notes: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          household_id: string;
+          user_id: string;
+          amount: number;
+          snapshot_date?: string;
+          notes?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          household_id?: string;
+          user_id?: string;
+          amount?: number;
+          snapshot_date?: string;
+          notes?: string | null;
+          created_at?: string;
+        };
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -322,3 +374,5 @@ export type Bill = Tables<"bills">;
 export type BillInstance = Tables<"bill_instances">;
 export type DebtAccount = Tables<"debt_accounts">;
 export type DebtPayment = Tables<"debt_payments">;
+export type HouseholdSettings = Tables<"household_settings">;
+export type CashSnapshot = Tables<"cash_snapshots">;
