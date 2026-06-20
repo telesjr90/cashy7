@@ -426,15 +426,39 @@ export function DashboardPage() {
             ) : cashSnapshotLoading || loading ? (
               <Skeleton className="h-8 w-48" />
             ) : (
-              <div className="space-y-1">
-                <p className="text-2xl font-semibold">
-                  {formatCurrency(safeToSpendBeforeSavings ?? 0)}
-                </p>
-                <p className="text-sm text-muted-foreground">{safeToSpendViewLabel}</p>
-                <p className="text-xs text-muted-foreground">
-                  Based on your latest current amount minus your unpaid bills in this view.
-                  Savings goals are not included yet.
-                </p>
+              <div className="space-y-4">
+                <div className="space-y-1">
+                  <p className="text-2xl font-semibold">
+                    {formatCurrency(safeToSpendBeforeSavings ?? 0)}
+                  </p>
+                  <p className="text-sm text-muted-foreground">{safeToSpendViewLabel}</p>
+                </div>
+                <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+                  <p className="mb-2 font-medium">How this was calculated</p>
+                  <dl className="space-y-1.5">
+                    <div className="flex items-baseline justify-between gap-4">
+                      <dt className="text-muted-foreground">Current available amount</dt>
+                      <dd className="font-medium tabular-nums">
+                        {formatCurrency(Number(cashSnapshot.amount))}
+                      </dd>
+                    </div>
+                    <div className="flex items-baseline justify-between gap-4">
+                      <dt className="text-muted-foreground">Your unpaid bills in this view</dt>
+                      <dd className="font-medium tabular-nums">
+                        {formatCurrency(myUnpaidBillTotal ?? 0)}
+                      </dd>
+                    </div>
+                    <div className="flex items-baseline justify-between gap-4 border-t pt-1.5">
+                      <dt className="font-medium">Safe to spend before savings</dt>
+                      <dd className="font-semibold tabular-nums">
+                        {formatCurrency(safeToSpendBeforeSavings ?? 0)}
+                      </dd>
+                    </div>
+                  </dl>
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Savings goals, expenses, and future paychecks are not included yet.
+                  </p>
+                </div>
               </div>
             )}
           </CardContent>
