@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  calculateSafeToSpendBeforeSavings,
   getMyBillShareAmount,
   resolveBillShareKeyForPerson,
   sumMyBillShareTotal,
+  sumMyUnpaidBillShareTotal,
 } from "./bill-share";
 
 describe("resolveBillShareKeyForPerson", () => {
@@ -99,5 +101,61 @@ describe("sumMyBillShareTotal", () => {
     ];
     expect(sumMyBillShareTotal(billsWithInvalid, "teles_amount", "1_14")).toBe(100);
     expect(sumMyBillShareTotal(billsWithInvalid, "nicole_amount", "1_14")).toBe(70);
+  });
+});
+
+describe("sumMyUnpaidBillShareTotal", () => {
+  const bills = [
+    { period_bucket: "1_14" as const, teles_amount: 100, nicole_amount: 50, is_paid: false },
+    { period_bucket: "1_14" as const, teles_amount: 25.5, nicole_amount: 30, is_paid: true },
+    { period_bucket: "15_eom" as const, teles_amount: 200, nicole_amount: 75, is_paid: false },
+    { period_bucket: "15_eom" as const, teles_amount: 10, nicole_amount: 40, is_paid: true },
+  ];
+
+  it("sums only unpaid bills for full month", () => {
+    expect(sumMyUnpaidBillShareTotal(bills, "teles_amount", "full")).toBe(300);
+    expect(sumMyUnpaidBillShareTotal(bills, "nicole_amount", "full")).toBe(125);
+  });
+
+  it("ignores paid bills", () => {
+    expect(sumMyUnpaidBillShareTotal(bills, "teles_amount", "1_14")).toBe(100);
+    expect(sumMyUnpaidBillShareTotal(bills, "nicole_amount", "1_14")).toBe(50);
+  });
+
+  it("sums only unpaid 1_14 bills", () => {
+    expect(sumMyUnpaidBillShareTotal(bills, "teles_amount", "1_14")).toBe(100);
+    expect(sumMyUnpaidBillShareTotal(bills, "nicole_amount", "1_14")).toBe(50);
+  });
+
+  it("sums only unpaid 15_eom bills", () => {
+    expect(sumMyUnpaidBillShareTotal(bills, "teles_amount", "15_eom")).toBe(200);
+    expect(sumMyUnpaidBillShareTotal(bills, "nicole_amount", "15_eom")).toBe(75);
+  });
+
+  it("returns null when share key is null", () => {
+    expect(sumMyUnpaidBillShareTotal(bills, null, "full")).toBeNull();
+  });
+
+  it("ignores invalid amounts when summing", () => {
+    const billsWithInvalid = [
+      { period_bucket: "1_14" as const, teles_amount: 100, nicole_amount: 50, is_paid: false },
+      { period_bucket: "1_14" as const, teles_amount: "bad", nicole_amount: 20, is_paid: false },
+    ];
+    expect(sumMyUnpaidBillShareTotal(billsWithInvalid, "teles_amount", "1_14")).toBe(100);
+    expect(sumMyUnpaidBillShareTotal(billsWithInvalid, "nicole_amount", "1_14")).toBe(70);
+  });
+});
+
+describe("calculateSafeToSpendBeforeSavings", () => {
+  it("returns positive safe-to-spend", () => {
+    expect(calculateSafeToSpendBeforeSavings(1000, 300)).toBe(700);
+  });
+
+  it("returns zero safe-to-spend", () => {
+    expect(calculateSafeToSpendBeforeSavings(500, 500)).toBe(0);
+  });
+
+  it("returns negative safe-to-spend", () => {
+    expect(calculateSafeToSpendBeforeSavings(200, 350)).toBe(-150);
   });
 });

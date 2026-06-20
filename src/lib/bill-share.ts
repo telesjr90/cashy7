@@ -44,6 +44,10 @@ type BillShareInput = {
   nicole_amount: number | string;
 };
 
+type UnpaidBillShareInput = BillShareInput & {
+  is_paid: boolean;
+};
+
 /** Sum the signed-in user's bill share for the selected dashboard period view. */
 export function sumMyBillShareTotal(
   bills: BillShareInput[],
@@ -63,4 +67,33 @@ export function sumMyBillShareTotal(
     const amount = getMyBillShareAmount(bill, shareKey);
     return amount === null ? sum : sum + amount;
   }, 0);
+}
+
+/** Sum the signed-in user's unpaid bill share for the selected dashboard period view. */
+export function sumMyUnpaidBillShareTotal(
+  bills: UnpaidBillShareInput[],
+  shareKey: BillShareKey | null,
+  periodView: BillSharePeriodView
+): number | null {
+  if (!shareKey) {
+    return null;
+  }
+
+  const unpaidBills = bills.filter((bill) => !bill.is_paid);
+  const periodBills =
+    periodView === "full"
+      ? unpaidBills
+      : unpaidBills.filter((bill) => bill.period_bucket === periodView);
+
+  return periodBills.reduce((sum, bill) => {
+    const amount = getMyBillShareAmount(bill, shareKey);
+    return amount === null ? sum : sum + amount;
+  }, 0);
+}
+
+export function calculateSafeToSpendBeforeSavings(
+  currentAmount: number,
+  unpaidBillTotal: number
+): number {
+  return currentAmount - unpaidBillTotal;
 }

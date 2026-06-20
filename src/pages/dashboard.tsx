@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
 import {
+  calculateSafeToSpendBeforeSavings,
   resolveBillShareKeyForPerson,
   sumMyBillShareTotal,
+  sumMyUnpaidBillShareTotal,
 } from "@/lib/bill-share";
 import { getHouseholdPeople } from "@/lib/user-person";
 import type { Person } from "@/lib/types";
@@ -258,6 +260,15 @@ export function DashboardPage() {
   const myBillTotal = sumMyBillShareTotal(bills, shareKey, periodView);
   const myBillTotalViewLabel =
     periodView === "full" ? "Full Month" : PERIOD_LABELS[periodView];
+  const myUnpaidBillTotal = sumMyUnpaidBillShareTotal(bills, shareKey, periodView);
+  const safeToSpendBeforeSavings =
+    cashSnapshot && shareKey !== null && myUnpaidBillTotal !== null
+      ? calculateSafeToSpendBeforeSavings(
+          Number(cashSnapshot.amount),
+          myUnpaidBillTotal
+        )
+      : null;
+  const safeToSpendViewLabel = myBillTotalViewLabel;
 
   if (!household) {
     return null;
@@ -378,6 +389,52 @@ export function DashboardPage() {
                   {formatCurrency(myBillTotal ?? 0)}
                 </p>
                 <p className="text-sm text-muted-foreground">{myBillTotalViewLabel}</p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="mb-6">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Safe to spend before savings</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {!cashSnapshot && shareKey === null ? (
+              <p className="text-sm text-muted-foreground">
+                Record your current amount and choose your budget profile in{" "}
+                <Link to="/settings" className="font-medium underline underline-offset-4">
+                  Settings
+                </Link>{" "}
+                to see safe-to-spend.
+              </p>
+            ) : !cashSnapshot ? (
+              <p className="text-sm text-muted-foreground">
+                Record your current amount in{" "}
+                <Link to="/settings" className="font-medium underline underline-offset-4">
+                  Settings
+                </Link>{" "}
+                to see safe-to-spend.
+              </p>
+            ) : shareKey === null ? (
+              <p className="text-sm text-muted-foreground">
+                Choose your budget profile in{" "}
+                <Link to="/settings" className="font-medium underline underline-offset-4">
+                  Settings
+                </Link>{" "}
+                to see safe-to-spend.
+              </p>
+            ) : cashSnapshotLoading || loading ? (
+              <Skeleton className="h-8 w-48" />
+            ) : (
+              <div className="space-y-1">
+                <p className="text-2xl font-semibold">
+                  {formatCurrency(safeToSpendBeforeSavings ?? 0)}
+                </p>
+                <p className="text-sm text-muted-foreground">{safeToSpendViewLabel}</p>
+                <p className="text-xs text-muted-foreground">
+                  Based on your latest current amount minus your unpaid bills in this view.
+                  Savings goals are not included yet.
+                </p>
               </div>
             )}
           </CardContent>
