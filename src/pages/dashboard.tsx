@@ -80,7 +80,7 @@ interface PeriodSummary {
 }
 
 export function DashboardPage() {
-  const { household, user, membership } = useAuth();
+  const { household, user, membership, refreshHousehold } = useAuth();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [bills, setBills] = useState<BillInstance[]>([]);
   const [loading, setLoading] = useState(true);
@@ -257,6 +257,8 @@ export function DashboardPage() {
       const background = options?.background ?? true;
 
       try {
+        await refreshHousehold();
+
         const { settings, error: settingsFetchError } = await getHouseholdSettings(
           household.id
         );
@@ -363,7 +365,7 @@ export function DashboardPage() {
         refreshInFlightRef.current = false;
       }
     },
-    [household, user, year, month]
+    [household, user, year, month, refreshHousehold]
   );
 
   useEffect(() => {
