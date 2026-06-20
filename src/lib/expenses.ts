@@ -281,6 +281,92 @@ export async function createManualExpense(input: InsertManualExpense): Promise<{
   return { expense: data as ManualExpense, error: null };
 }
 
+export interface ValidateManualExpenseUpdateInput {
+  description: string;
+  amount: number | string;
+  expenseDate: string;
+  splitType: ManualExpenseSplitType;
+  customTelesAmount?: number;
+  customNicoleAmount?: number;
+  person?: { name: string } | null;
+  category?: string | null;
+  notes?: string | null;
+  expenseScope?: ManualExpenseScope;
+}
+
+/** Whether the signed-in user paid this expense through Pay & deduct cash. */
+export function isManualExpensePaidThroughApp(
+  expenseId: string,
+  paidManualExpenseIds: ReadonlySet<string>
+): boolean {
+  return paidManualExpenseIds.has(expenseId);
+}
+
+/** Paid-through-app expenses must not have financial fields edited. */
+export function canEditManualExpenseFinancialFields(
+  expenseId: string,
+  paidManualExpenseIds: ReadonlySet<string>
+): boolean {
+  return !isManualExpensePaidThroughApp(expenseId, paidManualExpenseIds);
+}
+
+export function validateManualExpenseUpdate(
+  input: ValidateManualExpenseUpdateInput
+): { payload: UpdateManualExpense; error: null } | { payload: null; error: string } {
+  const trimmedDescription = input.description.trim();
+  if (!trimmedDescription) {
+    return { payload: null, error: "Description is required." };
+  }
+
+  const amount =
+    typeof input.amount === "number" ? input.amount : Number(input.amount);
+  if (!Number.isFinite(amount) || amount < 0) {
+    return { payload: null, error: "Enter a valid non-negative amount." };
+  }
+
+  const dateOnly = parseDateOnly(input.expenseDate);
+  if (!dateOnly) {
+    return { payload: null, error: "Expense date is required." };
+  }
+
+  const splitOptions =
+    input.splitType === "custom"
+      ? {
+          customTelesAmount: input.customTelesAmount,
+          customNicoleAmount: input.customNicoleAmount,
+        }
+      : { person: input.person };
+
+  const splitResult = calculateExpenseSplit(amount, input.splitType, splitOptions);
+  if (splitResult.error) {
+    return { payload: null, error: splitResult.error };
+  }
+
+  const payload: UpdateManualExpense = {
+    description: trimmedDescription,
+    amount,
+    expense_date: dateOnly,
+    period_bucket: getExpensePeriodBucket(dateOnly),
+    split_type: input.splitType,
+    teles_amount: splitResult.amounts.telesAmount,
+    nicole_amount: splitResult.amounts.nicoleAmount,
+  };
+
+  if (input.category !== undefined) {
+    payload.category = (input.category ?? "").trim() || null;
+  }
+
+  if (input.notes !== undefined) {
+    payload.notes = (input.notes ?? "").trim() || null;
+  }
+
+  if (input.expenseScope !== undefined) {
+    payload.expense_scope = input.expenseScope;
+  }
+
+  return { payload, error: null };
+}
+
 export async function updateManualExpense(
   id: string,
   input: UpdateManualExpense

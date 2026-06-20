@@ -10,8 +10,11 @@ import {
   getExpensePeriodBucket,
   getManualExpenses,
   getMyExpenseShareAmount,
+  isManualExpensePaidThroughApp,
   markManualExpensePaid,
+  updateManualExpense,
   validateCustomExpenseSplit,
+  validateManualExpenseUpdate,
 } from "@/lib/expenses";
 import {
   resolveBillShareKeyForPerson,
@@ -19,6 +22,7 @@ import {
 import { getHouseholdPeople } from "@/lib/user-person";
 import {
   getMyCashPaymentTransactions,
+  getPaidManualExpenseSourceIds,
   paySourceFromCurrentCash,
   getCashDeductionStatus,
   cashDeductionStatusLabel,
@@ -70,9 +74,20 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Loader as Loader2, Receipt, Trash2 } from "lucide-react";
+import { Loader as Loader2, Pencil, Receipt, Trash2 } from "lucide-react";
 import { format, parseISO } from "date-fns";
+
+const PAID_THROUGH_APP_EDIT_MESSAGE =
+  "Already deducted from cash. Create an adjustment instead of editing.";
 
 function todayIsoDate(): string {
   return format(new Date(), "yyyy-MM-dd");
@@ -93,6 +108,20 @@ export function ExpensesPage() {
   const [submitting, setSubmitting] = useState(false);
   const [markingPaidId, setMarkingPaidId] = useState<string | null>(null);
   const [payingExpenseId, setPayingExpenseId] = useState<string | null>(null);
+  const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editFormError, setEditFormError] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({
+    description: "",
+    category: "",
+    amountInput: "",
+    expenseDate: todayIsoDate(),
+    expenseScope: "private" as ManualExpenseScope,
+    splitType: "personal" as ManualExpenseSplitType,
+    customTelesInput: "",
+    customNicoleInput: "",
+    notes: "",
+  });
   const [actionError, setActionError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -168,6 +197,56 @@ export function ExpensesPage() {
     }
     return map;
   }, [paymentTransactions]);
+
+  const paidManualExpenseIds = useMemo(
+    () => getPaidManualExpenseSourceIds(paymentTransactions),
+    [paymentTransactions]
+  );
+
+  const editingExpense =
+    expenses.find((expense) => expense.id === editingExpenseId) ?? null;
+
+  const editPreviewSplit = useMemo(() => {
+    const amount = Number(editForm.amountInput);
+    if (!Number.isFinite(amount) || amount < 0) {
+      return null;
+    }
+
+    if (editForm.splitType === "custom") {
+      const telesAmount = Number(editForm.customTelesInput);
+      const nicoleAmount = Number(editForm.customNicoleInput);
+      if (!Number.isFinite(telesAmount) || !Number.isFinite(nicoleAmount)) {
+        return null;
+      }
+      const validationError = validateCustomExpenseSplit(
+        amount,
+        telesAmount,
+        nicoleAmount
+      );
+      if (validationError) {
+        return { amounts: null, error: validationError };
+      }
+      return {
+        amounts: { telesAmount, nicoleAmount },
+        error: null,
+      };
+    }
+
+    return calculateExpenseSplit(amount, editForm.splitType, {
+      person: mappedPerson,
+    });
+  }, [
+    editForm.amountInput,
+    editForm.splitType,
+    editForm.customTelesInput,
+    editForm.customNicoleInput,
+    mappedPerson,
+  ]);
+
+  const editPeriodBucket = useMemo(
+    () => getExpensePeriodBucket(editForm.expenseDate),
+    [editForm.expenseDate]
+  );
 
   const fetchData = useCallback(async () => {
     if (!household || !user) {
@@ -294,6 +373,79 @@ export function ExpensesPage() {
       setError(deleteError);
       return;
     }
+    await fetchData();
+  };
+
+  const startEditExpense = (expense: ManualExpense) => {
+    setEditingExpenseId(expense.id);
+    setEditFormError(null);
+    setEditForm({
+      description: expense.description,
+      category: expense.category ?? "",
+      amountInput: String(expense.amount),
+      expenseDate: expense.expense_date.slice(0, 10),
+      expenseScope: expense.expense_scope,
+      splitType: expense.split_type,
+      customTelesInput: String(expense.teles_amount),
+      customNicoleInput: String(expense.nicole_amount),
+      notes: expense.notes ?? "",
+    });
+  };
+
+  const handleSaveEdit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setEditFormError(null);
+
+    if (!editingExpense) {
+      return;
+    }
+
+    if (
+      isManualExpensePaidThroughApp(editingExpense.id, paidManualExpenseIds)
+    ) {
+      setEditFormError(PAID_THROUGH_APP_EDIT_MESSAGE);
+      return;
+    }
+
+    const validation = validateManualExpenseUpdate({
+      description: editForm.description,
+      amount: editForm.amountInput,
+      expenseDate: editForm.expenseDate,
+      splitType: editForm.splitType,
+      customTelesAmount:
+        editForm.splitType === "custom"
+          ? Number(editForm.customTelesInput)
+          : undefined,
+      customNicoleAmount:
+        editForm.splitType === "custom"
+          ? Number(editForm.customNicoleInput)
+          : undefined,
+      person: mappedPerson,
+      category: editForm.category,
+      notes: editForm.notes,
+      expenseScope: editForm.expenseScope,
+    });
+
+    if (validation.error || !validation.payload) {
+      setEditFormError(validation.error ?? "Could not validate expense update.");
+      return;
+    }
+
+    setSavingEdit(true);
+
+    const { expense: updated, error: updateError } = await updateManualExpense(
+      editingExpense.id,
+      validation.payload
+    );
+
+    setSavingEdit(false);
+
+    if (updateError || !updated) {
+      setEditFormError(updateError ?? "Could not update expense.");
+      return;
+    }
+
+    setEditingExpenseId(null);
     await fetchData();
   };
 
@@ -613,7 +765,7 @@ export function ExpensesPage() {
                     <TableHead>Split</TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="w-44">Pay & deduct cash</TableHead>
-                    <TableHead className="w-[70px]" />
+                    <TableHead className="w-[100px]" />
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -685,32 +837,51 @@ export function ExpensesPage() {
                         ) : null}
                       </TableCell>
                       <TableCell>
-                        {expense.created_by_user_id === user.id && (
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button variant="ghost" size="icon" aria-label="Delete expense">
-                                <Trash2 className="h-4 w-4" />
+                        {expense.created_by_user_id === user.id ? (
+                          <div className="flex items-center justify-end gap-1">
+                            {isManualExpensePaidThroughApp(
+                              expense.id,
+                              paidManualExpenseIds
+                            ) ? (
+                              <p className="max-w-[10rem] text-right text-xs text-muted-foreground">
+                                {PAID_THROUGH_APP_EDIT_MESSAGE}
+                              </p>
+                            ) : (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                aria-label="Edit expense"
+                                onClick={() => startEditExpense(expense)}
+                              >
+                                <Pencil className="h-4 w-4" />
                               </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Delete expense?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  This removes &quot;{expense.description}&quot; from your
-                                  expense history.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction
-                                  onClick={() => void handleDelete(expense.id)}
-                                >
-                                  Delete
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        )}
+                            )}
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="ghost" size="icon" aria-label="Delete expense">
+                                  <Trash2 className="h-4 w-4" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Delete expense?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    This removes &quot;{expense.description}&quot; from your
+                                    expense history.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => void handleDelete(expense.id)}
+                                  >
+                                    Delete
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
+                        ) : null}
                       </TableCell>
                     </TableRow>
                     );
@@ -721,6 +892,253 @@ export function ExpensesPage() {
           </CardContent>
         </Card>
       </div>
+
+      <Dialog
+        open={editingExpenseId !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditingExpenseId(null);
+            setEditFormError(null);
+          }
+        }}
+      >
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+          <form onSubmit={handleSaveEdit}>
+            <DialogHeader>
+              <DialogTitle>Edit expense</DialogTitle>
+              <DialogDescription>
+                {editingExpense
+                  ? `Update "${editingExpense.description}".`
+                  : "Update expense details."}
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="grid gap-4 py-4">
+              {editFormError && (
+                <Alert variant="destructive">
+                  <AlertDescription>{editFormError}</AlertDescription>
+                </Alert>
+              )}
+
+              <div className="space-y-2">
+                <Label htmlFor="edit-expense-description">Description</Label>
+                <Input
+                  id="edit-expense-description"
+                  value={editForm.description}
+                  onChange={(event) =>
+                    setEditForm((prev) => ({
+                      ...prev,
+                      description: event.target.value,
+                    }))
+                  }
+                  required
+                  disabled={savingEdit}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="edit-expense-category">Category (optional)</Label>
+                <Input
+                  id="edit-expense-category"
+                  value={editForm.category}
+                  onChange={(event) =>
+                    setEditForm((prev) => ({
+                      ...prev,
+                      category: event.target.value,
+                    }))
+                  }
+                  disabled={savingEdit}
+                />
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-expense-amount">Amount</Label>
+                  <Input
+                    id="edit-expense-amount"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={editForm.amountInput}
+                    onChange={(event) =>
+                      setEditForm((prev) => ({
+                        ...prev,
+                        amountInput: event.target.value,
+                      }))
+                    }
+                    required
+                    disabled={savingEdit}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit-expense-date">Expense date</Label>
+                  <Input
+                    id="edit-expense-date"
+                    type="date"
+                    value={editForm.expenseDate}
+                    onChange={(event) =>
+                      setEditForm((prev) => ({
+                        ...prev,
+                        expenseDate: event.target.value,
+                      }))
+                    }
+                    required
+                    disabled={savingEdit}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Period bucket</Label>
+                <p className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
+                  {formatExpensePeriodBucket(editPeriodBucket)}
+                </p>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-expense-scope">Scope</Label>
+                  <Select
+                    value={editForm.expenseScope}
+                    onValueChange={(value) =>
+                      setEditForm((prev) => ({
+                        ...prev,
+                        expenseScope: value as ManualExpenseScope,
+                      }))
+                    }
+                    disabled={savingEdit}
+                  >
+                    <SelectTrigger id="edit-expense-scope">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="private">Private</SelectItem>
+                      <SelectItem value="shared">Shared</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit-expense-split-type">Split type</Label>
+                  <Select
+                    value={editForm.splitType}
+                    onValueChange={(value) =>
+                      setEditForm((prev) => ({
+                        ...prev,
+                        splitType: value as ManualExpenseSplitType,
+                      }))
+                    }
+                    disabled={savingEdit}
+                  >
+                    <SelectTrigger id="edit-expense-split-type">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="personal">Personal</SelectItem>
+                      <SelectItem value="equal">Equal (50/50)</SelectItem>
+                      <SelectItem value="51_49">51/49</SelectItem>
+                      <SelectItem value="custom">Custom</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {editForm.splitType === "personal" && !mappedPerson && (
+                <Alert>
+                  <AlertDescription>
+                    Choose your budget profile in Settings before recording a
+                    personal expense.
+                  </AlertDescription>
+                </Alert>
+              )}
+
+              {editForm.splitType === "custom" && (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-custom-teles">Teles amount</Label>
+                    <Input
+                      id="edit-custom-teles"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={editForm.customTelesInput}
+                      onChange={(event) =>
+                        setEditForm((prev) => ({
+                          ...prev,
+                          customTelesInput: event.target.value,
+                        }))
+                      }
+                      disabled={savingEdit}
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-custom-nicole">Nicole amount</Label>
+                    <Input
+                      id="edit-custom-nicole"
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={editForm.customNicoleInput}
+                      onChange={(event) =>
+                        setEditForm((prev) => ({
+                          ...prev,
+                          customNicoleInput: event.target.value,
+                        }))
+                      }
+                      disabled={savingEdit}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {editPreviewSplit?.amounts && (
+                <p className="text-sm text-muted-foreground">
+                  Split preview: Teles{" "}
+                  {formatCurrency(editPreviewSplit.amounts.telesAmount)}
+                  {" / "}
+                  Nicole {formatCurrency(editPreviewSplit.amounts.nicoleAmount)}
+                </p>
+              )}
+
+              {editPreviewSplit?.error && editForm.splitType === "custom" && (
+                <p className="text-sm text-destructive">{editPreviewSplit.error}</p>
+              )}
+
+              <div className="space-y-2">
+                <Label htmlFor="edit-expense-notes">Notes (optional)</Label>
+                <Textarea
+                  id="edit-expense-notes"
+                  value={editForm.notes}
+                  onChange={(event) =>
+                    setEditForm((prev) => ({
+                      ...prev,
+                      notes: event.target.value,
+                    }))
+                  }
+                  rows={3}
+                  disabled={savingEdit}
+                />
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setEditingExpenseId(null)}
+                disabled={savingEdit}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={savingEdit}>
+                {savingEdit && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Save changes
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

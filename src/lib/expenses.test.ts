@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   calculateExpenseSplit,
+  canEditManualExpenseFinancialFields,
   getExpensePeriodBucket,
   getMyExpenseShareAmount,
+  isManualExpensePaidThroughApp,
   sumMyManualExpenseShareForView,
   validateCustomExpenseSplit,
+  validateManualExpenseUpdate,
 } from "@/lib/expenses";
 import { calculateSafeToSpendAfterSavings } from "@/lib/savings";
 import { calculateSafeToSpendBeforeSavings } from "@/lib/bill-share";
@@ -419,6 +422,114 @@ describe("sumMyManualExpenseShareForView", () => {
         new Set()
       )
     ).toBe(50);
+  });
+});
+
+describe("validateManualExpenseUpdate", () => {
+  it("returns a valid update payload", () => {
+    const result = validateManualExpenseUpdate({
+      description: "Groceries",
+      amount: 100,
+      expenseDate: "2026-06-10",
+      splitType: "equal",
+      category: "Food",
+      notes: "Weekly shop",
+      expenseScope: "private",
+    });
+
+    expect(result.error).toBeNull();
+    expect(result.payload).toEqual({
+      description: "Groceries",
+      amount: 100,
+      expense_date: "2026-06-10",
+      period_bucket: "1_14",
+      split_type: "equal",
+      teles_amount: 50,
+      nicole_amount: 50,
+      category: "Food",
+      notes: "Weekly shop",
+      expense_scope: "private",
+    });
+  });
+
+  it("rejects missing description", () => {
+    expect(
+      validateManualExpenseUpdate({
+        description: "   ",
+        amount: 50,
+        expenseDate: "2026-06-10",
+        splitType: "equal",
+      })
+    ).toEqual({ payload: null, error: "Description is required." });
+  });
+
+  it("rejects invalid amount", () => {
+    expect(
+      validateManualExpenseUpdate({
+        description: "Test",
+        amount: "bad",
+        expenseDate: "2026-06-10",
+        splitType: "equal",
+      })
+    ).toEqual({ payload: null, error: "Enter a valid non-negative amount." });
+  });
+
+  it("rejects missing expense date", () => {
+    expect(
+      validateManualExpenseUpdate({
+        description: "Test",
+        amount: 50,
+        expenseDate: "not-a-date",
+        splitType: "equal",
+      })
+    ).toEqual({ payload: null, error: "Expense date is required." });
+  });
+
+  it("rejects invalid custom split", () => {
+    expect(
+      validateManualExpenseUpdate({
+        description: "Test",
+        amount: 100,
+        expenseDate: "2026-06-20",
+        splitType: "custom",
+        customTelesAmount: 60,
+        customNicoleAmount: 30,
+      })
+    ).toEqual({
+      payload: null,
+      error: "Teles and Nicole amounts must sum to 100.00.",
+    });
+  });
+
+  it("accepts valid custom split", () => {
+    const result = validateManualExpenseUpdate({
+      description: "Custom split",
+      amount: 80,
+      expenseDate: "2026-06-20",
+      splitType: "custom",
+      customTelesAmount: 48,
+      customNicoleAmount: 32,
+    });
+
+    expect(result.error).toBeNull();
+    expect(result.payload?.split_type).toBe("custom");
+    expect(result.payload?.teles_amount).toBe(48);
+    expect(result.payload?.nicole_amount).toBe(32);
+    expect(result.payload?.period_bucket).toBe("15_eom");
+  });
+});
+
+describe("paid-through-app edit guard", () => {
+  const paidIds = new Set(["exp-paid"]);
+
+  it("detects paid-through-app expenses", () => {
+    expect(isManualExpensePaidThroughApp("exp-paid", paidIds)).toBe(true);
+    expect(isManualExpensePaidThroughApp("exp-unpaid", paidIds)).toBe(false);
+  });
+
+  it("blocks financial edits for paid-through-app expenses", () => {
+    expect(canEditManualExpenseFinancialFields("exp-paid", paidIds)).toBe(false);
+    expect(canEditManualExpenseFinancialFields("exp-unpaid", paidIds)).toBe(true);
   });
 });
 
