@@ -72,6 +72,10 @@ const MONTHS = [
   "July", "August", "September", "October", "November", "December"
 ];
 
+function formatDeductionAmount(amount: number): string {
+  return `− ${formatCurrency(amount)}`;
+}
+
 interface PeriodSummary {
   bills: BillInstance[];
   telesTotal: number;
@@ -844,13 +848,13 @@ export function DashboardPage() {
                     <div className="flex items-baseline justify-between gap-4">
                       <dt className="text-muted-foreground">Your unpaid bills in this view</dt>
                       <dd className="font-medium tabular-nums">
-                        {formatCurrency(myUnpaidBillTotal ?? 0)}
+                        {formatDeductionAmount(myUnpaidBillTotal ?? 0)}
                       </dd>
                     </div>
                     <div className="flex items-baseline justify-between gap-4">
                       <dt className="text-muted-foreground">Your manual expenses in this view</dt>
                       <dd className="font-medium tabular-nums">
-                        {formatCurrency(myManualExpenseTotalForView ?? 0)}
+                        {formatDeductionAmount(myManualExpenseTotalForView ?? 0)}
                       </dd>
                     </div>
                     <div className="flex items-baseline justify-between gap-4 border-t pt-1.5">
@@ -961,7 +965,7 @@ export function DashboardPage() {
                     <div className="flex items-baseline justify-between gap-4">
                       <dt className="text-muted-foreground">Remaining savings obligation in this view</dt>
                       <dd className="font-medium tabular-nums">
-                        {formatCurrency(remainingSavingsObligationForView)}
+                        {formatDeductionAmount(remainingSavingsObligationForView)}
                       </dd>
                     </div>
                     <div className="flex items-baseline justify-between gap-4 border-t pt-1.5">
