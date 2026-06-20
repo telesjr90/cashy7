@@ -46,6 +46,19 @@ export function paymentSourceLabel(sourceType: PaymentSourceType): string {
   }
 }
 
+/** Manual expense IDs already deducted from the signed-in user's current cash. */
+export function getPaidManualExpenseSourceIds(
+  paymentTransactions: Pick<CashPaymentTransaction, "source_type" | "source_id">[]
+): Set<string> {
+  const ids = new Set<string>();
+  for (const tx of paymentTransactions) {
+    if (tx.source_type === "manual_expense") {
+      ids.add(tx.source_id);
+    }
+  }
+  return ids;
+}
+
 export function isDuplicatePaymentError(error: unknown): boolean {
   if (!error) {
     return false;

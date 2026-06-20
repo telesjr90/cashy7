@@ -303,6 +303,123 @@ describe("sumMyManualExpenseShareForView", () => {
       sumMyManualExpenseShareForView(expenses, "teles_amount", "1_14", 2026, 6, "2026-06-01")
     ).toBe(50);
   });
+
+  it("counts unpaid manual expense after snapshot", () => {
+    const unpaid = [
+      { id: "exp-unpaid", expense_date: "2026-06-15", teles_amount: 40, nicole_amount: 0 },
+    ];
+    expect(
+      sumMyManualExpenseShareForView(
+        unpaid,
+        "teles_amount",
+        "full",
+        2026,
+        6,
+        "2026-06-10"
+      )
+    ).toBe(40);
+  });
+
+  it("counts marked-paid manual expense after snapshot with no payment transaction", () => {
+    const markedPaid = [
+      {
+        id: "exp-marked",
+        expense_date: "2026-06-15",
+        teles_amount: 35,
+        nicole_amount: 0,
+      },
+    ];
+    const deducted = new Set<string>();
+    expect(
+      sumMyManualExpenseShareForView(
+        markedPaid,
+        "teles_amount",
+        "full",
+        2026,
+        6,
+        "2026-06-10",
+        deducted
+      )
+    ).toBe(35);
+  });
+
+  it("excludes manual expense with matching cash payment transaction", () => {
+    const paidThroughApp = [
+      {
+        id: "exp-paid-app",
+        expense_date: "2026-06-15",
+        teles_amount: 60,
+        nicole_amount: 0,
+      },
+      {
+        id: "exp-still-counts",
+        expense_date: "2026-06-16",
+        teles_amount: 25,
+        nicole_amount: 0,
+      },
+    ];
+    const deducted = new Set(["exp-paid-app"]);
+    expect(
+      sumMyManualExpenseShareForView(
+        paidThroughApp,
+        "teles_amount",
+        "full",
+        2026,
+        6,
+        "2026-06-10",
+        deducted
+      )
+    ).toBe(25);
+  });
+
+  it("preserves current behavior when no deducted IDs are provided", () => {
+    const paidThroughApp = [
+      {
+        id: "exp-paid-app",
+        expense_date: "2026-06-15",
+        teles_amount: 60,
+        nicole_amount: 0,
+      },
+    ];
+    expect(
+      sumMyManualExpenseShareForView(
+        paidThroughApp,
+        "teles_amount",
+        "full",
+        2026,
+        6,
+        "2026-06-10"
+      )
+    ).toBe(60);
+  });
+
+  it("does not change totals based on expense scope; RLS handles visibility", () => {
+    const mixedScope = [
+      {
+        id: "exp-private",
+        expense_date: "2026-06-15",
+        teles_amount: 20,
+        nicole_amount: 0,
+      },
+      {
+        id: "exp-shared",
+        expense_date: "2026-06-16",
+        teles_amount: 30,
+        nicole_amount: 0,
+      },
+    ];
+    expect(
+      sumMyManualExpenseShareForView(
+        mixedScope,
+        "teles_amount",
+        "full",
+        2026,
+        6,
+        "2026-06-10",
+        new Set()
+      )
+    ).toBe(50);
+  });
 });
 
 describe("safe-to-spend with manual expenses", () => {

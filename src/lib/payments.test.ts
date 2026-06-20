@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   calculateCashAfterPayment,
+  getPaidManualExpenseSourceIds,
   isDuplicatePaymentError,
   parsePaymentAmount,
   paymentSourceLabel,
@@ -41,6 +42,46 @@ describe("paymentSourceLabel", () => {
     expect(paymentSourceLabel("bill_instance")).toBe("bill");
     expect(paymentSourceLabel("debt_payment")).toBe("debt payment");
     expect(paymentSourceLabel("manual_expense")).toBe("expense");
+  });
+});
+
+describe("getPaidManualExpenseSourceIds", () => {
+  it("extracts manual expense payment transaction source IDs", () => {
+    const ids = getPaidManualExpenseSourceIds([
+      {
+        source_type: "manual_expense",
+        source_id: "exp-1",
+      },
+      {
+        source_type: "manual_expense",
+        source_id: "exp-2",
+      },
+    ]);
+
+    expect(ids).toEqual(new Set(["exp-1", "exp-2"]));
+  });
+
+  it("ignores bill and debt payment transactions", () => {
+    const ids = getPaidManualExpenseSourceIds([
+      {
+        source_type: "bill_instance",
+        source_id: "bill-1",
+      },
+      {
+        source_type: "debt_payment",
+        source_id: "debt-1",
+      },
+      {
+        source_type: "manual_expense",
+        source_id: "exp-1",
+      },
+    ]);
+
+    expect(ids).toEqual(new Set(["exp-1"]));
+  });
+
+  it("returns an empty set when no manual expense payments exist", () => {
+    expect(getPaidManualExpenseSourceIds([])).toEqual(new Set());
   });
 });
 

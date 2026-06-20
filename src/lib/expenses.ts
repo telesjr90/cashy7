@@ -70,12 +70,18 @@ function expenseDateInViewRange(
 
 /** Sum the signed-in user's manual expense share for the selected dashboard view. */
 export function sumMyManualExpenseShareForView(
-  expenses: { expense_date: string; teles_amount: number | string; nicole_amount: number | string }[],
+  expenses: {
+    id?: string;
+    expense_date: string;
+    teles_amount: number | string;
+    nicole_amount: number | string;
+  }[],
   shareKey: BillShareKey | null,
   periodView: PeriodView,
   selectedYear: number,
   selectedMonth: number,
-  snapshotDate: string | null | undefined
+  snapshotDate: string | null | undefined,
+  deductedManualExpenseIds?: ReadonlySet<string>
 ): number | null {
   if (!shareKey) {
     return null;
@@ -100,6 +106,13 @@ export function sumMyManualExpenseShareForView(
 
     const expenseDateOnly = parseDateOnly(expense.expense_date);
     if (!expenseDateOnly || expenseDateOnly <= snapshotDateOnly) {
+      return sum;
+    }
+
+    if (
+      expense.id &&
+      deductedManualExpenseIds?.has(expense.id)
+    ) {
       return sum;
     }
 

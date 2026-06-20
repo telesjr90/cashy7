@@ -7,11 +7,15 @@ import {
   sumMyUnpaidBillShareTotal,
 } from "@/lib/bill-share";
 import { getManualExpenses, sumMyManualExpenseShareForView } from "@/lib/expenses";
+import {
+  getMyCashPaymentTransactions,
+  getPaidManualExpenseSourceIds,
+} from "@/lib/payments";
 import { getHouseholdPeople } from "@/lib/user-person";
 import type { Person } from "@/lib/types";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/lib/supabase";
-import type { BillInstance, ManualExpense } from "@/lib/types";
+import type { BillInstance, CashPaymentTransaction, ManualExpense } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -100,6 +104,9 @@ export function DashboardPage() {
   const [manualExpenses, setManualExpenses] = useState<ManualExpense[]>([]);
   const [manualExpensesLoading, setManualExpensesLoading] = useState(true);
   const [manualExpensesError, setManualExpensesError] = useState<string | null>(null);
+  const [paymentTransactions, setPaymentTransactions] = useState<CashPaymentTransaction[]>([]);
+  const [paymentTransactionsLoading, setPaymentTransactionsLoading] = useState(true);
+  const [paymentTransactionsError, setPaymentTransactionsError] = useState<string | null>(null);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth() + 1;
@@ -215,6 +222,24 @@ export function DashboardPage() {
     setManualExpensesLoading(false);
   }, [household]);
 
+  const fetchPaymentTransactions = useCallback(async () => {
+    if (!household || !user) return;
+
+    setPaymentTransactionsLoading(true);
+    const { transactions, error } = await getMyCashPaymentTransactions(
+      household.id,
+      user.id
+    );
+    if (error) {
+      setPaymentTransactionsError(error);
+      setPaymentTransactions([]);
+    } else {
+      setPaymentTransactionsError(null);
+      setPaymentTransactions(transactions);
+    }
+    setPaymentTransactionsLoading(false);
+  }, [household, user]);
+
   useEffect(() => {
     fetchSettings();
   }, [fetchSettings]);
@@ -234,6 +259,10 @@ export function DashboardPage() {
   useEffect(() => {
     fetchManualExpenses();
   }, [fetchManualExpenses]);
+
+  useEffect(() => {
+    fetchPaymentTransactions();
+  }, [fetchPaymentTransactions]);
 
   useEffect(() => {
     fetchCashSnapshot();
@@ -343,13 +372,15 @@ export function DashboardPage() {
   const myBillTotalViewLabel =
     periodView === "full" ? "Full Month" : PERIOD_LABELS[periodView];
   const myUnpaidBillTotal = sumMyUnpaidBillShareTotal(bills, shareKey, periodView);
+  const deductedManualExpenseIds = getPaidManualExpenseSourceIds(paymentTransactions);
   const myManualExpenseTotalForView = sumMyManualExpenseShareForView(
     manualExpenses,
     shareKey,
     periodView,
     year,
     month,
-    cashSnapshot?.snapshot_date ?? null
+    cashSnapshot?.snapshot_date ?? null,
+    paymentTransactionsLoading ? undefined : deductedManualExpenseIds
   );
   const safeToSpendBeforeSavings =
     cashSnapshot &&
@@ -541,7 +572,13 @@ export function DashboardPage() {
                 </Link>{" "}
                 to calculate expense-adjusted safe-to-spend.
               </p>
-            ) : cashSnapshotLoading || manualExpensesLoading ? (
+            ) : paymentTransactionsError ? (
+              <Alert variant="destructive" className="mb-3">
+                <AlertDescription>
+                  Could not load your payment history. ({paymentTransactionsError})
+                </AlertDescription>
+              </Alert>
+            ) : cashSnapshotLoading || manualExpensesLoading || paymentTransactionsLoading ? (
               <Skeleton className="h-8 w-48" />
             ) : (
               <div className="space-y-1">
@@ -551,7 +588,9 @@ export function DashboardPage() {
                 <p className="text-sm text-muted-foreground">{myBillTotalViewLabel}</p>
                 <p className="text-xs text-muted-foreground">
                   Only your share of manual expenses after your latest current-amount snapshot
-                  is counted.
+                  is counted. Expenses paid through the app are not counted again.
+                  Marked-paid-only expenses may still count until your current amount snapshot
+                  reflects them.
                 </p>
               </div>
             )}
@@ -594,7 +633,13 @@ export function DashboardPage() {
                 </Link>{" "}
                 to see safe-to-spend.
               </p>
-            ) : cashSnapshotLoading || loading || manualExpensesLoading ? (
+            ) : paymentTransactionsError ? (
+              <Alert variant="destructive" className="mb-3">
+                <AlertDescription>
+                  Could not load your payment history. ({paymentTransactionsError})
+                </AlertDescription>
+              </Alert>
+            ) : cashSnapshotLoading || loading || manualExpensesLoading || paymentTransactionsLoading ? (
               <Skeleton className="h-8 w-48" />
             ) : (
               <div className="space-y-4">
@@ -633,8 +678,9 @@ export function DashboardPage() {
                     </div>
                   </dl>
                   <p className="mt-2 text-xs text-muted-foreground">
-                    Only expenses after your latest current-amount snapshot are counted, to avoid
-                    double-counting. Savings goals and future paychecks are not included yet.
+                    Only expenses after your latest current-amount snapshot are counted. Expenses
+                    paid through the app are not counted again. Savings goals and future paychecks
+                    are not included yet.
                   </p>
                 </div>
               </div>
@@ -685,7 +731,7 @@ export function DashboardPage() {
                 </Link>{" "}
                 to see safe-to-spend after savings.
               </p>
-            ) : cashSnapshotLoading || loading || savingsParticipantsLoading || savingsContributionsLoading || manualExpensesLoading ? (
+            ) : cashSnapshotLoading || loading || savingsParticipantsLoading || savingsContributionsLoading || manualExpensesLoading || paymentTransactionsLoading ? (
               <Skeleton className="h-8 w-48" />
             ) : (
               <div className="space-y-4">
