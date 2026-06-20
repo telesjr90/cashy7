@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
-import { resolveBillShareKeyForPerson } from "@/lib/bill-share";
+import {
+  resolveBillShareKeyForPerson,
+  sumMyBillShareTotal,
+} from "@/lib/bill-share";
 import { getHouseholdPeople } from "@/lib/user-person";
 import type { Person } from "@/lib/types";
 import { useAuth } from "@/lib/auth-context";
@@ -250,8 +253,11 @@ export function DashboardPage() {
     membership?.person_id != null
       ? people.find((person) => person.id === membership.person_id) ?? null
       : null;
-  const showBudgetProfileNote =
-    peopleLoaded && resolveBillShareKeyForPerson(mappedPerson) === null;
+  const shareKey = resolveBillShareKeyForPerson(mappedPerson);
+  const showBudgetProfileNote = peopleLoaded && shareKey === null;
+  const myBillTotal = sumMyBillShareTotal(bills, shareKey, periodView);
+  const myBillTotalViewLabel =
+    periodView === "full" ? "Full Month" : PERIOD_LABELS[periodView];
 
   if (!household) {
     return null;
@@ -348,6 +354,32 @@ export function DashboardPage() {
                 </Link>
               </div>
             ) : null}
+          </CardContent>
+        </Card>
+
+        <Card className="mb-6">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">My bill total for this view</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {shareKey === null ? (
+              <p className="text-sm text-muted-foreground">
+                Choose your budget profile in{" "}
+                <Link to="/settings" className="font-medium underline underline-offset-4">
+                  Settings
+                </Link>{" "}
+                to see your bill total.
+              </p>
+            ) : loading ? (
+              <Skeleton className="h-8 w-48" />
+            ) : (
+              <div className="space-y-1">
+                <p className="text-2xl font-semibold">
+                  {formatCurrency(myBillTotal ?? 0)}
+                </p>
+                <p className="text-sm text-muted-foreground">{myBillTotalViewLabel}</p>
+              </div>
+            )}
           </CardContent>
         </Card>
 

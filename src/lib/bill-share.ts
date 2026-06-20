@@ -34,3 +34,33 @@ export function getMyBillShareAmount(
 
   return toSafeNumber(bill[shareKey]);
 }
+
+type BillSharePeriodBucket = "1_14" | "15_eom";
+type BillSharePeriodView = BillSharePeriodBucket | "full";
+
+type BillShareInput = {
+  period_bucket: BillSharePeriodBucket;
+  teles_amount: number | string;
+  nicole_amount: number | string;
+};
+
+/** Sum the signed-in user's bill share for the selected dashboard period view. */
+export function sumMyBillShareTotal(
+  bills: BillShareInput[],
+  shareKey: BillShareKey | null,
+  periodView: BillSharePeriodView
+): number | null {
+  if (!shareKey) {
+    return null;
+  }
+
+  const periodBills =
+    periodView === "full"
+      ? bills
+      : bills.filter((bill) => bill.period_bucket === periodView);
+
+  return periodBills.reduce((sum, bill) => {
+    const amount = getMyBillShareAmount(bill, shareKey);
+    return amount === null ? sum : sum + amount;
+  }, 0);
+}
