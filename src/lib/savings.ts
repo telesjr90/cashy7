@@ -126,3 +126,59 @@ export async function getMySavingsContributions(
     error: null,
   };
 }
+
+export async function upsertMySavingsGoalParticipant(
+  householdId: string,
+  userId: string,
+  input: {
+    savingsGoalId: string;
+    targetContributionAmount: number;
+    contributionPeriod: SavingsGoalParticipant["contribution_period"];
+    personId?: string | null;
+    periodStart?: string | null;
+    periodEnd?: string | null;
+  }
+): Promise<{ participant: SavingsGoalParticipant | null; error: string | null }> {
+  const { data, error } = await supabase
+    .from("savings_goal_participants")
+    .upsert(
+      {
+        savings_goal_id: input.savingsGoalId,
+        household_id: householdId,
+        user_id: userId,
+        person_id: input.personId ?? null,
+        target_contribution_amount: input.targetContributionAmount,
+        contribution_period: input.contributionPeriod,
+        period_start: input.periodStart ?? null,
+        period_end: input.periodEnd ?? null,
+      },
+      { onConflict: "savings_goal_id,user_id" }
+    )
+    .select()
+    .single();
+
+  if (error) {
+    return { participant: null, error: error.message };
+  }
+
+  return { participant: data as SavingsGoalParticipant, error: null };
+}
+
+export function filterMyContributionsForGoal(
+  contributions: SavingsContribution[],
+  savingsGoalId: string
+): SavingsContribution[] {
+  return contributions.filter(
+    (contribution) => contribution.savings_goal_id === savingsGoalId
+  );
+}
+
+export function sumMyContributionsForGoal(
+  contributions: SavingsContribution[],
+  savingsGoalId: string
+): number {
+  return filterMyContributionsForGoal(contributions, savingsGoalId).reduce(
+    (total, contribution) => total + Number(contribution.amount),
+    0
+  );
+}
