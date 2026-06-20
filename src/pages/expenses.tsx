@@ -7,6 +7,12 @@ import {
   PAID_THROUGH_APP_EDIT_MESSAGE,
 } from "@/lib/expense-detail";
 import {
+  DEFAULT_MANUAL_EXPENSE_FILTERS,
+  filterManualExpenses,
+  isManualExpenseFiltersActive,
+  type ManualExpenseFilters,
+} from "@/lib/expense-filters";
+import {
   adjustmentDirectionLabel,
   calculateExpenseSplit,
   canDeleteManualExpense,
@@ -112,7 +118,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Eye, Loader as Loader2, Pencil, Receipt, Trash2 } from "lucide-react";
+import { Eye, Loader as Loader2, Pencil, Receipt, Search, Trash2 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 
 function todayIsoDate(): string {
@@ -173,6 +179,9 @@ export function ExpensesPage() {
     notes: "",
   });
   const [detailExpenseId, setDetailExpenseId] = useState<string | null>(null);
+  const [filters, setFilters] = useState<ManualExpenseFilters>(
+    DEFAULT_MANUAL_EXPENSE_FILTERS
+  );
 
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("");
@@ -249,6 +258,19 @@ export function ExpensesPage() {
   const paidManualExpenseIds = useMemo(
     () => getPaidManualExpenseSourceIds(paymentTransactions),
     [paymentTransactions]
+  );
+
+  const filtersActive = useMemo(
+    () => isManualExpenseFiltersActive(filters),
+    [filters]
+  );
+
+  const filteredExpenses = useMemo(
+    () =>
+      filterManualExpenses(expenses, filters, {
+        paidManualExpenseIds,
+      }),
+    [expenses, filters, paidManualExpenseIds]
   );
 
   const creditedAdjustmentIds = useMemo(
@@ -453,6 +475,10 @@ export function ExpensesPage() {
     setCustomNicoleInput("");
     setNotes("");
     setFormError(null);
+  };
+
+  const resetFilters = () => {
+    setFilters(DEFAULT_MANUAL_EXPENSE_FILTERS);
   };
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -1029,9 +1055,209 @@ export function ExpensesPage() {
             <CardDescription>
               Showing expenses visible to you under household privacy rules.{" "}
               {PAYMENT_UX_EXPLANATION}
+              {filtersActive && expenses.length > 0 && (
+                <>
+                  {" "}
+                  Showing {filteredExpenses.length} of {expenses.length} expenses.
+                </>
+              )}
             </CardDescription>
           </CardHeader>
           <CardContent>
+            {!loading && expenses.length > 0 && (
+              <div className="mb-4 space-y-3">
+                <div className="flex flex-wrap items-end gap-2">
+                  <div className="min-w-[12rem] flex-1 space-y-1">
+                    <Label htmlFor="expense-search">Search</Label>
+                    <div className="relative">
+                      <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        id="expense-search"
+                        value={filters.searchText}
+                        onChange={(event) =>
+                          setFilters((prev) => ({
+                            ...prev,
+                            searchText: event.target.value,
+                          }))
+                        }
+                        placeholder="Description, category, notes, reason..."
+                        className="pl-9"
+                      />
+                    </div>
+                  </div>
+                  {filtersActive && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={resetFilters}
+                    >
+                      Clear filters
+                    </Button>
+                  )}
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="space-y-1">
+                    <Label htmlFor="expense-filter-month">Month</Label>
+                    <Input
+                      id="expense-filter-month"
+                      type="month"
+                      value={filters.filterMonth}
+                      onChange={(event) =>
+                        setFilters((prev) => ({
+                          ...prev,
+                          filterMonth: event.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label htmlFor="expense-filter-from">From date</Label>
+                    <Input
+                      id="expense-filter-from"
+                      type="date"
+                      value={filters.dateFrom}
+                      disabled={filters.filterMonth !== ""}
+                      onChange={(event) =>
+                        setFilters((prev) => ({
+                          ...prev,
+                          dateFrom: event.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label htmlFor="expense-filter-to">To date</Label>
+                    <Input
+                      id="expense-filter-to"
+                      type="date"
+                      value={filters.dateTo}
+                      disabled={filters.filterMonth !== ""}
+                      onChange={(event) =>
+                        setFilters((prev) => ({
+                          ...prev,
+                          dateTo: event.target.value,
+                        }))
+                      }
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label htmlFor="expense-filter-period">Period bucket</Label>
+                    <Select
+                      value={filters.periodBucket}
+                      onValueChange={(value) =>
+                        setFilters((prev) => ({
+                          ...prev,
+                          periodBucket: value as ManualExpenseFilters["periodBucket"],
+                        }))
+                      }
+                    >
+                      <SelectTrigger id="expense-filter-period">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All periods</SelectItem>
+                        <SelectItem value="1_14">1st–14th</SelectItem>
+                        <SelectItem value="15_eom">15th–end of month</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label htmlFor="expense-filter-paid">Paid status</Label>
+                    <Select
+                      value={filters.paidStatus}
+                      onValueChange={(value) =>
+                        setFilters((prev) => ({
+                          ...prev,
+                          paidStatus: value as ManualExpenseFilters["paidStatus"],
+                        }))
+                      }
+                    >
+                      <SelectTrigger id="expense-filter-paid">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All statuses</SelectItem>
+                        <SelectItem value="unpaid">Unpaid</SelectItem>
+                        <SelectItem value="marked_paid_only">
+                          Marked paid — cash not deducted
+                        </SelectItem>
+                        <SelectItem value="deducted_from_cash">
+                          Deducted from cash
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label htmlFor="expense-filter-scope">Scope</Label>
+                    <Select
+                      value={filters.scope}
+                      onValueChange={(value) =>
+                        setFilters((prev) => ({
+                          ...prev,
+                          scope: value as ManualExpenseFilters["scope"],
+                        }))
+                      }
+                    >
+                      <SelectTrigger id="expense-filter-scope">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All scopes</SelectItem>
+                        <SelectItem value="private">Private</SelectItem>
+                        <SelectItem value="shared">Shared</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label htmlFor="expense-filter-category">Category</Label>
+                    <Input
+                      id="expense-filter-category"
+                      value={filters.category}
+                      onChange={(event) =>
+                        setFilters((prev) => ({
+                          ...prev,
+                          category: event.target.value,
+                        }))
+                      }
+                      placeholder="Match category..."
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label htmlFor="expense-filter-adjustment">Adjustment type</Label>
+                    <Select
+                      value={filters.adjustmentType}
+                      onValueChange={(value) =>
+                        setFilters((prev) => ({
+                          ...prev,
+                          adjustmentType:
+                            value as ManualExpenseFilters["adjustmentType"],
+                        }))
+                      }
+                    >
+                      <SelectTrigger id="expense-filter-adjustment">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All rows</SelectItem>
+                        <SelectItem value="originals">Originals only</SelectItem>
+                        <SelectItem value="adjustments">Adjustments only</SelectItem>
+                        <SelectItem value="increase">Increase adjustments</SelectItem>
+                        <SelectItem value="decrease">Decrease adjustments</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {loading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -1040,6 +1266,15 @@ export function ExpensesPage() {
               <p className="py-8 text-center text-sm text-muted-foreground">
                 No expenses recorded yet.
               </p>
+            ) : filteredExpenses.length === 0 ? (
+              <div className="space-y-3 py-8 text-center">
+                <p className="text-sm text-muted-foreground">
+                  No expenses match your filters.
+                </p>
+                <Button type="button" variant="outline" onClick={resetFilters}>
+                  Clear filters
+                </Button>
+              </div>
             ) : (
               <Table>
                 <TableHeader>
@@ -1056,7 +1291,7 @@ export function ExpensesPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {expenses.map((expense) => {
+                  {filteredExpenses.map((expense) => {
                     const isAdjustment = isManualExpenseAdjustment(expense);
                     const hasPaymentTransaction = paymentByExpenseId.has(expense.id);
                     const cashStatus = getCashDeductionStatus({
