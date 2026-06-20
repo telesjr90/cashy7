@@ -1,14 +1,14 @@
 # Cashflow Task Queue
 
 ## Active task
-CASHFLOW-CURSOR-062 — Expense filters and search
+CASHFLOW-CURSOR-063 — Expense category management
 
 ## Next tasks
-- CASHFLOW-CURSOR-063 — Expense category management
 - CASHFLOW-CURSOR-064 — Dashboard bill/expense/savings drilldowns
 - CASHFLOW-CURSOR-065 — Regular bill edit UI
 
 ## Completed
+- CASHFLOW-CURSOR-062 — Expense filters and search
 - CASHFLOW-CURSOR-061 — Manual expense / adjustment detail view
 - CASHFLOW-CURSOR-056 — Cash credit for decrease adjustments
 - CASHFLOW-CURSOR-057 — Cash adjustment credit history in Settings
