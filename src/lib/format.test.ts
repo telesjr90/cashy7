@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyDebtPaymentBalanceChange,
   computeDebtPaymentAmounts,
   computeProjectedRemainingBalances,
   computeRegularDebtPayment,
@@ -72,6 +73,25 @@ describe("computeProjectedRemainingBalances", () => {
     const projected = computeProjectedRemainingBalances(balance, amounts);
     expect(projected[projected.length - 1]).toBe(0);
     expect(balance).toBe(1502.13);
+  });
+});
+
+describe("applyDebtPaymentBalanceChange", () => {
+  it("reduces balance when marking paid", () => {
+    expect(applyDebtPaymentBalanceChange(1502.13, 375.53, "pay")).toBe(1126.6);
+  });
+
+  it("restores balance when marking unpaid", () => {
+    expect(applyDebtPaymentBalanceChange(1126.6, 375.53, "unpay")).toBe(1502.13);
+  });
+
+  it("does not reduce below zero", () => {
+    expect(applyDebtPaymentBalanceChange(100, 150, "pay")).toBe(0);
+  });
+
+  it("keeps cent rounding stable", () => {
+    expect(applyDebtPaymentBalanceChange(0.01, 0.01, "pay")).toBe(0);
+    expect(applyDebtPaymentBalanceChange(0, 0.01, "unpay")).toBe(0.01);
   });
 });
 

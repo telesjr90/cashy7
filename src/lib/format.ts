@@ -41,6 +41,20 @@ export function computeDebtPaymentAmounts(
   return amounts;
 }
 
+export type DebtPaymentBalanceDirection = "pay" | "unpay";
+
+/** Apply a paid or unpaid debt payment to the account's current balance. */
+export function applyDebtPaymentBalanceChange(
+  currentBalance: number,
+  paymentAmount: number,
+  direction: DebtPaymentBalanceDirection
+): number {
+  if (direction === "pay") {
+    return Math.max(0, Math.round((currentBalance - paymentAmount) * 100) / 100);
+  }
+  return Math.round((currentBalance + paymentAmount) * 100) / 100;
+}
+
 /** Projected balance after each payment if all were paid in order; does not mutate actual balance. */
 export function computeProjectedRemainingBalances(
   startingBalance: number,

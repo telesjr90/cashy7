@@ -48,6 +48,7 @@ import {
   computeDebtPaymentAmounts,
   computeProjectedRemainingBalances,
   splitDebtPayment,
+  applyDebtPaymentBalanceChange,
 } from "@/lib/format";
 import {
   AlertDialog,
@@ -137,6 +138,9 @@ export function DebtPage() {
   const [pendingGenerateAccountId, setPendingGenerateAccountId] = useState<
     string | null
   >(null);
+  const [togglingPaymentId, setTogglingPaymentId] = useState<string | null>(
+    null
+  );
 
   const now = new Date();
   const currentMonth = now.getMonth() + 1;
@@ -556,10 +560,17 @@ export function DebtPage() {
         paidStatus: paymentForm.paidStatus,
       });
 
-      await supabase
-        .from("debt_accounts")
-        .update({ current_balance: remainingBalance })
-        .eq("id", selectedAccount.id);
+      if (paymentForm.paidStatus) {
+        const newBalance = applyDebtPaymentBalanceChange(
+          selectedAccount.current_balance,
+          totalPayment,
+          "pay"
+        );
+        await supabase
+          .from("debt_accounts")
+          .update({ current_balance: newBalance })
+          .eq("id", selectedAccount.id);
+      }
 
       setPaymentForm({
         debtAccountId: "",
@@ -591,24 +602,98 @@ export function DebtPage() {
     }
   };
 
-  const deleteDebtPayment = async (paymentId: string) => {
-    const payment = debtPayments.find((p) => p.id === paymentId);
+  const toggleDebtPaymentPaidStatus = async (payment: DebtPayment) => {
+    setError(null);
 
-    // Delete the linked bill instance if it exists
-    if (payment?.linked_bill_instance_id) {
-      await supabase
-        .from("bill_instances")
-        .delete()
-        .eq("id", payment.linked_bill_instance_id);
+    const account = debtAccounts.find((a) => a.id === payment.debt_account_id);
+    if (!account) {
+      setError("Debt account not found");
+      return;
     }
 
-    const { error } = await supabase
-      .from("debt_payments")
-      .delete()
-      .eq("id", paymentId);
+    const newPaidStatus = !payment.paid_status;
+    const direction = newPaidStatus ? "pay" : "unpay";
+    const newBalance = applyDebtPaymentBalanceChange(
+      account.current_balance,
+      payment.total_payment,
+      direction
+    );
 
-    if (!error) {
-      setDebtPayments((prev) => prev.filter((p) => p.id !== paymentId));
+    setTogglingPaymentId(payment.id);
+
+    try {
+      const { error: paymentError } = await supabase
+        .from("debt_payments")
+        .update({ paid_status: newPaidStatus })
+        .eq("id", payment.id);
+
+      if (paymentError) throw new Error(paymentError.message);
+
+      if (payment.linked_bill_instance_id) {
+        const { error: billError } = await supabase
+          .from("bill_instances")
+          .update({ is_paid: newPaidStatus })
+          .eq("id", payment.linked_bill_instance_id);
+
+        if (billError) throw new Error(billError.message);
+      }
+
+      const { error: balanceError } = await supabase
+        .from("debt_accounts")
+        .update({ current_balance: newBalance })
+        .eq("id", account.id);
+
+      if (balanceError) throw new Error(balanceError.message);
+
+      fetchData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred");
+    } finally {
+      setTogglingPaymentId(null);
+    }
+  };
+
+  const deleteDebtPayment = async (paymentId: string) => {
+    setError(null);
+    const payment = debtPayments.find((p) => p.id === paymentId);
+    if (!payment) return;
+
+    const account = debtAccounts.find((a) => a.id === payment.debt_account_id);
+
+    try {
+      if (payment.paid_status && account) {
+        const restoredBalance = applyDebtPaymentBalanceChange(
+          account.current_balance,
+          payment.total_payment,
+          "unpay"
+        );
+        const { error: balanceError } = await supabase
+          .from("debt_accounts")
+          .update({ current_balance: restoredBalance })
+          .eq("id", account.id);
+
+        if (balanceError) throw new Error(balanceError.message);
+      }
+
+      if (payment.linked_bill_instance_id) {
+        const { error: billError } = await supabase
+          .from("bill_instances")
+          .delete()
+          .eq("id", payment.linked_bill_instance_id);
+
+        if (billError) throw new Error(billError.message);
+      }
+
+      const { error: paymentError } = await supabase
+        .from("debt_payments")
+        .delete()
+        .eq("id", paymentId);
+
+      if (paymentError) throw new Error(paymentError.message);
+
+      fetchData();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "An error occurred");
     }
   };
 
@@ -1349,7 +1434,15 @@ export function DebtPage() {
                   {debtPayments.map((payment) => (
                     <TableRow key={payment.id}>
                       <TableCell>
-                        <Checkbox checked={payment.paid_status} />
+                        <Checkbox
+                          checked={payment.paid_status}
+                          onCheckedChange={() =>
+                            toggleDebtPaymentPaidStatus(payment)
+                          }
+                          disabled={
+                            submitting || togglingPaymentId === payment.id
+                          }
+                        />
                       </TableCell>
                       <TableCell>{getAccountName(payment.debt_account_id)}</TableCell>
                       <TableCell>
