@@ -43,7 +43,7 @@ import {
   Calendar,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
-import { formatCurrency } from "@/lib/format";
+import { formatCurrency, formatDeductionAmount } from "@/lib/format";
 import {
   calculateRemainingSavingsObligation,
   calculateSafeToSpendAfterSavings,
@@ -71,10 +71,6 @@ const MONTHS = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December"
 ];
-
-function formatDeductionAmount(amount: number): string {
-  return `− ${formatCurrency(amount)}`;
-}
 
 interface PeriodSummary {
   bills: BillInstance[];
@@ -720,7 +716,7 @@ export function DashboardPage() {
             ) : (
               <div className="space-y-1">
                 <p className="text-2xl font-semibold">
-                  {formatCurrency(myUnpaidBillTotal ?? 0)}
+                  {formatDeductionAmount(myUnpaidBillTotal ?? 0)}
                 </p>
                 <p className="text-sm text-muted-foreground">{myBillTotalViewLabel}</p>
                 <p className="text-xs text-muted-foreground">
@@ -770,7 +766,7 @@ export function DashboardPage() {
             ) : (
               <div className="space-y-1">
                 <p className="text-2xl font-semibold">
-                  {formatCurrency(myManualExpenseTotalForView ?? 0)}
+                  {formatDeductionAmount(myManualExpenseTotalForView ?? 0)}
                 </p>
                 <p className="text-sm text-muted-foreground">{myBillTotalViewLabel}</p>
                 <p className="text-xs text-muted-foreground">

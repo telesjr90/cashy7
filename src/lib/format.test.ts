@@ -7,6 +7,7 @@ import {
   computeRegularDebtPayment,
   debtBillInstanceName,
   formatCurrency,
+  formatDeductionAmount,
   splitDebtPayment,
   split5149,
 } from "./format";
@@ -30,6 +31,24 @@ describe("formatCurrency", () => {
 
   it("formats negative values", () => {
     expect(formatCurrency(-25)).toBe("-CA$25.00");
+  });
+});
+
+describe("formatDeductionAmount", () => {
+  it("formats zero", () => {
+    expect(formatDeductionAmount(0)).toBe("− CA$0.00");
+  });
+
+  it("formats whole dollars", () => {
+    expect(formatDeductionAmount(5)).toBe("− CA$5.00");
+  });
+
+  it("formats cents", () => {
+    expect(formatDeductionAmount(127.5)).toBe("− CA$127.50");
+  });
+
+  it("uses the same currency style as formatCurrency", () => {
+    expect(formatDeductionAmount(2127.08)).toBe(`− ${formatCurrency(2127.08)}`);
   });
 });
 

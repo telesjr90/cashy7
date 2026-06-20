@@ -118,3 +118,7 @@ export function formatCurrency(amount: number): string {
   const body = CAD_SYMBOL + formatted;
   return value < 0 ? "-" + body : body;
 }
+
+export function formatDeductionAmount(amount: number): string {
+  return `− ${formatCurrency(amount)}`;
+}
