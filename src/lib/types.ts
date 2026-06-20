@@ -351,6 +351,117 @@ export interface Database {
           created_at?: string;
         };
       };
+      savings_goals: {
+        Row: {
+          id: string;
+          household_id: string;
+          name: string;
+          goal_type: "private" | "shared";
+          target_amount: number;
+          start_date: string;
+          end_date: string;
+          created_by_user_id: string;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          household_id: string;
+          name: string;
+          goal_type: "private" | "shared";
+          target_amount: number;
+          start_date: string;
+          end_date: string;
+          created_by_user_id: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          household_id?: string;
+          name?: string;
+          goal_type?: "private" | "shared";
+          target_amount?: number;
+          start_date?: string;
+          end_date?: string;
+          created_by_user_id?: string;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      savings_goal_participants: {
+        Row: {
+          id: string;
+          savings_goal_id: string;
+          household_id: string;
+          user_id: string;
+          person_id: string | null;
+          target_contribution_amount: number;
+          contribution_period: "1_14" | "15_eom" | "monthly";
+          period_start: string | null;
+          period_end: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          savings_goal_id: string;
+          household_id: string;
+          user_id: string;
+          person_id?: string | null;
+          target_contribution_amount: number;
+          contribution_period: "1_14" | "15_eom" | "monthly";
+          period_start?: string | null;
+          period_end?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          savings_goal_id?: string;
+          household_id?: string;
+          user_id?: string;
+          person_id?: string | null;
+          target_contribution_amount?: number;
+          contribution_period?: "1_14" | "15_eom" | "monthly";
+          period_start?: string | null;
+          period_end?: string | null;
+          created_at?: string;
+        };
+      };
+      savings_contributions: {
+        Row: {
+          id: string;
+          savings_goal_id: string;
+          household_id: string;
+          user_id: string;
+          person_id: string | null;
+          amount: number;
+          contribution_date: string;
+          notes: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          savings_goal_id: string;
+          household_id: string;
+          user_id: string;
+          person_id?: string | null;
+          amount: number;
+          contribution_date?: string;
+          notes?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          savings_goal_id?: string;
+          household_id?: string;
+          user_id?: string;
+          person_id?: string | null;
+          amount?: number;
+          contribution_date?: string;
+          notes?: string | null;
+          created_at?: string;
+        };
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -379,3 +490,8 @@ export type DebtAccount = Tables<"debt_accounts">;
 export type DebtPayment = Tables<"debt_payments">;
 export type HouseholdSettings = Tables<"household_settings">;
 export type CashSnapshot = Tables<"cash_snapshots">;
+export type SavingsGoal = Tables<"savings_goals">;
+export type SavingsGoalParticipant = Tables<"savings_goal_participants">;
+export type SavingsContribution = Tables<"savings_contributions">;
+export type SavingsGoalType = SavingsGoal["goal_type"];
+export type SavingsContributionPeriod = SavingsGoalParticipant["contribution_period"];
