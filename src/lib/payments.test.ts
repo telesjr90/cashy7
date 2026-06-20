@@ -1,14 +1,23 @@
 import { describe, expect, it } from "vitest";
 import {
+  BILL_PAYMENT_DEDUCTION_FALLBACK_LABEL,
+  buildBillInstanceNameLookup,
+  buildManualExpenseDescriptionLookup,
   calculateCashAfterPayment,
   cashDeductionStatusLabel,
+  cashPaymentSourceTypeLabel,
+  DEBT_PAYMENT_DEDUCTION_FALLBACK_LABEL,
   getCashDeductionStatus,
+  getLinkedPaymentSourceDescription,
   getPaidManualExpenseSourceIds,
   hasCashDeductionForBill,
   isDuplicatePaymentError,
+  MANUAL_EXPENSE_PAYMENT_DEDUCTION_FALLBACK_LABEL,
+  mapCashPaymentDeductionsForDisplay,
   parsePaymentAmount,
   paymentSourceLabel,
 } from "@/lib/payments";
+import type { CashPaymentTransaction } from "@/lib/types";
 
 describe("calculateCashAfterPayment", () => {
   it("returns positive balance after payment", () => {
@@ -45,6 +54,154 @@ describe("paymentSourceLabel", () => {
     expect(paymentSourceLabel("bill_instance")).toBe("bill");
     expect(paymentSourceLabel("debt_payment")).toBe("debt payment");
     expect(paymentSourceLabel("manual_expense")).toBe("expense");
+  });
+});
+
+describe("cashPaymentSourceTypeLabel", () => {
+  it("maps source types to display labels", () => {
+    expect(cashPaymentSourceTypeLabel("bill_instance")).toBe("Bill");
+    expect(cashPaymentSourceTypeLabel("debt_payment")).toBe("Debt payment");
+    expect(cashPaymentSourceTypeLabel("manual_expense")).toBe("Manual expense");
+  });
+});
+
+describe("buildBillInstanceNameLookup", () => {
+  it("maps bill instance ids to trimmed names", () => {
+    const lookup = buildBillInstanceNameLookup([
+      { id: "bill-1", name: "  Internet  " },
+      { id: "bill-2", name: "Hydro" },
+    ]);
+
+    expect(lookup.get("bill-1")).toBe("Internet");
+    expect(lookup.get("bill-2")).toBe("Hydro");
+  });
+});
+
+describe("buildManualExpenseDescriptionLookup", () => {
+  it("maps expense ids to trimmed descriptions", () => {
+    const lookup = buildManualExpenseDescriptionLookup([
+      { id: "exp-1", description: "  Coffee  " },
+    ]);
+
+    expect(lookup.get("exp-1")).toBe("Coffee");
+  });
+});
+
+describe("getLinkedPaymentSourceDescription", () => {
+  const lookups = {
+    billInstanceNameById: buildBillInstanceNameLookup([
+      { id: "bill-1", name: "Internet" },
+    ]),
+    manualExpenseDescriptionById: buildManualExpenseDescriptionLookup([
+      { id: "exp-1", description: "Coffee" },
+    ]),
+  };
+
+  it("uses bill instance names when available", () => {
+    expect(
+      getLinkedPaymentSourceDescription("bill_instance", "bill-1", lookups)
+    ).toBe("Internet");
+  });
+
+  it("uses manual expense descriptions when available", () => {
+    expect(
+      getLinkedPaymentSourceDescription("manual_expense", "exp-1", lookups)
+    ).toBe("Coffee");
+  });
+
+  it("uses fallback labels when descriptions are missing", () => {
+    expect(
+      getLinkedPaymentSourceDescription("bill_instance", "missing", lookups)
+    ).toBe(BILL_PAYMENT_DEDUCTION_FALLBACK_LABEL);
+    expect(
+      getLinkedPaymentSourceDescription("debt_payment", "debt-1", lookups)
+    ).toBe(DEBT_PAYMENT_DEDUCTION_FALLBACK_LABEL);
+    expect(
+      getLinkedPaymentSourceDescription("manual_expense", "missing", lookups)
+    ).toBe(MANUAL_EXPENSE_PAYMENT_DEDUCTION_FALLBACK_LABEL);
+  });
+});
+
+describe("mapCashPaymentDeductionsForDisplay", () => {
+  const transactions = [
+    {
+      id: "tx-1",
+      household_id: "household-1",
+      user_id: "user-1",
+      person_id: null,
+      source_type: "manual_expense",
+      source_id: "exp-1",
+      amount: 5,
+      previous_cash_snapshot_id: null,
+      new_cash_snapshot_id: null,
+      paid_at: "2026-06-20T12:00:00.000Z",
+      notes: "Lunch",
+      created_at: "2026-06-20T12:00:00.000Z",
+    },
+    {
+      id: "tx-2",
+      household_id: "household-1",
+      user_id: "user-1",
+      person_id: null,
+      source_type: "bill_instance",
+      source_id: "bill-1",
+      amount: 25,
+      previous_cash_snapshot_id: null,
+      new_cash_snapshot_id: null,
+      paid_at: "2026-06-19T12:00:00.000Z",
+      notes: null,
+      created_at: "2026-06-19T12:00:00.000Z",
+    },
+  ] satisfies CashPaymentTransaction[];
+
+  const lookups = {
+    billInstanceNameById: buildBillInstanceNameLookup([
+      { id: "bill-1", name: "Internet" },
+    ]),
+    manualExpenseDescriptionById: buildManualExpenseDescriptionLookup([
+      { id: "exp-1", description: "Coffee" },
+    ]),
+  };
+
+  it("uses formatDeductionAmount for amounts", () => {
+    const rows = mapCashPaymentDeductionsForDisplay(transactions, lookups, {
+      limit: 10,
+    });
+
+    expect(rows[0]?.formattedAmount).toBe("− CA$5.00");
+    expect(rows[1]?.formattedAmount).toBe("− CA$25.00");
+  });
+
+  it("maps source labels and linked descriptions", () => {
+    const rows = mapCashPaymentDeductionsForDisplay(transactions, lookups, {
+      limit: 10,
+    });
+
+    expect(rows[0]).toMatchObject({
+      id: "tx-1",
+      sourceTypeLabel: "Manual expense",
+      sourceDescription: "Coffee",
+      notes: "Lunch",
+    });
+    expect(rows[1]).toMatchObject({
+      id: "tx-2",
+      sourceTypeLabel: "Bill",
+      sourceDescription: "Internet",
+      notes: null,
+    });
+  });
+
+  it("limits to the requested count", () => {
+    const rows = mapCashPaymentDeductionsForDisplay(transactions, lookups, {
+      limit: 1,
+    });
+
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.id).toBe("tx-1");
+  });
+
+  it("returns an empty array when there are no deductions", () => {
+    expect(mapCashPaymentDeductionsForDisplay([], lookups)).toEqual([]);
   });
 });
 

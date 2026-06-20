@@ -1,7 +1,10 @@
+import { formatDeductionAmount } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
 import type {
+  BillInstance,
   CashPaymentTransaction,
   CashSnapshot,
+  ManualExpense,
   PaymentSourceType,
 } from "@/lib/types";
 
@@ -107,6 +110,129 @@ export function paymentSourceLabel(sourceType: PaymentSourceType): string {
   }
 }
 
+export const DEFAULT_CASH_PAYMENT_DEDUCTION_HISTORY_LIMIT = 10;
+
+export const BILL_PAYMENT_DEDUCTION_FALLBACK_LABEL = "Bill payment";
+export const DEBT_PAYMENT_DEDUCTION_FALLBACK_LABEL = "Debt payment";
+export const MANUAL_EXPENSE_PAYMENT_DEDUCTION_FALLBACK_LABEL = "Manual expense";
+export const PAYMENT_DEDUCTION_FALLBACK_LABEL = "Payment deduction";
+
+export function cashPaymentSourceTypeLabel(sourceType: PaymentSourceType): string {
+  switch (sourceType) {
+    case "bill_instance":
+      return "Bill";
+    case "debt_payment":
+      return "Debt payment";
+    case "manual_expense":
+      return "Manual expense";
+  }
+}
+
+export function getPaymentDeductionFallbackLabel(
+  sourceType: PaymentSourceType
+): string {
+  switch (sourceType) {
+    case "bill_instance":
+      return BILL_PAYMENT_DEDUCTION_FALLBACK_LABEL;
+    case "debt_payment":
+      return DEBT_PAYMENT_DEDUCTION_FALLBACK_LABEL;
+    case "manual_expense":
+      return MANUAL_EXPENSE_PAYMENT_DEDUCTION_FALLBACK_LABEL;
+  }
+}
+
+export function buildBillInstanceNameLookup(
+  billInstances: ReadonlyArray<Pick<BillInstance, "id" | "name">>
+): ReadonlyMap<string, string> {
+  const map = new Map<string, string>();
+  for (const instance of billInstances) {
+    const name = instance.name.trim();
+    if (name) {
+      map.set(instance.id, name);
+    }
+  }
+  return map;
+}
+
+export function buildManualExpenseDescriptionLookup(
+  expenses: ReadonlyArray<Pick<ManualExpense, "id" | "description">>
+): ReadonlyMap<string, string> {
+  const map = new Map<string, string>();
+  for (const expense of expenses) {
+    const description = expense.description.trim();
+    if (description) {
+      map.set(expense.id, description);
+    }
+  }
+  return map;
+}
+
+export function getLinkedPaymentSourceDescription(
+  sourceType: PaymentSourceType,
+  sourceId: string,
+  lookups: {
+    billInstanceNameById: ReadonlyMap<string, string>;
+    manualExpenseDescriptionById: ReadonlyMap<string, string>;
+  }
+): string {
+  switch (sourceType) {
+    case "bill_instance":
+      return (
+        lookups.billInstanceNameById.get(sourceId) ??
+        BILL_PAYMENT_DEDUCTION_FALLBACK_LABEL
+      );
+    case "debt_payment":
+      return DEBT_PAYMENT_DEDUCTION_FALLBACK_LABEL;
+    case "manual_expense":
+      return (
+        lookups.manualExpenseDescriptionById.get(sourceId) ??
+        MANUAL_EXPENSE_PAYMENT_DEDUCTION_FALLBACK_LABEL
+      );
+  }
+}
+
+export interface CashPaymentDeductionDisplayRow {
+  id: string;
+  paidAt: string;
+  formattedAmount: string;
+  sourceTypeLabel: string;
+  sourceDescription: string;
+  notes: string | null;
+}
+
+export function mapCashPaymentDeductionsForDisplay(
+  transactions: CashPaymentTransaction[],
+  lookups: {
+    billInstanceNameById: ReadonlyMap<string, string>;
+    manualExpenseDescriptionById: ReadonlyMap<string, string>;
+  },
+  options?: { limit?: number }
+): CashPaymentDeductionDisplayRow[] {
+  const limit = options?.limit ?? transactions.length;
+  const rows: CashPaymentDeductionDisplayRow[] = [];
+
+  for (const transaction of transactions) {
+    if (rows.length >= limit) {
+      break;
+    }
+
+    rows.push({
+      id: transaction.id,
+      paidAt: transaction.paid_at,
+      formattedAmount: formatDeductionAmount(Number(transaction.amount)),
+      sourceTypeLabel: cashPaymentSourceTypeLabel(transaction.source_type),
+      sourceDescription: getLinkedPaymentSourceDescription(
+        transaction.source_type,
+        transaction.source_id,
+        lookups
+      ),
+      notes: transaction.notes,
+    });
+  }
+
+  return rows;
+}
+
 /** Manual expense IDs already deducted from the signed-in user's current cash. */
 export function getPaidManualExpenseSourceIds(
   paymentTransactions: Pick<CashPaymentTransaction, "source_type" | "source_id">[]
@@ -158,20 +284,48 @@ function mapRpcError(message: string): string {
 
 export async function getMyCashPaymentTransactions(
   householdId: string,
-  userId: string
+  userId: string,
+  limit?: number
 ): Promise<{ transactions: CashPaymentTransaction[]; error: string | null }> {
-  const { data, error } = await supabase
+  let query = supabase
     .from("cash_payment_transactions")
     .select("*")
     .eq("household_id", householdId)
     .eq("user_id", userId)
     .order("paid_at", { ascending: false });
 
+  if (limit !== undefined) {
+    query = query.limit(limit);
+  }
+
+  const { data, error } = await query;
+
   if (error) {
     return { transactions: [], error: error.message };
   }
 
   return { transactions: (data as CashPaymentTransaction[]) ?? [], error: null };
+}
+
+export async function getBillInstancesByIds(
+  householdId: string,
+  ids: string[]
+): Promise<{ billInstances: BillInstance[]; error: string | null }> {
+  if (ids.length === 0) {
+    return { billInstances: [], error: null };
+  }
+
+  const { data, error } = await supabase
+    .from("bill_instances")
+    .select("*")
+    .eq("household_id", householdId)
+    .in("id", ids);
+
+  if (error) {
+    return { billInstances: [], error: error.message };
+  }
+
+  return { billInstances: (data as BillInstance[]) ?? [], error: null };
 }
 
 export async function getMyCashPaymentTransactionForSource(

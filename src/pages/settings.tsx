@@ -10,9 +10,17 @@ import {
   DEFAULT_CASH_ADJUSTMENT_CREDIT_HISTORY_LIMIT,
   getMyCashAdjustmentTransactions,
   mapCashAdjustmentCreditsForDisplay,
-  buildManualExpenseDescriptionLookup,
+  buildManualExpenseDescriptionLookup as buildAdjustmentManualExpenseDescriptionLookup,
 } from "@/lib/cash-adjustments";
 import { getManualExpenses } from "@/lib/expenses";
+import {
+  buildBillInstanceNameLookup,
+  buildManualExpenseDescriptionLookup,
+  DEFAULT_CASH_PAYMENT_DEDUCTION_HISTORY_LIMIT,
+  getBillInstancesByIds,
+  getMyCashPaymentTransactions,
+  mapCashPaymentDeductionsForDisplay,
+} from "@/lib/payments";
 import {
   getHouseholdPeople,
   getMyHouseholdMemberProfile,
@@ -523,6 +531,15 @@ export function SettingsPage() {
     ReturnType<typeof mapCashAdjustmentCreditsForDisplay>
   >([]);
 
+  const [cashPaymentDeductionsLoading, setCashPaymentDeductionsLoading] =
+    useState(true);
+  const [cashPaymentDeductionsError, setCashPaymentDeductionsError] = useState<
+    string | null
+  >(null);
+  const [cashPaymentDeductionRows, setCashPaymentDeductionRows] = useState<
+    ReturnType<typeof mapCashPaymentDeductionsForDisplay>
+  >([]);
+
   const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>([]);
   const [myParticipants, setMyParticipants] = useState<SavingsGoalParticipant[]>([]);
   const [myContributions, setMyContributions] = useState<SavingsContribution[]>([]);
@@ -631,7 +648,7 @@ export function SettingsPage() {
       setCashAdjustmentCreditsError(errors[0] ?? "Failed to load cash adjustment credits.");
       setCashAdjustmentCreditRows([]);
     } else {
-      const descriptionById = buildManualExpenseDescriptionLookup(
+      const descriptionById = buildAdjustmentManualExpenseDescriptionLookup(
         expensesResult.expenses
       );
       setCashAdjustmentCreditRows(
@@ -644,6 +661,64 @@ export function SettingsPage() {
     }
 
     setCashAdjustmentCreditsLoading(false);
+  }, [household, user]);
+
+  const loadCashPaymentDeductions = useCallback(async () => {
+    if (!household || !user) return;
+
+    setCashPaymentDeductionsLoading(true);
+    setCashPaymentDeductionsError(null);
+
+    const [transactionsResult, expensesResult] = await Promise.all([
+      getMyCashPaymentTransactions(
+        household.id,
+        user.id,
+        DEFAULT_CASH_PAYMENT_DEDUCTION_HISTORY_LIMIT
+      ),
+      getManualExpenses(household.id),
+    ]);
+
+    const errors = [transactionsResult.error, expensesResult.error].filter(Boolean);
+    if (errors.length > 0) {
+      setCashPaymentDeductionsError(
+        errors[0] ?? "Failed to load cash payment deductions."
+      );
+      setCashPaymentDeductionRows([]);
+      setCashPaymentDeductionsLoading(false);
+      return;
+    }
+
+    const billInstanceIds = transactionsResult.transactions
+      .filter((transaction) => transaction.source_type === "bill_instance")
+      .map((transaction) => transaction.source_id);
+    const uniqueBillInstanceIds = [...new Set(billInstanceIds)];
+
+    const billInstancesResult = await getBillInstancesByIds(
+      household.id,
+      uniqueBillInstanceIds
+    );
+
+    if (billInstancesResult.error) {
+      setCashPaymentDeductionsError(billInstancesResult.error);
+      setCashPaymentDeductionRows([]);
+    } else {
+      setCashPaymentDeductionRows(
+        mapCashPaymentDeductionsForDisplay(
+          transactionsResult.transactions,
+          {
+            billInstanceNameById: buildBillInstanceNameLookup(
+              billInstancesResult.billInstances
+            ),
+            manualExpenseDescriptionById: buildManualExpenseDescriptionLookup(
+              expensesResult.expenses
+            ),
+          },
+          { limit: DEFAULT_CASH_PAYMENT_DEDUCTION_HISTORY_LIMIT }
+        )
+      );
+    }
+
+    setCashPaymentDeductionsLoading(false);
   }, [household, user]);
 
   const loadSavings = useCallback(async () => {
@@ -689,6 +764,10 @@ export function SettingsPage() {
   useEffect(() => {
     loadCashAdjustmentCredits();
   }, [loadCashAdjustmentCredits]);
+
+  useEffect(() => {
+    loadCashPaymentDeductions();
+  }, [loadCashPaymentDeductions]);
 
   useEffect(() => {
     loadSavings();
@@ -1118,6 +1197,54 @@ export function SettingsPage() {
                   Save current amount
                 </Button>
               </>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Cash payment deductions</CardTitle>
+            <CardDescription>
+              Amounts deducted from your current amount when you used Pay & deduct
+              cash.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {cashPaymentDeductionsLoading ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading cash payment deductions...
+              </div>
+            ) : cashPaymentDeductionsError ? (
+              <Alert variant="destructive">
+                <AlertDescription>{cashPaymentDeductionsError}</AlertDescription>
+              </Alert>
+            ) : cashPaymentDeductionRows.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No cash payment deductions yet.
+              </p>
+            ) : (
+              <ul className="space-y-2 text-sm">
+                {cashPaymentDeductionRows.map((deduction) => (
+                  <li
+                    key={deduction.id}
+                    className="rounded-md bg-muted/40 px-3 py-2"
+                  >
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <span className="font-medium">{deduction.formattedAmount}</span>
+                      <span className="text-muted-foreground">
+                        {formatDisplayDate(deduction.paidAt)}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-muted-foreground">
+                      {deduction.sourceTypeLabel} · {deduction.sourceDescription}
+                    </p>
+                    {deduction.notes && (
+                      <p className="mt-1 text-muted-foreground">{deduction.notes}</p>
+                    )}
+                  </li>
+                ))}
+              </ul>
             )}
           </CardContent>
         </Card>
