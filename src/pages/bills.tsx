@@ -1,8 +1,17 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/lib/supabase";
-import type { BillInstance } from "@/lib/types";
+import type { BillInstance, CashPaymentTransaction, Person } from "@/lib/types";
+import {
+  getMyBillShareAmount,
+  resolveBillShareKeyForPerson,
+} from "@/lib/bill-share";
+import { getHouseholdPeople } from "@/lib/user-person";
+import {
+  getMyCashPaymentTransactions,
+  paySourceFromCurrentCash,
+} from "@/lib/payments";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -73,13 +82,19 @@ const MONTHS = [
 ];
 
 export function BillsPage() {
-  const { household } = useAuth();
+  const { user, household, membership } = useAuth();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [bills, setBills] = useState<BillInstance[]>([]);
+  const [people, setPeople] = useState<Person[]>([]);
+  const [paymentTransactions, setPaymentTransactions] = useState<
+    CashPaymentTransaction[]
+  >([]);
   const [debtLinkedBillIds, setDebtLinkedBillIds] = useState<Set<string>>(
     () => new Set()
   );
   const [loading, setLoading] = useState(true);
+  const [payingBillId, setPayingBillId] = useState<string | null>(null);
+  const [payError, setPayError] = useState<string | null>(null);
   const [editingBillId, setEditingBillId] = useState<string | null>(null);
   const [billEditForm, setBillEditForm] = useState({
     amount: "",
@@ -90,21 +105,49 @@ export function BillsPage() {
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth() + 1;
 
+  const mappedPerson = useMemo(() => {
+    if (!membership?.person_id) {
+      return null;
+    }
+    return people.find((person) => person.id === membership.person_id) ?? null;
+  }, [membership?.person_id, people]);
+
+  const shareKey = useMemo(
+    () => resolveBillShareKeyForPerson(mappedPerson),
+    [mappedPerson]
+  );
+
+  const paymentByBillId = useMemo(() => {
+    const map = new Map<string, CashPaymentTransaction>();
+    for (const tx of paymentTransactions) {
+      if (tx.source_type === "bill_instance") {
+        map.set(tx.source_id, tx);
+      }
+    }
+    return map;
+  }, [paymentTransactions]);
+
   const fetchBills = useCallback(async () => {
-    if (!household) return;
+    if (!household || !user) return;
 
     setLoading(true);
-    const { data, error } = await supabase
-      .from("bill_instances")
-      .select("*")
-      .eq("household_id", household.id)
-      .eq("year", year)
-      .eq("month", month)
-      .order("period_bucket")
-      .order("name");
+    setPayError(null);
 
-    if (!error && data) {
-      const billRows = data as BillInstance[];
+    const [billsRes, peopleRes, paymentsRes] = await Promise.all([
+      supabase
+        .from("bill_instances")
+        .select("*")
+        .eq("household_id", household.id)
+        .eq("year", year)
+        .eq("month", month)
+        .order("period_bucket")
+        .order("name"),
+      getHouseholdPeople(household.id),
+      getMyCashPaymentTransactions(household.id, user.id),
+    ]);
+
+    if (!billsRes.error && billsRes.data) {
+      const billRows = billsRes.data as BillInstance[];
       setBills(billRows);
 
       const { linkedIds, error: linkedError } =
@@ -114,8 +157,17 @@ export function BillsPage() {
         setDebtLinkedBillIds(linkedIds);
       }
     }
+
+    if (!peopleRes.error) {
+      setPeople(peopleRes.people);
+    }
+
+    if (!paymentsRes.error) {
+      setPaymentTransactions(paymentsRes.transactions);
+    }
+
     setLoading(false);
-  }, [household, year, month]);
+  }, [household, user, year, month]);
 
   useEffect(() => {
     fetchBills();
@@ -134,6 +186,57 @@ export function BillsPage() {
         prev.map((b) => (b.id === bill.id ? { ...b, is_paid: newPaidStatus } : b))
       );
     }
+  };
+
+  const payBill = async (bill: BillInstance) => {
+    if (!household || !user) {
+      return;
+    }
+
+    setPayError(null);
+
+    const shareAmount = getMyBillShareAmount(bill, shareKey);
+    if (shareAmount === null) {
+      setPayError("Choose your budget profile in Settings before paying from cash.");
+      return;
+    }
+
+    if (shareAmount <= 0) {
+      setPayError("Your share for this bill is zero.");
+      return;
+    }
+
+    if (paymentByBillId.has(bill.id)) {
+      setPayError("This item has already been deducted from your current amount.");
+      return;
+    }
+
+    setPayingBillId(bill.id);
+
+    const { result, error } = await paySourceFromCurrentCash({
+      householdId: household.id,
+      userId: user.id,
+      personId: membership?.person_id ?? null,
+      sourceType: "bill_instance",
+      sourceId: bill.id,
+      amount: shareAmount,
+      notes: `Paid bill: ${bill.name}`,
+    });
+
+    setPayingBillId(null);
+
+    if (error || !result) {
+      setPayError(error ?? "Could not pay bill from current cash.");
+      return;
+    }
+
+    if (result.transaction) {
+      setPaymentTransactions((prev) => [result.transaction!, ...prev]);
+    }
+
+    setBills((prev) =>
+      prev.map((b) => (b.id === bill.id ? { ...b, is_paid: true } : b))
+    );
   };
 
   const deleteBill = async (billId: string) => {
@@ -226,6 +329,12 @@ export function BillsPage() {
       </div>
 
       <div className="container mx-auto px-4 py-6">
+        {payError && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertDescription>{payError}</AlertDescription>
+          </Alert>
+        )}
+
         <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Button variant="outline" size="icon" onClick={() => navigateMonth("prev")}>
@@ -345,6 +454,7 @@ export function BillsPage() {
                     <TableHead className="text-right">Total</TableHead>
                     <TableHead className="text-right text-blue-600 dark:text-blue-400">Teles</TableHead>
                     <TableHead className="text-right text-green-600 dark:text-green-400">Nicole</TableHead>
+                    <TableHead className="w-36">Pay</TableHead>
                     <TableHead className="w-24"></TableHead>
                   </TableRow>
                 </TableHeader>
@@ -390,6 +500,26 @@ export function BillsPage() {
                       </TableCell>
                       <TableCell className="text-right">
                         {formatCurrency(Number(bill.nicole_amount))}
+                      </TableCell>
+                      <TableCell>
+                        {paymentByBillId.has(bill.id) ? (
+                          <span className="text-xs text-muted-foreground">
+                            Deducted from cash
+                          </span>
+                        ) : bill.is_paid ? (
+                          <span className="text-xs text-muted-foreground">
+                            Already marked paid
+                          </span>
+                        ) : (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            disabled={payingBillId === bill.id}
+                            onClick={() => void payBill(bill)}
+                          >
+                            Pay
+                          </Button>
+                        )}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center justify-end gap-1">

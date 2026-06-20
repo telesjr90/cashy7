@@ -477,6 +477,8 @@ export interface Database {
           split_type: "personal" | "equal" | "51_49" | "custom";
           teles_amount: number;
           nicole_amount: number;
+          is_paid: boolean;
+          paid_at: string | null;
           notes: string | null;
           created_at: string;
           updated_at: string;
@@ -495,6 +497,8 @@ export interface Database {
           split_type?: "personal" | "equal" | "51_49" | "custom";
           teles_amount?: number;
           nicole_amount?: number;
+          is_paid?: boolean;
+          paid_at?: string | null;
           notes?: string | null;
           created_at?: string;
           updated_at?: string;
@@ -513,9 +517,55 @@ export interface Database {
           split_type?: "personal" | "equal" | "51_49" | "custom";
           teles_amount?: number;
           nicole_amount?: number;
+          is_paid?: boolean;
+          paid_at?: string | null;
           notes?: string | null;
           created_at?: string;
           updated_at?: string;
+        };
+      };
+      cash_payment_transactions: {
+        Row: {
+          id: string;
+          household_id: string;
+          user_id: string;
+          person_id: string | null;
+          source_type: "bill_instance" | "debt_payment" | "manual_expense";
+          source_id: string;
+          amount: number;
+          previous_cash_snapshot_id: string | null;
+          new_cash_snapshot_id: string | null;
+          paid_at: string;
+          notes: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          household_id: string;
+          user_id: string;
+          person_id?: string | null;
+          source_type: "bill_instance" | "debt_payment" | "manual_expense";
+          source_id: string;
+          amount: number;
+          previous_cash_snapshot_id?: string | null;
+          new_cash_snapshot_id?: string | null;
+          paid_at?: string;
+          notes?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          household_id?: string;
+          user_id?: string;
+          person_id?: string | null;
+          source_type?: "bill_instance" | "debt_payment" | "manual_expense";
+          source_id?: string;
+          amount?: number;
+          previous_cash_snapshot_id?: string | null;
+          new_cash_snapshot_id?: string | null;
+          paid_at?: string;
+          notes?: string | null;
+          created_at?: string;
         };
       };
     };
@@ -524,6 +574,15 @@ export interface Database {
       get_my_household_id: {
         Args: Record<string, never>;
         Returns: string | null;
+      };
+      pay_source_from_current_cash: {
+        Args: {
+          p_source_type: string;
+          p_source_id: string;
+          p_amount: number;
+          p_notes?: string | null;
+        };
+        Returns: Json;
       };
     };
     Enums: Record<string, never>;
@@ -556,3 +615,5 @@ export type InsertManualExpense = InsertTables<"manual_expenses">;
 export type UpdateManualExpense = UpdateTables<"manual_expenses">;
 export type ManualExpenseScope = ManualExpense["expense_scope"];
 export type ManualExpenseSplitType = ManualExpense["split_type"];
+export type CashPaymentTransaction = Tables<"cash_payment_transactions">;
+export type PaymentSourceType = CashPaymentTransaction["source_type"];

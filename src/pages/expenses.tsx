@@ -9,10 +9,20 @@ import {
   formatExpensePeriodBucket,
   getExpensePeriodBucket,
   getManualExpenses,
+  getMyExpenseShareAmount,
+  markManualExpensePaid,
   validateCustomExpenseSplit,
 } from "@/lib/expenses";
+import {
+  resolveBillShareKeyForPerson,
+} from "@/lib/bill-share";
 import { getHouseholdPeople } from "@/lib/user-person";
+import {
+  getMyCashPaymentTransactions,
+  paySourceFromCurrentCash,
+} from "@/lib/payments";
 import type {
+  CashPaymentTransaction,
   ManualExpense,
   ManualExpenseScope,
   ManualExpenseSplitType,
@@ -57,6 +67,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Loader as Loader2, Receipt, Trash2 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 
@@ -72,8 +83,14 @@ export function ExpensesPage() {
   const { user, household, membership } = useAuth();
   const [expenses, setExpenses] = useState<ManualExpense[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
+  const [paymentTransactions, setPaymentTransactions] = useState<
+    CashPaymentTransaction[]
+  >([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [markingPaidId, setMarkingPaidId] = useState<string | null>(null);
+  const [payingExpenseId, setPayingExpenseId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -93,11 +110,6 @@ export function ExpensesPage() {
     }
     return people.find((person) => person.id === membership.person_id) ?? null;
   }, [membership?.person_id, people]);
-
-  const periodBucket = useMemo(
-    () => getExpensePeriodBucket(expenseDate),
-    [expenseDate]
-  );
 
   const previewSplit = useMemo(() => {
     const amount = Number(amountInput);
@@ -134,17 +146,38 @@ export function ExpensesPage() {
     mappedPerson,
   ]);
 
+  const periodBucket = useMemo(
+    () => getExpensePeriodBucket(expenseDate),
+    [expenseDate]
+  );
+
+  const shareKey = useMemo(
+    () => resolveBillShareKeyForPerson(mappedPerson),
+    [mappedPerson]
+  );
+
+  const paymentByExpenseId = useMemo(() => {
+    const map = new Map<string, CashPaymentTransaction>();
+    for (const tx of paymentTransactions) {
+      if (tx.source_type === "manual_expense") {
+        map.set(tx.source_id, tx);
+      }
+    }
+    return map;
+  }, [paymentTransactions]);
+
   const fetchData = useCallback(async () => {
-    if (!household) {
+    if (!household || !user) {
       return;
     }
 
     setLoading(true);
     setError(null);
 
-    const [expensesResult, peopleResult] = await Promise.all([
+    const [expensesResult, peopleResult, paymentsResult] = await Promise.all([
       getManualExpenses(household.id),
       getHouseholdPeople(household.id),
+      getMyCashPaymentTransactions(household.id, user.id),
     ]);
 
     if (expensesResult.error) {
@@ -161,8 +194,15 @@ export function ExpensesPage() {
       setPeople(peopleResult.people);
     }
 
+    if (paymentsResult.error) {
+      setError((current) => current ?? paymentsResult.error);
+      setPaymentTransactions([]);
+    } else {
+      setPaymentTransactions(paymentsResult.transactions);
+    }
+
     setLoading(false);
-  }, [household]);
+  }, [household, user]);
 
   useEffect(() => {
     void fetchData();
@@ -254,6 +294,85 @@ export function ExpensesPage() {
     await fetchData();
   };
 
+  const handleMarkPaid = async (expense: ManualExpense) => {
+    if (expense.is_paid) {
+      return;
+    }
+
+    setActionError(null);
+    setMarkingPaidId(expense.id);
+
+    const { expense: updated, error: markError } = await markManualExpensePaid(
+      expense.id
+    );
+
+    setMarkingPaidId(null);
+
+    if (markError || !updated) {
+      setActionError(markError ?? "Could not mark expense as paid.");
+      return;
+    }
+
+    setExpenses((prev) =>
+      prev.map((row) => (row.id === expense.id ? updated : row))
+    );
+  };
+
+  const handlePay = async (expense: ManualExpense) => {
+    if (!household || !user) {
+      return;
+    }
+
+    setActionError(null);
+
+    const shareAmount = getMyExpenseShareAmount(expense, shareKey);
+    if (shareAmount === null) {
+      setActionError("Choose your budget profile in Settings before paying from cash.");
+      return;
+    }
+
+    if (shareAmount <= 0) {
+      setActionError("Your share for this expense is zero.");
+      return;
+    }
+
+    if (paymentByExpenseId.has(expense.id)) {
+      setActionError("This item has already been deducted from your current amount.");
+      return;
+    }
+
+    setPayingExpenseId(expense.id);
+
+    const { result, error: payError } = await paySourceFromCurrentCash({
+      householdId: household.id,
+      userId: user.id,
+      personId: membership?.person_id ?? null,
+      sourceType: "manual_expense",
+      sourceId: expense.id,
+      amount: shareAmount,
+      notes: `Paid expense: ${expense.description}`,
+    });
+
+    setPayingExpenseId(null);
+
+    if (payError || !result) {
+      setActionError(payError ?? "Could not pay expense from current cash.");
+      return;
+    }
+
+    if (result.transaction) {
+      setPaymentTransactions((prev) => [result.transaction!, ...prev]);
+    }
+
+    setExpenses((prev) =>
+      prev.map((row) =>
+        row.id === expense.id
+          ? { ...row, is_paid: true, paid_at: new Date().toISOString() }
+          : row
+      )
+    );
+  };
+
   if (!household || !user) {
     return null;
   }
@@ -274,6 +393,11 @@ export function ExpensesPage() {
       {error && (
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+      {actionError && (
+        <Alert variant="destructive">
+          <AlertDescription>{actionError}</AlertDescription>
         </Alert>
       )}
 
@@ -477,11 +601,13 @@ export function ExpensesPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-12">Paid</TableHead>
                     <TableHead>Description</TableHead>
                     <TableHead>Scope</TableHead>
                     <TableHead>Amount</TableHead>
                     <TableHead>Date</TableHead>
                     <TableHead>Split</TableHead>
+                    <TableHead className="w-36">Pay</TableHead>
                     <TableHead className="w-[70px]" />
                   </TableRow>
                 </TableHeader>
@@ -489,8 +615,22 @@ export function ExpensesPage() {
                   {expenses.map((expense) => (
                     <TableRow key={expense.id}>
                       <TableCell>
+                        <Checkbox
+                          checked={expense.is_paid}
+                          disabled={markingPaidId === expense.id || expense.is_paid}
+                          onCheckedChange={() => void handleMarkPaid(expense)}
+                          aria-label={`Mark ${expense.description} as paid`}
+                        />
+                      </TableCell>
+                      <TableCell>
                         <div className="space-y-1">
-                          <p className="font-medium">{expense.description}</p>
+                          <p
+                            className={`font-medium ${
+                              expense.is_paid ? "line-through text-muted-foreground" : ""
+                            }`}
+                          >
+                            {expense.description}
+                          </p>
                           {expense.category && (
                             <p className="text-xs text-muted-foreground">
                               {expense.category}
@@ -515,6 +655,26 @@ export function ExpensesPage() {
                           <p>Teles {formatCurrency(Number(expense.teles_amount))}</p>
                           <p>Nicole {formatCurrency(Number(expense.nicole_amount))}</p>
                         </div>
+                      </TableCell>
+                      <TableCell>
+                        {paymentByExpenseId.has(expense.id) ? (
+                          <span className="text-xs text-muted-foreground">
+                            Deducted from cash
+                          </span>
+                        ) : expense.is_paid ? (
+                          <span className="text-xs text-muted-foreground">
+                            Already marked paid
+                          </span>
+                        ) : (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            disabled={payingExpenseId === expense.id}
+                            onClick={() => void handlePay(expense)}
+                          >
+                            Pay
+                          </Button>
+                        )}
                       </TableCell>
                       <TableCell>
                         {expense.created_by_user_id === user.id && (

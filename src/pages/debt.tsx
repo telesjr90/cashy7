@@ -1,8 +1,17 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/lib/supabase";
-import type { DebtAccount, DebtPayment } from "@/lib/types";
+import type { CashPaymentTransaction, DebtAccount, DebtPayment, Person } from "@/lib/types";
+import {
+  getMyBillShareAmount,
+  resolveBillShareKeyForPerson,
+} from "@/lib/bill-share";
+import { getHouseholdPeople } from "@/lib/user-person";
+import {
+  getMyCashPaymentTransactions,
+  paySourceFromCurrentCash,
+} from "@/lib/payments";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -135,9 +144,13 @@ function updateScheduleFromBalance(
 }
 
 export function DebtPage() {
-  const { household } = useAuth();
+  const { user, household, membership } = useAuth();
   const [debtAccounts, setDebtAccounts] = useState<DebtAccount[]>([]);
   const [debtPayments, setDebtPayments] = useState<DebtPayment[]>([]);
+  const [people, setPeople] = useState<Person[]>([]);
+  const [paymentTransactions, setPaymentTransactions] = useState<
+    CashPaymentTransaction[]
+  >([]);
   const [loading, setLoading] = useState(true);
   const [showAccountForm, setShowAccountForm] = useState(false);
   const [editingAccountId, setEditingAccountId] = useState<string | null>(null);
@@ -151,6 +164,8 @@ export function DebtPage() {
   const [togglingPaymentId, setTogglingPaymentId] = useState<string | null>(
     null
   );
+  const [payingPaymentId, setPayingPaymentId] = useState<string | null>(null);
+  const [payError, setPayError] = useState<string | null>(null);
   const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null);
   const [paymentEditForm, setPaymentEditForm] = useState({
     totalPayment: "",
@@ -184,10 +199,12 @@ export function DebtPage() {
   });
 
   const fetchData = useCallback(async () => {
-    if (!household) return;
+    if (!household || !user) return;
 
     setLoading(true);
-    const [accountsRes, paymentsRes] = await Promise.all([
+    setPayError(null);
+
+    const [accountsRes, paymentsRes, peopleRes, paymentTxRes] = await Promise.all([
       supabase
         .from("debt_accounts")
         .select("*")
@@ -198,12 +215,38 @@ export function DebtPage() {
         .select("*")
         .eq("household_id", household.id)
         .order("created_at", { ascending: false }),
+      getHouseholdPeople(household.id),
+      getMyCashPaymentTransactions(household.id, user.id),
     ]);
 
     if (accountsRes.data) setDebtAccounts(accountsRes.data as DebtAccount[]);
     if (paymentsRes.data) setDebtPayments(paymentsRes.data as DebtPayment[]);
+    if (!peopleRes.error) setPeople(peopleRes.people);
+    if (!paymentTxRes.error) setPaymentTransactions(paymentTxRes.transactions);
     setLoading(false);
-  }, [household]);
+  }, [household, user]);
+
+  const mappedPerson = useMemo(() => {
+    if (!membership?.person_id) {
+      return null;
+    }
+    return people.find((person) => person.id === membership.person_id) ?? null;
+  }, [membership?.person_id, people]);
+
+  const shareKey = useMemo(
+    () => resolveBillShareKeyForPerson(mappedPerson),
+    [mappedPerson]
+  );
+
+  const paymentByDebtPaymentId = useMemo(() => {
+    const map = new Map<string, CashPaymentTransaction>();
+    for (const tx of paymentTransactions) {
+      if (tx.source_type === "debt_payment") {
+        map.set(tx.source_id, tx);
+      }
+    }
+    return map;
+  }, [paymentTransactions]);
 
   useEffect(() => {
     fetchData();
@@ -794,6 +837,56 @@ export function DebtPage() {
     }
   };
 
+  const payDebtPayment = async (payment: DebtPayment) => {
+    if (!household || !user) {
+      return;
+    }
+
+    setPayError(null);
+
+    const shareAmount = getMyBillShareAmount(payment, shareKey);
+    if (shareAmount === null) {
+      setPayError("Choose your budget profile in Settings before paying from cash.");
+      return;
+    }
+
+    if (shareAmount <= 0) {
+      setPayError("Your share for this payment is zero.");
+      return;
+    }
+
+    if (paymentByDebtPaymentId.has(payment.id)) {
+      setPayError("This item has already been deducted from your current amount.");
+      return;
+    }
+
+    setPayingPaymentId(payment.id);
+
+    const accountName = getAccountName(payment.debt_account_id);
+    const { result, error } = await paySourceFromCurrentCash({
+      householdId: household.id,
+      userId: user.id,
+      personId: membership?.person_id ?? null,
+      sourceType: "debt_payment",
+      sourceId: payment.id,
+      amount: shareAmount,
+      notes: `Paid debt payment: ${accountName}`,
+    });
+
+    setPayingPaymentId(null);
+
+    if (error || !result) {
+      setPayError(error ?? "Could not pay debt payment from current cash.");
+      return;
+    }
+
+    if (result.transaction) {
+      setPaymentTransactions((prev) => [result.transaction!, ...prev]);
+    }
+
+    await fetchData();
+  };
+
   const deleteDebtPayment = async (paymentId: string) => {
     setError(null);
     const payment = debtPayments.find((p) => p.id === paymentId);
@@ -1025,6 +1118,11 @@ export function DebtPage() {
         {error && (
           <Alert variant="destructive">
             <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+        {payError && (
+          <Alert variant="destructive">
+            <AlertDescription>{payError}</AlertDescription>
           </Alert>
         )}
         {warning && (
@@ -1573,6 +1671,7 @@ export function DebtPage() {
                     <TableHead className="text-right">
                       Projected Remaining After Payment
                     </TableHead>
+                    <TableHead className="w-36">Pay</TableHead>
                     <TableHead className="w-24"></TableHead>
                   </TableRow>
                 </TableHeader>
@@ -1611,6 +1710,29 @@ export function DebtPage() {
                         {payment.remaining_balance_after_payment !== null
                           ? formatCurrency(payment.remaining_balance_after_payment)
                           : "-"}
+                      </TableCell>
+                      <TableCell>
+                        {paymentByDebtPaymentId.has(payment.id) ? (
+                          <span className="text-xs text-muted-foreground">
+                            Deducted from cash
+                          </span>
+                        ) : payment.paid_status ? (
+                          <span className="text-xs text-muted-foreground">
+                            Already marked paid
+                          </span>
+                        ) : (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            disabled={
+                              payingPaymentId === payment.id ||
+                              togglingPaymentId === payment.id
+                            }
+                            onClick={() => void payDebtPayment(payment)}
+                          >
+                            Pay
+                          </Button>
+                        )}
                       </TableCell>
                       <TableCell>
                         <div className="flex justify-end gap-1">

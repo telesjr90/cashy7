@@ -298,6 +298,16 @@ export async function deleteManualExpense(id: string): Promise<{
   return { error: null };
 }
 
+export async function markManualExpensePaid(id: string): Promise<{
+  expense: ManualExpense | null;
+  error: string | null;
+}> {
+  return updateManualExpense(id, {
+    is_paid: true,
+    paid_at: new Date().toISOString(),
+  });
+}
+
 export function expenseScopeLabel(scope: ManualExpenseScope): string {
   return scope === "private" ? "Private" : "Shared";
 }
