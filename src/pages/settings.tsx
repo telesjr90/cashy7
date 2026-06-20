@@ -7,6 +7,13 @@ import {
   addMyCashSnapshot,
 } from "@/lib/cashflow-settings";
 import {
+  DEFAULT_CASH_ADJUSTMENT_CREDIT_HISTORY_LIMIT,
+  getMyCashAdjustmentTransactions,
+  mapCashAdjustmentCreditsForDisplay,
+  buildManualExpenseDescriptionLookup,
+} from "@/lib/cash-adjustments";
+import { getManualExpenses } from "@/lib/expenses";
+import {
   getHouseholdPeople,
   getMyHouseholdMemberProfile,
   updateMyPersonMapping,
@@ -507,6 +514,15 @@ export function SettingsPage() {
   const [snapshotSaveError, setSnapshotSaveError] = useState<string | null>(null);
   const [snapshotSuccess, setSnapshotSuccess] = useState<string | null>(null);
 
+  const [cashAdjustmentCreditsLoading, setCashAdjustmentCreditsLoading] =
+    useState(true);
+  const [cashAdjustmentCreditsError, setCashAdjustmentCreditsError] = useState<
+    string | null
+  >(null);
+  const [cashAdjustmentCreditRows, setCashAdjustmentCreditRows] = useState<
+    ReturnType<typeof mapCashAdjustmentCreditsForDisplay>
+  >([]);
+
   const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>([]);
   const [myParticipants, setMyParticipants] = useState<SavingsGoalParticipant[]>([]);
   const [myContributions, setMyContributions] = useState<SavingsContribution[]>([]);
@@ -595,6 +611,41 @@ export function SettingsPage() {
     setSnapshotLoading(false);
   }, [household, user]);
 
+  const loadCashAdjustmentCredits = useCallback(async () => {
+    if (!household || !user) return;
+
+    setCashAdjustmentCreditsLoading(true);
+    setCashAdjustmentCreditsError(null);
+
+    const [transactionsResult, expensesResult] = await Promise.all([
+      getMyCashAdjustmentTransactions(
+        household.id,
+        user.id,
+        DEFAULT_CASH_ADJUSTMENT_CREDIT_HISTORY_LIMIT
+      ),
+      getManualExpenses(household.id),
+    ]);
+
+    const errors = [transactionsResult.error, expensesResult.error].filter(Boolean);
+    if (errors.length > 0) {
+      setCashAdjustmentCreditsError(errors[0] ?? "Failed to load cash adjustment credits.");
+      setCashAdjustmentCreditRows([]);
+    } else {
+      const descriptionById = buildManualExpenseDescriptionLookup(
+        expensesResult.expenses
+      );
+      setCashAdjustmentCreditRows(
+        mapCashAdjustmentCreditsForDisplay(
+          transactionsResult.transactions,
+          descriptionById,
+          { limit: DEFAULT_CASH_ADJUSTMENT_CREDIT_HISTORY_LIMIT }
+        )
+      );
+    }
+
+    setCashAdjustmentCreditsLoading(false);
+  }, [household, user]);
+
   const loadSavings = useCallback(async () => {
     if (!household || !user) return;
 
@@ -634,6 +685,10 @@ export function SettingsPage() {
   useEffect(() => {
     loadLatestSnapshot();
   }, [loadLatestSnapshot]);
+
+  useEffect(() => {
+    loadCashAdjustmentCredits();
+  }, [loadCashAdjustmentCredits]);
 
   useEffect(() => {
     loadSavings();
@@ -1063,6 +1118,55 @@ export function SettingsPage() {
                   Save current amount
                 </Button>
               </>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Cash adjustment credits</CardTitle>
+            <CardDescription>
+              Credits added to your current amount from decrease expense adjustments.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {cashAdjustmentCreditsLoading ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading cash adjustment credits...
+              </div>
+            ) : cashAdjustmentCreditsError ? (
+              <Alert variant="destructive">
+                <AlertDescription>{cashAdjustmentCreditsError}</AlertDescription>
+              </Alert>
+            ) : cashAdjustmentCreditRows.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No cash adjustment credits yet.
+              </p>
+            ) : (
+              <ul className="space-y-2 text-sm">
+                {cashAdjustmentCreditRows.map((credit) => (
+                  <li
+                    key={credit.id}
+                    className="rounded-md bg-muted/40 px-3 py-2"
+                  >
+                    <div className="flex flex-wrap items-baseline justify-between gap-2">
+                      <span className="font-medium">
+                        {formatCurrency(credit.amount)}
+                      </span>
+                      <span className="text-muted-foreground">
+                        {formatDisplayDate(credit.creditedAt)}
+                      </span>
+                    </div>
+                    <p className="mt-1 text-muted-foreground">
+                      {credit.adjustmentDescription}
+                    </p>
+                    {credit.notes && (
+                      <p className="mt-1 text-muted-foreground">{credit.notes}</p>
+                    )}
+                  </li>
+                ))}
+              </ul>
             )}
           </CardContent>
         </Card>

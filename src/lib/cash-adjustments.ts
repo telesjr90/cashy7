@@ -118,16 +118,85 @@ function mapRpcError(message: string): string {
   return message;
 }
 
+export const MANUAL_EXPENSE_ADJUSTMENT_CREDIT_FALLBACK_LABEL =
+  "Manual expense adjustment";
+
+export const DEFAULT_CASH_ADJUSTMENT_CREDIT_HISTORY_LIMIT = 10;
+
+export interface CashAdjustmentCreditDisplayRow {
+  id: string;
+  creditedAt: string;
+  amount: number;
+  adjustmentDescription: string;
+  notes: string | null;
+}
+
+export function buildManualExpenseDescriptionLookup(
+  expenses: ReadonlyArray<Pick<ManualExpense, "id" | "description">>
+): ReadonlyMap<string, string> {
+  const map = new Map<string, string>();
+  for (const expense of expenses) {
+    const description = expense.description.trim();
+    if (description) {
+      map.set(expense.id, description);
+    }
+  }
+  return map;
+}
+
+export function getLinkedAdjustmentDescription(
+  sourceId: string,
+  descriptionById: ReadonlyMap<string, string>,
+  fallbackLabel: string = MANUAL_EXPENSE_ADJUSTMENT_CREDIT_FALLBACK_LABEL
+): string {
+  return descriptionById.get(sourceId) ?? fallbackLabel;
+}
+
+export function mapCashAdjustmentCreditsForDisplay(
+  transactions: CashAdjustmentTransaction[],
+  descriptionById: ReadonlyMap<string, string>,
+  options?: { limit?: number }
+): CashAdjustmentCreditDisplayRow[] {
+  const limit = options?.limit ?? transactions.length;
+  const rows: CashAdjustmentCreditDisplayRow[] = [];
+
+  for (const transaction of transactions) {
+    if (rows.length >= limit) {
+      break;
+    }
+
+    rows.push({
+      id: transaction.id,
+      creditedAt: transaction.credited_at,
+      amount: Number(transaction.amount),
+      adjustmentDescription:
+        transaction.source_type === "manual_expense_adjustment"
+          ? getLinkedAdjustmentDescription(transaction.source_id, descriptionById)
+          : MANUAL_EXPENSE_ADJUSTMENT_CREDIT_FALLBACK_LABEL,
+      notes: transaction.notes,
+    });
+  }
+
+  return rows;
+}
+
 export async function getMyCashAdjustmentTransactions(
   householdId: string,
-  userId: string
+  userId: string,
+  limit?: number
 ): Promise<{ transactions: CashAdjustmentTransaction[]; error: string | null }> {
-  const { data, error } = await supabase
+  let query = supabase
     .from("cash_adjustment_transactions")
     .select("*")
     .eq("household_id", householdId)
     .eq("user_id", userId)
     .order("credited_at", { ascending: false });
+
+  if (limit !== undefined) {
+    query = query.limit(limit);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     return { transactions: [], error: error.message };
