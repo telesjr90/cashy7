@@ -1,6 +1,12 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
 import {
+  ADJUSTMENT_PAY_DISABLED_MESSAGE,
+  buildManualExpenseDetailView,
+  PAID_THROUGH_APP_DELETE_MESSAGE,
+  PAID_THROUGH_APP_EDIT_MESSAGE,
+} from "@/lib/expense-detail";
+import {
   adjustmentDirectionLabel,
   calculateExpenseSplit,
   canDeleteManualExpense,
@@ -98,18 +104,16 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Loader as Loader2, Pencil, Receipt, Trash2 } from "lucide-react";
+import { Eye, Loader as Loader2, Pencil, Receipt, Trash2 } from "lucide-react";
 import { format, parseISO } from "date-fns";
-
-const PAID_THROUGH_APP_EDIT_MESSAGE =
-  "Already deducted from cash. Create an adjustment instead of editing.";
-
-const PAID_THROUGH_APP_DELETE_MESSAGE =
-  "Already deducted from cash. Create an adjustment instead of deleting.";
-
-const ADJUSTMENT_PAY_DISABLED_MESSAGE =
-  "Adjustment affects planning totals only.";
 
 function todayIsoDate(): string {
   return format(new Date(), "yyyy-MM-dd");
@@ -168,6 +172,7 @@ export function ExpensesPage() {
     description: "",
     notes: "",
   });
+  const [detailExpenseId, setDetailExpenseId] = useState<string | null>(null);
 
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("");
@@ -256,6 +261,48 @@ export function ExpensesPage() {
     () => new Map(expenses.map((expense) => [expense.id, expense])),
     [expenses]
   );
+
+  const creditTransactionByAdjustmentId = useMemo(() => {
+    const map = new Map<string, CashAdjustmentTransaction>();
+    for (const tx of cashAdjustmentTransactions) {
+      if (tx.source_type === "manual_expense_adjustment") {
+        map.set(tx.source_id, tx);
+      }
+    }
+    return map;
+  }, [cashAdjustmentTransactions]);
+
+  const detailExpense =
+    detailExpenseId !== null
+      ? (expenseById.get(detailExpenseId) ?? null)
+      : null;
+
+  const detailView = useMemo(() => {
+    if (!detailExpense || !user) {
+      return null;
+    }
+
+    return buildManualExpenseDetailView({
+      expense: detailExpense,
+      visibleExpenses: expenses,
+      userId: user.id,
+      shareKey,
+      paidManualExpenseIds: paidManualExpenseIds,
+      paymentTransaction: paymentByExpenseId.get(detailExpense.id) ?? null,
+      creditTransaction:
+        creditTransactionByAdjustmentId.get(detailExpense.id) ?? null,
+      creditedAdjustmentIds,
+    });
+  }, [
+    creditTransactionByAdjustmentId,
+    creditedAdjustmentIds,
+    detailExpense,
+    expenses,
+    paidManualExpenseIds,
+    paymentByExpenseId,
+    shareKey,
+    user,
+  ]);
 
   const editingExpense =
     expenses.find((expense) => expense.id === editingExpenseId) ?? null;
@@ -1050,15 +1097,25 @@ export function ExpensesPage() {
                               {adjustmentDirectionLabel(expense.adjustment_direction)}
                             </p>
                           )}
-                          <p
-                            className={`font-medium ${
-                              expense.is_paid && !isAdjustment
-                                ? "line-through text-muted-foreground"
-                                : ""
-                            }`}
+                          <button
+                            type="button"
+                            className="group flex w-full items-start gap-2 text-left"
+                            onClick={() => setDetailExpenseId(expense.id)}
+                            aria-label={`View details for ${expense.description}`}
                           >
-                            {expense.description}
-                          </p>
+                            <Eye className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+                            <span className="min-w-0 flex-1">
+                              <span
+                                className={`block font-medium underline-offset-2 group-hover:underline ${
+                                  expense.is_paid && !isAdjustment
+                                    ? "line-through text-muted-foreground"
+                                    : ""
+                                }`}
+                              >
+                                {expense.description}
+                              </span>
+                            </span>
+                          </button>
                           {isAdjustment && originalExpense && (
                             <p className="text-xs text-muted-foreground">
                               For: {originalExpense.description} (
@@ -1748,6 +1805,258 @@ export function ExpensesPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <Sheet
+        open={detailExpenseId !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDetailExpenseId(null);
+          }
+        }}
+      >
+        <SheetContent className="w-full overflow-y-auto sm:max-w-md">
+          {detailView && detailExpense ? (
+            <>
+              <SheetHeader>
+                <SheetTitle>{detailView.description}</SheetTitle>
+                <SheetDescription>
+                  {detailView.isAdjustment
+                    ? `Adjustment · ${detailView.adjustmentDirectionLabel ?? "Adjustment"}`
+                    : "Manual expense details"}
+                </SheetDescription>
+              </SheetHeader>
+
+              <div className="space-y-6 px-4 pb-6">
+                <section className="space-y-3">
+                  <h3 className="text-sm font-semibold">Details</h3>
+                  <dl className="grid gap-2 text-sm">
+                    <div className="flex justify-between gap-4">
+                      <dt className="text-muted-foreground">Scope</dt>
+                      <dd>{detailView.scopeLabel}</dd>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <dt className="text-muted-foreground">Amount</dt>
+                      <dd>{detailView.amountLabel}</dd>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <dt className="text-muted-foreground">Date</dt>
+                      <dd>{detailView.dateLabel}</dd>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <dt className="text-muted-foreground">Period bucket</dt>
+                      <dd>{detailView.periodBucketLabel}</dd>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <dt className="text-muted-foreground">Split type</dt>
+                      <dd>{detailView.splitTypeLabel}</dd>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <dt className="text-muted-foreground">Teles</dt>
+                      <dd>{detailView.telesAmountLabel}</dd>
+                    </div>
+                    <div className="flex justify-between gap-4">
+                      <dt className="text-muted-foreground">Nicole</dt>
+                      <dd>{detailView.nicoleAmountLabel}</dd>
+                    </div>
+                    {detailView.category && (
+                      <div className="flex justify-between gap-4">
+                        <dt className="text-muted-foreground">Category</dt>
+                        <dd>{detailView.category}</dd>
+                      </div>
+                    )}
+                    {detailView.notes && (
+                      <div className="space-y-1">
+                        <dt className="text-muted-foreground">Notes</dt>
+                        <dd>{detailView.notes}</dd>
+                      </div>
+                    )}
+                    {detailView.createdAtLabel && (
+                      <div className="flex justify-between gap-4">
+                        <dt className="text-muted-foreground">Created</dt>
+                        <dd className="text-right">{detailView.createdAtLabel}</dd>
+                      </div>
+                    )}
+                    {detailView.updatedAtLabel && (
+                      <div className="flex justify-between gap-4">
+                        <dt className="text-muted-foreground">Updated</dt>
+                        <dd className="text-right">{detailView.updatedAtLabel}</dd>
+                      </div>
+                    )}
+                  </dl>
+                </section>
+
+                {(detailView.isAdjustment ||
+                  detailView.relatedAdjustments.length > 0) && (
+                  <section className="space-y-3">
+                    <h3 className="text-sm font-semibold">Adjustments</h3>
+                    {detailView.isAdjustment && detailView.linkedOriginalDescription && (
+                      <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
+                        <p className="font-medium">Linked original</p>
+                        <p>{detailView.linkedOriginalDescription}</p>
+                        {detailView.linkedOriginalAmountLabel && (
+                          <p className="text-muted-foreground">
+                            Original amount: {detailView.linkedOriginalAmountLabel}
+                          </p>
+                        )}
+                        {detailView.adjustmentReason && (
+                          <p className="text-muted-foreground">
+                            Reason: {detailView.adjustmentReason}
+                          </p>
+                        )}
+                      </div>
+                    )}
+                    {detailView.relatedAdjustments.length > 0 ? (
+                      <ul className="space-y-2">
+                        {detailView.relatedAdjustments.map((adjustment) => (
+                          <li
+                            key={adjustment.id}
+                            className="rounded-md border px-3 py-2 text-sm"
+                          >
+                            <p className="font-medium">
+                              {adjustment.directionLabel} · {adjustment.amountLabel}
+                            </p>
+                            <p>{adjustment.description}</p>
+                            <p className="text-muted-foreground">
+                              {adjustment.dateLabel}
+                              {adjustment.reason ? ` · ${adjustment.reason}` : ""}
+                            </p>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">
+                        No other adjustments for this original expense.
+                      </p>
+                    )}
+                  </section>
+                )}
+
+                <section className="space-y-3">
+                  <h3 className="text-sm font-semibold">Cash & payment</h3>
+                  <dl className="grid gap-2 text-sm">
+                    <div className="flex justify-between gap-4">
+                      <dt className="text-muted-foreground">Mark paid</dt>
+                      <dd className="text-right">{detailView.paymentAudit.markPaidLabel}</dd>
+                    </div>
+                    {detailView.paymentAudit.markPaidAt && (
+                      <div className="flex justify-between gap-4">
+                        <dt className="text-muted-foreground">Marked paid at</dt>
+                        <dd className="text-right">
+                          {detailView.paymentAudit.markPaidAt}
+                        </dd>
+                      </div>
+                    )}
+                    {detailView.paymentAudit.cashDeductionStatusLabel && (
+                      <div className="flex justify-between gap-4">
+                        <dt className="text-muted-foreground">Cash deduction</dt>
+                        <dd className="text-right">
+                          {detailView.paymentAudit.cashDeductionStatusLabel}
+                        </dd>
+                      </div>
+                    )}
+                    {detailView.paymentAudit.hasPaymentTransaction && (
+                      <>
+                        <div className="flex justify-between gap-4">
+                          <dt className="text-muted-foreground">Pay & deduct cash</dt>
+                          <dd className="text-right">Deducted from your current amount</dd>
+                        </div>
+                        {detailView.paymentAudit.paymentAmountLabel && (
+                          <div className="flex justify-between gap-4">
+                            <dt className="text-muted-foreground">Payment amount</dt>
+                            <dd>{detailView.paymentAudit.paymentAmountLabel}</dd>
+                          </div>
+                        )}
+                        {detailView.paymentAudit.paymentDateLabel && (
+                          <div className="flex justify-between gap-4">
+                            <dt className="text-muted-foreground">Payment date</dt>
+                            <dd className="text-right">
+                              {detailView.paymentAudit.paymentDateLabel}
+                            </dd>
+                          </div>
+                        )}
+                        {detailView.paymentAudit.paymentNotes && (
+                          <div className="space-y-1">
+                            <dt className="text-muted-foreground">Payment notes</dt>
+                            <dd>{detailView.paymentAudit.paymentNotes}</dd>
+                          </div>
+                        )}
+                      </>
+                    )}
+                    {detailView.paymentAudit.creditApplied !== null && (
+                      <>
+                        <div className="flex justify-between gap-4">
+                          <dt className="text-muted-foreground">Cash credit</dt>
+                          <dd className="text-right">
+                            {detailView.paymentAudit.creditApplied
+                              ? "Credited to current amount"
+                              : "Not credited yet"}
+                          </dd>
+                        </div>
+                        {detailView.paymentAudit.creditApplied &&
+                          detailView.paymentAudit.creditAmountLabel && (
+                            <>
+                              <div className="flex justify-between gap-4">
+                                <dt className="text-muted-foreground">Credit amount</dt>
+                                <dd>{detailView.paymentAudit.creditAmountLabel}</dd>
+                              </div>
+                              {detailView.paymentAudit.creditDateLabel && (
+                                <div className="flex justify-between gap-4">
+                                  <dt className="text-muted-foreground">Credit date</dt>
+                                  <dd className="text-right">
+                                    {detailView.paymentAudit.creditDateLabel}
+                                  </dd>
+                                </div>
+                              )}
+                              {detailView.paymentAudit.creditNotes && (
+                                <div className="space-y-1">
+                                  <dt className="text-muted-foreground">Credit notes</dt>
+                                  <dd>{detailView.paymentAudit.creditNotes}</dd>
+                                </div>
+                              )}
+                            </>
+                          )}
+                      </>
+                    )}
+                  </dl>
+                </section>
+
+                <section className="space-y-3">
+                  <h3 className="text-sm font-semibold">Actions</h3>
+                  <ul className="space-y-3">
+                    {detailView.actions.map((action) => (
+                      <li
+                        key={action.action}
+                        className="rounded-md border px-3 py-2 text-sm"
+                      >
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="font-medium">{action.label}</p>
+                          <span
+                            className={
+                              action.available
+                                ? "text-xs font-medium text-primary"
+                                : "text-xs text-muted-foreground"
+                            }
+                          >
+                            {action.available ? "Available" : "Unavailable"}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-muted-foreground">
+                          {action.explanation}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
+              </div>
+            </>
+          ) : (
+            <SheetHeader>
+              <SheetTitle>Expense details</SheetTitle>
+              <SheetDescription>This expense is no longer visible.</SheetDescription>
+            </SheetHeader>
+          )}
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
