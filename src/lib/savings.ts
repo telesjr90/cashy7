@@ -419,6 +419,28 @@ export function getParticipantSummaryMonth(
   };
 }
 
+function formatSummaryMonthLabel(year: number, month: number): string {
+  return new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    year: "numeric",
+  }).format(new Date(year, month - 1, 1));
+}
+
+/** One-line hint explaining which month the Settings scoped summary uses. */
+export function getParticipantSummaryMonthHint(
+  participant: SavingsGoalParticipant,
+  referenceDate: Date = new Date()
+): string {
+  const { year, month } = getParticipantSummaryMonth(participant, referenceDate);
+  const monthLabel = formatSummaryMonthLabel(year, month);
+
+  if (parseDateOnly(participant.period_start)) {
+    return `Based on ${monthLabel} from your target period start.`;
+  }
+
+  return `Based on ${monthLabel} because no target period start is set.`;
+}
+
 export interface MySavingsGoalTargetPeriodSummary {
   contributionPeriod: SavingsGoalParticipant["contribution_period"];
   periodView: PeriodView;

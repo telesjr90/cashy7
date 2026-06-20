@@ -18,6 +18,7 @@ import {
   getMySavingsContributions,
   getMySavingsGoalParticipants,
   getMySavingsGoalTargetPeriodSummary,
+  getParticipantSummaryMonthHint,
   getSavingsGoals,
   sumMyContributionsForGoal,
   upsertMySavingsGoalParticipant,
@@ -140,6 +141,10 @@ function SavingsGoalPanel({
         ? getMySavingsGoalTargetPeriodSummary(participant, contributions)
         : null,
     [participant, contributions]
+  );
+  const targetPeriodMonthHint = useMemo(
+    () => (participant ? getParticipantSummaryMonthHint(participant) : null),
+    [participant]
   );
   const recentContributions = goalContributions.slice(0, 5);
 
@@ -383,6 +388,9 @@ function SavingsGoalPanel({
           <h4 className="text-sm font-medium">
             Your contributions for this target period
           </h4>
+          {targetPeriodMonthHint && (
+            <p className="text-xs text-muted-foreground">{targetPeriodMonthHint}</p>
+          )}
           <div className="grid gap-1 rounded-md bg-muted/40 px-3 py-2 text-sm">
             <p>
               Contribution period:{" "}

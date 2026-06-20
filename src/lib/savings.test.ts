@@ -7,6 +7,7 @@ import {
   getDashboardViewDateRange,
   getMySavingsGoalTargetPeriodSummary,
   getParticipantSummaryMonth,
+  getParticipantSummaryMonthHint,
   sumMyContributionsForGoal,
   sumMySavingsContributionsForView,
   sumMySavingsTargetForView,
@@ -938,6 +939,44 @@ describe("getParticipantSummaryMonth", () => {
       year: 2026,
       month: 6,
     });
+  });
+});
+
+describe("getParticipantSummaryMonthHint", () => {
+  it("uses period_start month when present", () => {
+    const row = participant({
+      contribution_period: "1_14",
+      target_contribution_amount: 100,
+      period_start: "2026-01-15",
+    });
+
+    expect(getParticipantSummaryMonthHint(row, new Date("2026-06-19"))).toBe(
+      "Based on January 2026 from your target period start."
+    );
+  });
+
+  it("uses current month fallback when period_start is null", () => {
+    const row = participant({
+      contribution_period: "monthly",
+      target_contribution_amount: 100,
+      period_start: null,
+    });
+
+    expect(getParticipantSummaryMonthHint(row, new Date("2026-06-19"))).toBe(
+      "Based on June 2026 because no target period start is set."
+    );
+  });
+
+  it("formats the hint clearly with month and year", () => {
+    const row = participant({
+      contribution_period: "15_eom",
+      target_contribution_amount: 200,
+      period_start: "2026-03-01",
+    });
+
+    expect(getParticipantSummaryMonthHint(row, new Date("2026-12-01"))).toBe(
+      "Based on March 2026 from your target period start."
+    );
   });
 });
 
