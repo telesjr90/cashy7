@@ -328,7 +328,12 @@ export function DashboardPage() {
         )
       : null;
   const safeToSpendViewLabel = myBillTotalViewLabel;
-  const mySavingsTargetForView = sumMySavingsTargetForView(savingsParticipants, periodView);
+  const mySavingsTargetForView = sumMySavingsTargetForView(
+    savingsParticipants,
+    periodView,
+    year,
+    month
+  );
   const myContributionsForView = sumMySavingsContributionsForView(
     savingsContributions,
     savingsParticipants,

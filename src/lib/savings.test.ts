@@ -100,6 +100,9 @@ function participant(
 }
 
 describe("sumMySavingsTargetForView", () => {
+  const selectedYear = 2026;
+  const selectedMonth = 1;
+
   const participants = [
     participant({ id: "1", contribution_period: "1_14", target_contribution_amount: 100 }),
     participant({ id: "2", contribution_period: "15_eom", target_contribution_amount: 200 }),
@@ -107,20 +110,256 @@ describe("sumMySavingsTargetForView", () => {
   ];
 
   it("includes only 1_14 targets for 1_14 view", () => {
-    expect(sumMySavingsTargetForView(participants, "1_14")).toBe(100);
+    expect(
+      sumMySavingsTargetForView(participants, "1_14", selectedYear, selectedMonth)
+    ).toBe(100);
   });
 
   it("includes only 15_eom targets for 15_eom view", () => {
-    expect(sumMySavingsTargetForView(participants, "15_eom")).toBe(200);
+    expect(
+      sumMySavingsTargetForView(participants, "15_eom", selectedYear, selectedMonth)
+    ).toBe(200);
   });
 
   it("includes 1_14, 15_eom, and monthly targets for full view", () => {
-    expect(sumMySavingsTargetForView(participants, "full")).toBe(600);
+    expect(
+      sumMySavingsTargetForView(participants, "full", selectedYear, selectedMonth)
+    ).toBe(600);
   });
 
   it("does not include monthly targets in single-period views", () => {
-    expect(sumMySavingsTargetForView(participants, "1_14")).not.toBe(400);
-    expect(sumMySavingsTargetForView(participants, "15_eom")).not.toBe(500);
+    expect(
+      sumMySavingsTargetForView(participants, "1_14", selectedYear, selectedMonth)
+    ).not.toBe(400);
+    expect(
+      sumMySavingsTargetForView(participants, "15_eom", selectedYear, selectedMonth)
+    ).not.toBe(500);
+  });
+
+  it("1_14 includes active 1_14 target for selected view", () => {
+    const active = [
+      participant({
+        contribution_period: "1_14",
+        target_contribution_amount: 150,
+        period_start: "2026-01-01",
+        period_end: "2026-01-31",
+      }),
+    ];
+
+    expect(
+      sumMySavingsTargetForView(active, "1_14", selectedYear, selectedMonth)
+    ).toBe(150);
+  });
+
+  it("1_14 excludes 1_14 target whose date range does not overlap selected view", () => {
+    const futureOnly = [
+      participant({
+        contribution_period: "1_14",
+        target_contribution_amount: 150,
+        period_start: "2026-02-01",
+        period_end: "2026-02-28",
+      }),
+    ];
+
+    expect(
+      sumMySavingsTargetForView(futureOnly, "1_14", selectedYear, selectedMonth)
+    ).toBe(0);
+  });
+
+  it("15_eom includes active 15_eom target for selected view", () => {
+    const active = [
+      participant({
+        contribution_period: "15_eom",
+        target_contribution_amount: 250,
+        period_start: "2026-01-01",
+        period_end: "2026-01-31",
+      }),
+    ];
+
+    expect(
+      sumMySavingsTargetForView(active, "15_eom", selectedYear, selectedMonth)
+    ).toBe(250);
+  });
+
+  it("15_eom excludes 15_eom target whose date range does not overlap selected view", () => {
+    const expired = [
+      participant({
+        contribution_period: "15_eom",
+        target_contribution_amount: 250,
+        period_start: "2025-11-01",
+        period_end: "2025-11-30",
+      }),
+    ];
+
+    expect(
+      sumMySavingsTargetForView(expired, "15_eom", selectedYear, selectedMonth)
+    ).toBe(0);
+  });
+
+  it("full includes active 1_14, 15_eom, and monthly targets", () => {
+    const active = [
+      participant({
+        id: "1",
+        contribution_period: "1_14",
+        target_contribution_amount: 100,
+        period_start: "2026-01-01",
+        period_end: "2026-01-31",
+      }),
+      participant({
+        id: "2",
+        contribution_period: "15_eom",
+        target_contribution_amount: 200,
+        period_start: "2026-01-01",
+        period_end: "2026-01-31",
+      }),
+      participant({
+        id: "3",
+        contribution_period: "monthly",
+        target_contribution_amount: 300,
+        period_start: "2026-01-01",
+        period_end: "2026-01-31",
+      }),
+    ];
+
+    expect(
+      sumMySavingsTargetForView(active, "full", selectedYear, selectedMonth)
+    ).toBe(600);
+  });
+
+  it("monthly is excluded from single-period views", () => {
+    const monthlyOnly = [
+      participant({
+        contribution_period: "monthly",
+        target_contribution_amount: 300,
+        period_start: "2026-01-01",
+        period_end: "2026-01-31",
+      }),
+    ];
+
+    expect(
+      sumMySavingsTargetForView(monthlyOnly, "1_14", selectedYear, selectedMonth)
+    ).toBe(0);
+    expect(
+      sumMySavingsTargetForView(monthlyOnly, "15_eom", selectedYear, selectedMonth)
+    ).toBe(0);
+  });
+
+  it("no period_start / period_end means generally active", () => {
+    const generallyActive = [
+      participant({
+        contribution_period: "1_14",
+        target_contribution_amount: 80,
+        period_start: null,
+        period_end: null,
+      }),
+    ];
+
+    expect(
+      sumMySavingsTargetForView(
+        generallyActive,
+        "1_14",
+        selectedYear,
+        selectedMonth
+      )
+    ).toBe(80);
+  });
+
+  it("only period_start works", () => {
+    const startOnly = [
+      participant({
+        contribution_period: "1_14",
+        target_contribution_amount: 90,
+        period_start: "2026-01-10",
+        period_end: null,
+      }),
+    ];
+
+    expect(
+      sumMySavingsTargetForView(startOnly, "1_14", selectedYear, selectedMonth)
+    ).toBe(90);
+    expect(
+      sumMySavingsTargetForView(startOnly, "1_14", 2025, 12)
+    ).toBe(0);
+  });
+
+  it("only period_end works", () => {
+    const endOnly = [
+      participant({
+        contribution_period: "15_eom",
+        target_contribution_amount: 110,
+        period_start: null,
+        period_end: "2026-01-20",
+      }),
+    ];
+
+    expect(
+      sumMySavingsTargetForView(endOnly, "15_eom", selectedYear, selectedMonth)
+    ).toBe(110);
+    expect(
+      sumMySavingsTargetForView(endOnly, "15_eom", 2026, 2)
+    ).toBe(0);
+  });
+
+  it("both dates use overlap logic", () => {
+    const overlapping = [
+      participant({
+        contribution_period: "1_14",
+        target_contribution_amount: 120,
+        period_start: "2026-01-05",
+        period_end: "2026-01-10",
+      }),
+    ];
+    const nonOverlapping = [
+      participant({
+        contribution_period: "1_14",
+        target_contribution_amount: 120,
+        period_start: "2026-01-20",
+        period_end: "2026-01-25",
+      }),
+    ];
+
+    expect(
+      sumMySavingsTargetForView(overlapping, "1_14", selectedYear, selectedMonth)
+    ).toBe(120);
+    expect(
+      sumMySavingsTargetForView(nonOverlapping, "1_14", selectedYear, selectedMonth)
+    ).toBe(0);
+  });
+
+  it("selected previous month does not include a future-only target", () => {
+    const futureOnly = [
+      participant({
+        contribution_period: "1_14",
+        target_contribution_amount: 200,
+        period_start: "2026-03-01",
+        period_end: "2026-06-30",
+      }),
+    ];
+
+    expect(
+      sumMySavingsTargetForView(futureOnly, "1_14", selectedYear, selectedMonth)
+    ).toBe(0);
+    expect(
+      sumMySavingsTargetForView(futureOnly, "full", selectedYear, selectedMonth)
+    ).toBe(0);
+  });
+
+  it("selected future month does not include an expired target", () => {
+    const expired = [
+      participant({
+        contribution_period: "15_eom",
+        target_contribution_amount: 200,
+        period_start: "2025-01-01",
+        period_end: "2025-12-31",
+      }),
+    ];
+
+    expect(
+      sumMySavingsTargetForView(expired, "15_eom", 2026, 6)
+    ).toBe(0);
+    expect(
+      sumMySavingsTargetForView(expired, "full", 2026, 6)
+    ).toBe(0);
   });
 
   it("skips invalid amounts", () => {
@@ -133,11 +372,13 @@ describe("sumMySavingsTargetForView", () => {
       }),
     ];
 
-    expect(sumMySavingsTargetForView(withInvalid, "1_14")).toBe(50);
+    expect(
+      sumMySavingsTargetForView(withInvalid, "1_14", selectedYear, selectedMonth)
+    ).toBe(50);
   });
 
   it("returns zero when participants is empty", () => {
-    expect(sumMySavingsTargetForView([], "full")).toBe(0);
+    expect(sumMySavingsTargetForView([], "full", selectedYear, selectedMonth)).toBe(0);
   });
 
   it("coerces string amounts from the database", () => {
@@ -153,7 +394,9 @@ describe("sumMySavingsTargetForView", () => {
       }),
     ];
 
-    expect(sumMySavingsTargetForView(withStrings, "full")).toBe(100);
+    expect(
+      sumMySavingsTargetForView(withStrings, "full", selectedYear, selectedMonth)
+    ).toBe(100);
   });
 });
 

@@ -12,15 +12,19 @@ function toSafeNumber(value: number | string): number | null {
   return Number.isFinite(num) ? num : null;
 }
 
-function parseContributionDateOnly(
-  contributionDate: string | null | undefined
-): string | null {
-  if (!contributionDate) {
+function parseDateOnly(dateValue: string | null | undefined): string | null {
+  if (!dateValue) {
     return null;
   }
 
-  const match = contributionDate.match(/^(\d{4}-\d{2}-\d{2})/);
+  const match = dateValue.match(/^(\d{4}-\d{2}-\d{2})/);
   return match ? match[1] : null;
+}
+
+function parseContributionDateOnly(
+  contributionDate: string | null | undefined
+): string | null {
+  return parseDateOnly(contributionDate);
 }
 
 /** ISO date range for the Dashboard's selected month and period view. */
@@ -87,13 +91,60 @@ function participantMatchesView(
   return contributionPeriod === periodView;
 }
 
+function participantAppliesToViewDateRange(
+  participant: SavingsGoalParticipant,
+  periodView: PeriodView,
+  selectedYear: number,
+  selectedMonth: number
+): boolean {
+  const { start: viewStart, end: viewEnd } = getDashboardViewDateRange(
+    periodView,
+    selectedYear,
+    selectedMonth
+  );
+
+  const periodStart = parseDateOnly(participant.period_start);
+  const periodEnd = parseDateOnly(participant.period_end);
+
+  if (!periodStart && !periodEnd) {
+    return true;
+  }
+
+  if (periodStart && !periodEnd) {
+    return viewEnd >= periodStart;
+  }
+
+  if (!periodStart && periodEnd) {
+    return viewStart <= periodEnd;
+  }
+
+  if (periodStart && periodEnd) {
+    return viewStart <= periodEnd && viewEnd >= periodStart;
+  }
+
+  return true;
+}
+
 /** Sum the signed-in user's savings target for the selected dashboard period view. */
 export function sumMySavingsTargetForView(
   participants: SavingsGoalParticipant[],
-  periodView: PeriodView
+  periodView: PeriodView,
+  selectedYear: number,
+  selectedMonth: number
 ): number {
   return participants.reduce((sum, participant) => {
     if (!participantMatchesView(participant.contribution_period, periodView)) {
+      return sum;
+    }
+
+    if (
+      !participantAppliesToViewDateRange(
+        participant,
+        periodView,
+        selectedYear,
+        selectedMonth
+      )
+    ) {
       return sum;
     }
 
