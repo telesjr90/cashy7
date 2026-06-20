@@ -4,9 +4,29 @@ import type {
   BillInstance,
   CashPaymentTransaction,
   CashSnapshot,
+  DebtAccount,
+  DebtPayment,
   ManualExpense,
   PaymentSourceType,
 } from "@/lib/types";
+
+export type DebtPaymentWithAccountName = Pick<DebtPayment, "id"> & {
+  debt_accounts: Pick<DebtAccount, "name"> | null;
+};
+
+function normalizeDebtPaymentWithAccountName(row: {
+  id: string;
+  debt_accounts: Pick<DebtAccount, "name"> | Pick<DebtAccount, "name">[] | null;
+}): DebtPaymentWithAccountName {
+  const debtAccount = Array.isArray(row.debt_accounts)
+    ? (row.debt_accounts[0] ?? null)
+    : row.debt_accounts;
+
+  return {
+    id: row.id,
+    debt_accounts: debtAccount,
+  };
+}
 
 export const DUPLICATE_PAYMENT_MESSAGE =
   "This item has already been deducted from your current amount.";
@@ -167,11 +187,25 @@ export function buildManualExpenseDescriptionLookup(
   return map;
 }
 
+export function buildDebtPaymentDescriptionLookup(
+  debtPayments: ReadonlyArray<DebtPaymentWithAccountName>
+): ReadonlyMap<string, string> {
+  const map = new Map<string, string>();
+  for (const payment of debtPayments) {
+    const name = payment.debt_accounts?.name.trim();
+    if (name) {
+      map.set(payment.id, name);
+    }
+  }
+  return map;
+}
+
 export function getLinkedPaymentSourceDescription(
   sourceType: PaymentSourceType,
   sourceId: string,
   lookups: {
     billInstanceNameById: ReadonlyMap<string, string>;
+    debtPaymentDescriptionById: ReadonlyMap<string, string>;
     manualExpenseDescriptionById: ReadonlyMap<string, string>;
   }
 ): string {
@@ -182,7 +216,10 @@ export function getLinkedPaymentSourceDescription(
         BILL_PAYMENT_DEDUCTION_FALLBACK_LABEL
       );
     case "debt_payment":
-      return DEBT_PAYMENT_DEDUCTION_FALLBACK_LABEL;
+      return (
+        lookups.debtPaymentDescriptionById.get(sourceId) ??
+        DEBT_PAYMENT_DEDUCTION_FALLBACK_LABEL
+      );
     case "manual_expense":
       return (
         lookups.manualExpenseDescriptionById.get(sourceId) ??
@@ -204,6 +241,7 @@ export function mapCashPaymentDeductionsForDisplay(
   transactions: CashPaymentTransaction[],
   lookups: {
     billInstanceNameById: ReadonlyMap<string, string>;
+    debtPaymentDescriptionById: ReadonlyMap<string, string>;
     manualExpenseDescriptionById: ReadonlyMap<string, string>;
   },
   options?: { limit?: number }
@@ -326,6 +364,36 @@ export async function getBillInstancesByIds(
   }
 
   return { billInstances: (data as BillInstance[]) ?? [], error: null };
+}
+
+export async function getDebtPaymentsByIds(
+  householdId: string,
+  ids: string[]
+): Promise<{ debtPayments: DebtPaymentWithAccountName[]; error: string | null }> {
+  if (ids.length === 0) {
+    return { debtPayments: [], error: null };
+  }
+
+  const { data, error } = await supabase
+    .from("debt_payments")
+    .select("id, debt_accounts(name)")
+    .eq("household_id", householdId)
+    .in("id", ids);
+
+  if (error) {
+    return { debtPayments: [], error: error.message };
+  }
+
+  const debtPayments = (data ?? []).map((row) =>
+    normalizeDebtPaymentWithAccountName(
+      row as {
+        id: string;
+        debt_accounts: Pick<DebtAccount, "name"> | Pick<DebtAccount, "name">[] | null;
+      }
+    )
+  );
+
+  return { debtPayments, error: null };
 }
 
 export async function getMyCashPaymentTransactionForSource(

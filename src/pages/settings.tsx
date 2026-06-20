@@ -15,9 +15,11 @@ import {
 import { getManualExpenses } from "@/lib/expenses";
 import {
   buildBillInstanceNameLookup,
+  buildDebtPaymentDescriptionLookup,
   buildManualExpenseDescriptionLookup,
   DEFAULT_CASH_PAYMENT_DEDUCTION_HISTORY_LIMIT,
   getBillInstancesByIds,
+  getDebtPaymentsByIds,
   getMyCashPaymentTransactions,
   mapCashPaymentDeductionsForDisplay,
 } from "@/lib/payments";
@@ -693,13 +695,21 @@ export function SettingsPage() {
       .map((transaction) => transaction.source_id);
     const uniqueBillInstanceIds = [...new Set(billInstanceIds)];
 
-    const billInstancesResult = await getBillInstancesByIds(
-      household.id,
-      uniqueBillInstanceIds
-    );
+    const debtPaymentIds = transactionsResult.transactions
+      .filter((transaction) => transaction.source_type === "debt_payment")
+      .map((transaction) => transaction.source_id);
+    const uniqueDebtPaymentIds = [...new Set(debtPaymentIds)];
 
-    if (billInstancesResult.error) {
-      setCashPaymentDeductionsError(billInstancesResult.error);
+    const [billInstancesResult, debtPaymentsResult] = await Promise.all([
+      getBillInstancesByIds(household.id, uniqueBillInstanceIds),
+      getDebtPaymentsByIds(household.id, uniqueDebtPaymentIds),
+    ]);
+
+    const lookupErrors = [billInstancesResult.error, debtPaymentsResult.error].filter(
+      Boolean
+    );
+    if (lookupErrors.length > 0) {
+      setCashPaymentDeductionsError(lookupErrors[0] ?? "Failed to load cash payment deductions.");
       setCashPaymentDeductionRows([]);
     } else {
       setCashPaymentDeductionRows(
@@ -708,6 +718,9 @@ export function SettingsPage() {
           {
             billInstanceNameById: buildBillInstanceNameLookup(
               billInstancesResult.billInstances
+            ),
+            debtPaymentDescriptionById: buildDebtPaymentDescriptionLookup(
+              debtPaymentsResult.debtPayments
             ),
             manualExpenseDescriptionById: buildManualExpenseDescriptionLookup(
               expensesResult.expenses

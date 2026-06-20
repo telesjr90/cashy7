@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   BILL_PAYMENT_DEDUCTION_FALLBACK_LABEL,
   buildBillInstanceNameLookup,
+  buildDebtPaymentDescriptionLookup,
   buildManualExpenseDescriptionLookup,
   calculateCashAfterPayment,
   cashDeductionStatusLabel,
@@ -87,10 +88,35 @@ describe("buildManualExpenseDescriptionLookup", () => {
   });
 });
 
+describe("buildDebtPaymentDescriptionLookup", () => {
+  it("maps debt payment ids to trimmed debt account names", () => {
+    const lookup = buildDebtPaymentDescriptionLookup([
+      { id: "debt-pay-1", debt_accounts: { name: "  test  " } },
+      { id: "debt-pay-2", debt_accounts: { name: "RBC Credit Card" } },
+    ]);
+
+    expect(lookup.get("debt-pay-1")).toBe("test");
+    expect(lookup.get("debt-pay-2")).toBe("RBC Credit Card");
+  });
+
+  it("skips rows with missing or blank debt account names", () => {
+    const lookup = buildDebtPaymentDescriptionLookup([
+      { id: "debt-pay-1", debt_accounts: null },
+      { id: "debt-pay-2", debt_accounts: { name: "   " } },
+    ]);
+
+    expect(lookup.has("debt-pay-1")).toBe(false);
+    expect(lookup.has("debt-pay-2")).toBe(false);
+  });
+});
+
 describe("getLinkedPaymentSourceDescription", () => {
   const lookups = {
     billInstanceNameById: buildBillInstanceNameLookup([
       { id: "bill-1", name: "Internet" },
+    ]),
+    debtPaymentDescriptionById: buildDebtPaymentDescriptionLookup([
+      { id: "debt-pay-1", debt_accounts: { name: "test" } },
     ]),
     manualExpenseDescriptionById: buildManualExpenseDescriptionLookup([
       { id: "exp-1", description: "Coffee" },
@@ -101,6 +127,12 @@ describe("getLinkedPaymentSourceDescription", () => {
     expect(
       getLinkedPaymentSourceDescription("bill_instance", "bill-1", lookups)
     ).toBe("Internet");
+  });
+
+  it("uses debt account names when available", () => {
+    expect(
+      getLinkedPaymentSourceDescription("debt_payment", "debt-pay-1", lookups)
+    ).toBe("test");
   });
 
   it("uses manual expense descriptions when available", () => {
@@ -114,11 +146,21 @@ describe("getLinkedPaymentSourceDescription", () => {
       getLinkedPaymentSourceDescription("bill_instance", "missing", lookups)
     ).toBe(BILL_PAYMENT_DEDUCTION_FALLBACK_LABEL);
     expect(
-      getLinkedPaymentSourceDescription("debt_payment", "debt-1", lookups)
+      getLinkedPaymentSourceDescription("debt_payment", "missing", lookups)
     ).toBe(DEBT_PAYMENT_DEDUCTION_FALLBACK_LABEL);
     expect(
       getLinkedPaymentSourceDescription("manual_expense", "missing", lookups)
     ).toBe(MANUAL_EXPENSE_PAYMENT_DEDUCTION_FALLBACK_LABEL);
+  });
+
+  it("does not use raw UUIDs as fallback labels", () => {
+    const unknownId = "550e8400-e29b-41d4-a716-446655440000";
+    expect(
+      getLinkedPaymentSourceDescription("debt_payment", unknownId, lookups)
+    ).toBe(DEBT_PAYMENT_DEDUCTION_FALLBACK_LABEL);
+    expect(
+      getLinkedPaymentSourceDescription("debt_payment", unknownId, lookups)
+    ).not.toBe(unknownId);
   });
 });
 
@@ -152,11 +194,28 @@ describe("mapCashPaymentDeductionsForDisplay", () => {
       notes: null,
       created_at: "2026-06-19T12:00:00.000Z",
     },
+    {
+      id: "tx-3",
+      household_id: "household-1",
+      user_id: "user-1",
+      person_id: null,
+      source_type: "debt_payment",
+      source_id: "debt-pay-1",
+      amount: 100,
+      previous_cash_snapshot_id: null,
+      new_cash_snapshot_id: null,
+      paid_at: "2026-06-18T12:00:00.000Z",
+      notes: null,
+      created_at: "2026-06-18T12:00:00.000Z",
+    },
   ] satisfies CashPaymentTransaction[];
 
   const lookups = {
     billInstanceNameById: buildBillInstanceNameLookup([
       { id: "bill-1", name: "Internet" },
+    ]),
+    debtPaymentDescriptionById: buildDebtPaymentDescriptionLookup([
+      { id: "debt-pay-1", debt_accounts: { name: "test" } },
     ]),
     manualExpenseDescriptionById: buildManualExpenseDescriptionLookup([
       { id: "exp-1", description: "Coffee" },
@@ -189,6 +248,41 @@ describe("mapCashPaymentDeductionsForDisplay", () => {
       sourceDescription: "Internet",
       notes: null,
     });
+    expect(rows[2]).toMatchObject({
+      id: "tx-3",
+      sourceTypeLabel: "Debt payment",
+      sourceDescription: "test",
+      notes: null,
+    });
+  });
+
+  it("falls back for debt payments missing from the lookup", () => {
+    const rows = mapCashPaymentDeductionsForDisplay(
+      [
+        {
+          id: "tx-debt",
+          household_id: "household-1",
+          user_id: "user-1",
+          person_id: null,
+          source_type: "debt_payment",
+          source_id: "550e8400-e29b-41d4-a716-446655440000",
+          amount: 50,
+          previous_cash_snapshot_id: null,
+          new_cash_snapshot_id: null,
+          paid_at: "2026-06-17T12:00:00.000Z",
+          notes: null,
+          created_at: "2026-06-17T12:00:00.000Z",
+        },
+      ] satisfies CashPaymentTransaction[],
+      {
+        billInstanceNameById: new Map(),
+        debtPaymentDescriptionById: new Map(),
+        manualExpenseDescriptionById: new Map(),
+      }
+    );
+
+    expect(rows[0]?.sourceDescription).toBe(DEBT_PAYMENT_DEDUCTION_FALLBACK_LABEL);
+    expect(rows[0]?.sourceDescription).not.toBe("550e8400-e29b-41d4-a716-446655440000");
   });
 
   it("limits to the requested count", () => {
