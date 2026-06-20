@@ -310,6 +310,58 @@ export function canEditManualExpenseFinancialFields(
   return !isManualExpensePaidThroughApp(expenseId, paidManualExpenseIds);
 }
 
+export const PAID_EXPENSE_DELETE_BLOCKED_MESSAGE =
+  "This expense has already been deducted from cash and cannot be deleted. Create an adjustment instead.";
+
+export function isPaidExpenseDeleteBlockedError(error: unknown): boolean {
+  if (!error) {
+    return false;
+  }
+
+  const message =
+    typeof error === "string"
+      ? error
+      : error instanceof Error
+        ? error.message
+        : typeof error === "object" &&
+            error !== null &&
+            "message" in error &&
+            typeof (error as { message: unknown }).message === "string"
+          ? (error as { message: string }).message
+          : "";
+
+  return message.includes("PAID_EXPENSE_DELETE_BLOCKED");
+}
+
+function mapDeleteManualExpenseError(message: string): string {
+  if (message.includes("PAID_EXPENSE_DELETE_BLOCKED")) {
+    return PAID_EXPENSE_DELETE_BLOCKED_MESSAGE;
+  }
+
+  return message;
+}
+
+/** Whether the signed-in user may delete this manual expense from the UI. */
+export function canDeleteManualExpense({
+  createdByUserId,
+  userId,
+  hasPaymentTransaction,
+}: {
+  createdByUserId: string;
+  userId: string;
+  hasPaymentTransaction: boolean;
+}): boolean {
+  if (createdByUserId !== userId) {
+    return false;
+  }
+
+  if (hasPaymentTransaction) {
+    return false;
+  }
+
+  return true;
+}
+
 export function validateManualExpenseUpdate(
   input: ValidateManualExpenseUpdateInput
 ): { payload: UpdateManualExpense; error: null } | { payload: null; error: string } {
@@ -391,7 +443,7 @@ export async function deleteManualExpense(id: string): Promise<{
   const { error } = await supabase.from("manual_expenses").delete().eq("id", id);
 
   if (error) {
-    return { error: error.message };
+    return { error: mapDeleteManualExpenseError(error.message) };
   }
 
   return { error: null };

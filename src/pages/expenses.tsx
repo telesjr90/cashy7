@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
 import {
   calculateExpenseSplit,
+  canDeleteManualExpense,
   createManualExpense,
   deleteManualExpense,
   expenseScopeLabel,
@@ -88,6 +89,9 @@ import { format, parseISO } from "date-fns";
 
 const PAID_THROUGH_APP_EDIT_MESSAGE =
   "Already deducted from cash. Create an adjustment instead of editing.";
+
+const PAID_THROUGH_APP_DELETE_MESSAGE =
+  "Already deducted from cash. Create an adjustment instead of deleting.";
 
 function todayIsoDate(): string {
   return format(new Date(), "yyyy-MM-dd");
@@ -770,9 +774,19 @@ export function ExpensesPage() {
                 </TableHeader>
                 <TableBody>
                   {expenses.map((expense) => {
+                    const hasPaymentTransaction = paymentByExpenseId.has(expense.id);
                     const cashStatus = getCashDeductionStatus({
                       isMarkedPaid: expense.is_paid,
-                      hasPaymentTransaction: paymentByExpenseId.has(expense.id),
+                      hasPaymentTransaction,
+                    });
+                    const paidThroughApp = isManualExpensePaidThroughApp(
+                      expense.id,
+                      paidManualExpenseIds
+                    );
+                    const canDelete = canDeleteManualExpense({
+                      createdByUserId: expense.created_by_user_id,
+                      userId: user.id,
+                      hasPaymentTransaction,
                     });
 
                     return (
@@ -838,48 +852,58 @@ export function ExpensesPage() {
                       </TableCell>
                       <TableCell>
                         {expense.created_by_user_id === user.id ? (
-                          <div className="flex items-center justify-end gap-1">
-                            {isManualExpensePaidThroughApp(
-                              expense.id,
-                              paidManualExpenseIds
-                            ) ? (
-                              <p className="max-w-[10rem] text-right text-xs text-muted-foreground">
-                                {PAID_THROUGH_APP_EDIT_MESSAGE}
-                              </p>
-                            ) : (
-                              <Button
-                                variant="ghost"
-                                size="icon"
-                                aria-label="Edit expense"
-                                onClick={() => startEditExpense(expense)}
-                              >
-                                <Pencil className="h-4 w-4" />
-                              </Button>
-                            )}
-                            <AlertDialog>
-                              <AlertDialogTrigger asChild>
-                                <Button variant="ghost" size="icon" aria-label="Delete expense">
-                                  <Trash2 className="h-4 w-4" />
+                          <div className="flex flex-col items-end gap-1">
+                            <div className="flex items-center justify-end gap-1">
+                              {paidThroughApp ? (
+                                <p className="max-w-[10rem] text-right text-xs text-muted-foreground">
+                                  {PAID_THROUGH_APP_EDIT_MESSAGE}
+                                </p>
+                              ) : (
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  aria-label="Edit expense"
+                                  onClick={() => startEditExpense(expense)}
+                                >
+                                  <Pencil className="h-4 w-4" />
                                 </Button>
-                              </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                <AlertDialogHeader>
-                                  <AlertDialogTitle>Delete expense?</AlertDialogTitle>
-                                  <AlertDialogDescription>
-                                    This removes &quot;{expense.description}&quot; from your
-                                    expense history.
-                                  </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                  <AlertDialogAction
-                                    onClick={() => void handleDelete(expense.id)}
-                                  >
-                                    Delete
-                                  </AlertDialogAction>
-                                </AlertDialogFooter>
-                              </AlertDialogContent>
-                            </AlertDialog>
+                              )}
+                              {canDelete ? (
+                                <AlertDialog>
+                                  <AlertDialogTrigger asChild>
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      aria-label="Delete expense"
+                                    >
+                                      <Trash2 className="h-4 w-4" />
+                                    </Button>
+                                  </AlertDialogTrigger>
+                                  <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                      <AlertDialogTitle>Delete expense?</AlertDialogTitle>
+                                      <AlertDialogDescription>
+                                        This removes &quot;{expense.description}&quot; from your
+                                        expense history.
+                                      </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                      <AlertDialogAction
+                                        onClick={() => void handleDelete(expense.id)}
+                                      >
+                                        Delete
+                                      </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                  </AlertDialogContent>
+                                </AlertDialog>
+                              ) : null}
+                            </div>
+                            {paidThroughApp ? (
+                              <p className="max-w-[10rem] text-right text-xs text-muted-foreground">
+                                {PAID_THROUGH_APP_DELETE_MESSAGE}
+                              </p>
+                            ) : null}
                           </div>
                         ) : null}
                       </TableCell>

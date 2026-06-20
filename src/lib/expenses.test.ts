@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   calculateExpenseSplit,
+  canDeleteManualExpense,
   canEditManualExpenseFinancialFields,
   getExpensePeriodBucket,
   getMyExpenseShareAmount,
   isManualExpensePaidThroughApp,
+  isPaidExpenseDeleteBlockedError,
   sumMyManualExpenseShareForView,
   validateCustomExpenseSplit,
   validateManualExpenseUpdate,
@@ -530,6 +532,72 @@ describe("paid-through-app edit guard", () => {
   it("blocks financial edits for paid-through-app expenses", () => {
     expect(canEditManualExpenseFinancialFields("exp-paid", paidIds)).toBe(false);
     expect(canEditManualExpenseFinancialFields("exp-unpaid", paidIds)).toBe(true);
+  });
+});
+
+describe("canDeleteManualExpense", () => {
+  const creatorId = "user-creator";
+  const otherUserId = "user-other";
+
+  it("allows creator to delete when there is no payment transaction", () => {
+    expect(
+      canDeleteManualExpense({
+        createdByUserId: creatorId,
+        userId: creatorId,
+        hasPaymentTransaction: false,
+      })
+    ).toBe(true);
+  });
+
+  it("blocks creator delete when there is a payment transaction", () => {
+    expect(
+      canDeleteManualExpense({
+        createdByUserId: creatorId,
+        userId: creatorId,
+        hasPaymentTransaction: true,
+      })
+    ).toBe(false);
+  });
+
+  it("blocks non-creator delete even without a payment transaction", () => {
+    expect(
+      canDeleteManualExpense({
+        createdByUserId: creatorId,
+        userId: otherUserId,
+        hasPaymentTransaction: false,
+      })
+    ).toBe(false);
+  });
+
+  it("allows marked-paid-only creator delete when there is no payment transaction", () => {
+    expect(
+      canDeleteManualExpense({
+        createdByUserId: creatorId,
+        userId: creatorId,
+        hasPaymentTransaction: false,
+      })
+    ).toBe(true);
+  });
+
+  it("blocks paid-through-app delete for creator", () => {
+    expect(
+      canDeleteManualExpense({
+        createdByUserId: creatorId,
+        userId: creatorId,
+        hasPaymentTransaction: true,
+      })
+    ).toBe(false);
+  });
+});
+
+describe("isPaidExpenseDeleteBlockedError", () => {
+  it("detects PAID_EXPENSE_DELETE_BLOCKED errors", () => {
+    expect(
+      isPaidExpenseDeleteBlockedError(
+        new Error("PAID_EXPENSE_DELETE_BLOCKED: Manual expense has already been deducted")
+      )
+    ).toBe(true);
+    expect(isPaidExpenseDeleteBlockedError(new Error("Some other error"))).toBe(false);
   });
 });
 
