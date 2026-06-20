@@ -861,9 +861,10 @@ export function DashboardPage() {
                     </div>
                   </dl>
                   <p className="mt-2 text-xs text-muted-foreground">
-                    Only expenses after your latest current-amount snapshot are counted. Expenses
-                    paid through the app are not counted again. Savings goals and future paychecks
-                    are not included yet.
+                    Only expenses after your latest current-amount snapshot are counted, to avoid
+                    double-counting. Expenses paid through the app are not counted again.
+                    Marked-paid-only expenses may still count until your current amount snapshot
+                    reflects them.
                   </p>
                 </div>
               </div>
