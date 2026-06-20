@@ -700,6 +700,35 @@ export function DashboardPage() {
 
         <Card className="mb-6">
           <CardHeader className="pb-2">
+            <CardTitle className="text-base">My unpaid bills for this view</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {shareKey === null ? (
+              <p className="text-sm text-muted-foreground">
+                Choose your budget profile in{" "}
+                <Link to="/settings" className="font-medium underline underline-offset-4">
+                  Settings
+                </Link>{" "}
+                to see your unpaid bill total.
+              </p>
+            ) : loading ? (
+              <Skeleton className="h-8 w-48" />
+            ) : (
+              <div className="space-y-1">
+                <p className="text-2xl font-semibold">
+                  {formatCurrency(myUnpaidBillTotal ?? 0)}
+                </p>
+                <p className="text-sm text-muted-foreground">{myBillTotalViewLabel}</p>
+                <p className="text-xs text-muted-foreground">
+                  Only bills not marked paid are included.
+                </p>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="mb-6">
+          <CardHeader className="pb-2">
             <CardTitle className="text-base">My manual expenses for this view</CardTitle>
           </CardHeader>
           <CardContent>
