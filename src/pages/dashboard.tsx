@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { Link } from "react-router-dom";
+import { resolveBillShareKeyForPerson } from "@/lib/bill-share";
+import { getHouseholdPeople } from "@/lib/user-person";
+import type { Person } from "@/lib/types";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/lib/supabase";
 import type { BillInstance } from "@/lib/types";
@@ -58,7 +61,7 @@ interface PeriodSummary {
 }
 
 export function DashboardPage() {
-  const { household, user } = useAuth();
+  const { household, user, membership } = useAuth();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [bills, setBills] = useState<BillInstance[]>([]);
   const [loading, setLoading] = useState(true);
@@ -71,6 +74,8 @@ export function DashboardPage() {
   const [periodView, setPeriodView] = useState<PeriodView>(() =>
     defaultPeriodViewForMonth(new Date())
   );
+  const [people, setPeople] = useState<Person[]>([]);
+  const [peopleLoaded, setPeopleLoaded] = useState(false);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth() + 1;
@@ -125,9 +130,23 @@ export function DashboardPage() {
     setLoading(false);
   }, [household, year, month, cashflowStartDate, settingsLoaded]);
 
+  const fetchPeople = useCallback(async () => {
+    if (!household) return;
+
+    const { people: householdPeople, error } = await getHouseholdPeople(household.id);
+    if (!error) {
+      setPeople(householdPeople);
+    }
+    setPeopleLoaded(true);
+  }, [household]);
+
   useEffect(() => {
     fetchSettings();
   }, [fetchSettings]);
+
+  useEffect(() => {
+    fetchPeople();
+  }, [fetchPeople]);
 
   useEffect(() => {
     fetchCashSnapshot();
@@ -227,6 +246,13 @@ export function DashboardPage() {
 
   const periodCardCount = periodView === "full" ? 2 : 1;
 
+  const mappedPerson =
+    membership?.person_id != null
+      ? people.find((person) => person.id === membership.person_id) ?? null
+      : null;
+  const showBudgetProfileNote =
+    peopleLoaded && resolveBillShareKeyForPerson(mappedPerson) === null;
+
   if (!household) {
     return null;
   }
@@ -270,6 +296,18 @@ export function DashboardPage() {
           <p className="mb-4 text-xs text-muted-foreground">
             Ignoring bills before {format(parseISO(cashflowStartDate), "MMM d, yyyy")}
           </p>
+        )}
+
+        {showBudgetProfileNote && (
+          <Alert className="mb-4">
+            <AlertDescription>
+              Choose your budget profile in{" "}
+              <Link to="/settings" className="font-medium underline underline-offset-4">
+                Settings
+              </Link>{" "}
+              to enable private calculations.
+            </AlertDescription>
+          </Alert>
         )}
 
         <Card className="mb-6">
