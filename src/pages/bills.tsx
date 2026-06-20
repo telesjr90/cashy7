@@ -34,6 +34,7 @@ import {
   Plus,
   ArrowLeft,
   Trash2,
+  Pencil,
 } from "lucide-react";
 import { format } from "date-fns";
 import {
@@ -47,8 +48,23 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { formatCurrency } from "@/lib/format";
-import { syncBillPaidStatusWithDebt } from "@/lib/sync-bill-paid-status";
+import {
+  DEBT_LINKED_BILL_EDIT_MESSAGE,
+  fetchDebtLinkedBillInstanceIds,
+  syncBillPaidStatusWithDebt,
+} from "@/lib/sync-bill-paid-status";
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -59,7 +75,16 @@ export function BillsPage() {
   const { household } = useAuth();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [bills, setBills] = useState<BillInstance[]>([]);
+  const [debtLinkedBillIds, setDebtLinkedBillIds] = useState<Set<string>>(
+    () => new Set()
+  );
   const [loading, setLoading] = useState(true);
+  const [editingBillId, setEditingBillId] = useState<string | null>(null);
+  const [billEditForm, setBillEditForm] = useState({
+    amount: "",
+    telesAmount: "",
+    nicoleAmount: "",
+  });
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth() + 1;
@@ -78,7 +103,15 @@ export function BillsPage() {
       .order("name");
 
     if (!error && data) {
-      setBills(data as BillInstance[]);
+      const billRows = data as BillInstance[];
+      setBills(billRows);
+
+      const { linkedIds, error: linkedError } =
+        await fetchDebtLinkedBillInstanceIds(billRows.map((bill) => bill.id));
+
+      if (!linkedError) {
+        setDebtLinkedBillIds(linkedIds);
+      }
     }
     setLoading(false);
   }, [household, year, month]);
@@ -110,7 +143,25 @@ export function BillsPage() {
 
     if (!error) {
       setBills((prev) => prev.filter((b) => b.id !== billId));
+      setDebtLinkedBillIds((prev) => {
+        const next = new Set(prev);
+        next.delete(billId);
+        return next;
+      });
     }
+  };
+
+  const isDebtLinkedBill = (billId: string) => debtLinkedBillIds.has(billId);
+
+  const editingBill = bills.find((bill) => bill.id === editingBillId) ?? null;
+
+  const startEditBill = (bill: BillInstance) => {
+    setEditingBillId(bill.id);
+    setBillEditForm({
+      amount: bill.amount.toString(),
+      telesAmount: bill.teles_amount.toString(),
+      nicoleAmount: bill.nicole_amount.toString(),
+    });
   };
 
   const navigateMonth = (direction: "prev" | "next") => {
@@ -289,11 +340,14 @@ export function BillsPage() {
                     <TableHead className="text-right">Total</TableHead>
                     <TableHead className="text-right text-blue-600 dark:text-blue-400">Teles</TableHead>
                     <TableHead className="text-right text-green-600 dark:text-green-400">Nicole</TableHead>
-                    <TableHead className="w-12"></TableHead>
+                    <TableHead className="w-24"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {bills.map((bill) => (
+                  {bills.map((bill) => {
+                    const debtLinked = isDebtLinkedBill(bill.id);
+
+                    return (
                     <TableRow key={bill.id}>
                       <TableCell>
                         <Checkbox
@@ -303,6 +357,14 @@ export function BillsPage() {
                       </TableCell>
                       <TableCell className={bill.is_paid ? "line-through text-muted-foreground" : ""}>
                         {bill.name}
+                        {debtLinked && (
+                          <p className="text-xs text-muted-foreground max-w-xs">
+                            {DEBT_LINKED_BILL_EDIT_MESSAGE}{" "}
+                            <Link to="/debt" className="underline underline-offset-2">
+                              Debt page
+                            </Link>
+                          </p>
+                        )}
                         {bill.notes && (
                           <p className="text-xs text-muted-foreground truncate max-w-xs">
                             {bill.notes}
@@ -325,39 +387,124 @@ export function BillsPage() {
                         {formatCurrency(Number(bill.nicole_amount))}
                       </TableCell>
                       <TableCell>
-                        <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="ghost" size="icon">
-                              <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                        <div className="flex items-center justify-end gap-1">
+                          {debtLinked && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => startEditBill(bill)}
+                            >
+                              <Pencil className="h-4 w-4 text-muted-foreground" />
                             </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Delete Bill</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                Are you sure you want to delete "{bill.name}"? This action cannot be undone.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction
-                                onClick={() => deleteBill(bill.id)}
-                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                              >
-                                Delete
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
+                          )}
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="ghost" size="icon">
+                                <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Delete Bill</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Are you sure you want to delete "{bill.name}"? This action cannot be undone.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => deleteBill(bill.id)}
+                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                >
+                                  Delete
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
                       </TableCell>
                     </TableRow>
-                  ))}
+                    );
+                  })}
                 </TableBody>
               </Table>
             )}
           </CardContent>
         </Card>
       </div>
+
+      <Dialog
+        open={editingBillId !== null}
+        onOpenChange={(open) => {
+          if (!open) setEditingBillId(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Debt-Linked Bill</DialogTitle>
+            <DialogDescription>
+              {editingBill
+                ? `${editingBill.name} is linked to a debt payment.`
+                : "This bill is linked to a debt payment."}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <Alert>
+              <AlertDescription>
+                {DEBT_LINKED_BILL_EDIT_MESSAGE}{" "}
+                <Link to="/debt" className="underline underline-offset-2">
+                  Go to Debt page
+                </Link>
+              </AlertDescription>
+            </Alert>
+            <div className="space-y-2">
+              <Label htmlFor="editBillAmount">Total Amount (CA$)</Label>
+              <Input
+                id="editBillAmount"
+                type="number"
+                step="0.01"
+                min="0"
+                value={billEditForm.amount}
+                disabled
+                readOnly
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="editBillTelesAmount">Teles Amount (CA$)</Label>
+              <Input
+                id="editBillTelesAmount"
+                type="number"
+                step="0.01"
+                min="0"
+                value={billEditForm.telesAmount}
+                disabled
+                readOnly
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="editBillNicoleAmount">Nicole Amount (CA$)</Label>
+              <Input
+                id="editBillNicoleAmount"
+                type="number"
+                step="0.01"
+                min="0"
+                value={billEditForm.nicoleAmount}
+                disabled
+                readOnly
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setEditingBillId(null)}
+            >
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

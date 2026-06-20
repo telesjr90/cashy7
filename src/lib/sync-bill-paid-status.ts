@@ -1,6 +1,35 @@
 import { applyDebtPaymentBalanceChange } from "@/lib/format";
 import { supabase } from "@/lib/supabase";
 
+export const DEBT_LINKED_BILL_EDIT_MESSAGE =
+  "This bill is linked to a debt payment. Edit the amount from the Debt page to keep the debt balance in sync.";
+
+export async function fetchDebtLinkedBillInstanceIds(
+  billInstanceIds: string[]
+): Promise<{ linkedIds: Set<string>; error: string | null }> {
+  if (billInstanceIds.length === 0) {
+    return { linkedIds: new Set(), error: null };
+  }
+
+  const { data, error } = await supabase
+    .from("debt_payments")
+    .select("linked_bill_instance_id")
+    .in("linked_bill_instance_id", billInstanceIds);
+
+  if (error) {
+    return { linkedIds: new Set(), error: error.message };
+  }
+
+  const linkedIds = new Set<string>();
+  for (const row of data ?? []) {
+    if (row.linked_bill_instance_id) {
+      linkedIds.add(row.linked_bill_instance_id);
+    }
+  }
+
+  return { linkedIds, error: null };
+}
+
 export async function syncBillPaidStatusWithDebt(
   billInstanceId: string,
   oldPaidStatus: boolean,
