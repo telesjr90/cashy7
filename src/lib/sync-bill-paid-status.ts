@@ -4,6 +4,9 @@ import { supabase } from "@/lib/supabase";
 export const DEBT_LINKED_BILL_EDIT_MESSAGE =
   "This bill is linked to a debt payment. Edit the amount from the Debt page to keep the debt balance in sync.";
 
+export const DEBT_LINKED_BILL_DELETE_MESSAGE =
+  "This bill is linked to a debt payment. Manage or delete it from the Debt page to keep balances in sync.";
+
 export async function fetchDebtLinkedBillInstanceIds(
   billInstanceIds: string[]
 ): Promise<{ linkedIds: Set<string>; error: string | null }> {

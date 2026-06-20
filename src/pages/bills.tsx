@@ -61,6 +61,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { formatCurrency } from "@/lib/format";
 import {
+  DEBT_LINKED_BILL_DELETE_MESSAGE,
   DEBT_LINKED_BILL_EDIT_MESSAGE,
   fetchDebtLinkedBillInstanceIds,
   syncBillPaidStatusWithDebt,
@@ -136,6 +137,10 @@ export function BillsPage() {
   };
 
   const deleteBill = async (billId: string) => {
+    if (isDebtLinkedBill(billId)) {
+      return;
+    }
+
     const { error } = await supabase
       .from("bill_instances")
       .delete()
@@ -397,30 +402,39 @@ export function BillsPage() {
                               <Pencil className="h-4 w-4 text-muted-foreground" />
                             </Button>
                           )}
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button variant="ghost" size="icon">
-                                <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Delete Bill</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  Are you sure you want to delete "{bill.name}"? This action cannot be undone.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction
-                                  onClick={() => deleteBill(bill.id)}
-                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                                >
-                                  Delete
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
+                          {debtLinked ? (
+                            <p className="text-xs text-muted-foreground max-w-[12rem] text-right">
+                              {DEBT_LINKED_BILL_DELETE_MESSAGE}{" "}
+                              <Link to="/debt" className="underline underline-offset-2">
+                                Debt page
+                              </Link>
+                            </p>
+                          ) : (
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="ghost" size="icon">
+                                  <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Delete Bill</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Are you sure you want to delete "{bill.name}"? This action cannot be undone.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => deleteBill(bill.id)}
+                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                  >
+                                    Delete
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
