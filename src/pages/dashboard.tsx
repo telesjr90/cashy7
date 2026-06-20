@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Link } from "react-router-dom";
 import {
   calculateSafeToSpendBeforeSavings,
@@ -239,6 +239,158 @@ export function DashboardPage() {
     }
     setPaymentTransactionsLoading(false);
   }, [household, user]);
+
+  const refreshInFlightRef = useRef(false);
+  const lastRefreshAtRef = useRef(0);
+  const skipInitialFocusRef = useRef(true);
+
+  const refreshDashboardData = useCallback(
+    async (options?: { background?: boolean }) => {
+      if (!household || !user) return;
+      if (refreshInFlightRef.current) return;
+
+      const now = Date.now();
+      if (now - lastRefreshAtRef.current < 500) return;
+
+      refreshInFlightRef.current = true;
+      lastRefreshAtRef.current = now;
+      const background = options?.background ?? true;
+
+      try {
+        const { settings, error: settingsFetchError } = await getHouseholdSettings(
+          household.id
+        );
+        const nextCashflowStartDate = settings?.cashflow_start_date ?? null;
+
+        const [
+          snapshotResult,
+          billsResult,
+          expensesResult,
+          transactionsResult,
+          participantsResult,
+          contributionsResult,
+        ] = await Promise.all([
+          getMyLatestCashSnapshot(household.id, user.id),
+          supabase
+            .from("bill_instances")
+            .select("*")
+            .eq("household_id", household.id)
+            .eq("year", year)
+            .eq("month", month),
+          getManualExpenses(household.id),
+          getMyCashPaymentTransactions(household.id, user.id),
+          getMySavingsGoalParticipants(household.id, user.id),
+          getMySavingsContributions(household.id, user.id),
+        ]);
+
+        if (settingsFetchError) {
+          setSettingsError(settingsFetchError);
+          if (!background) {
+            setCashflowStartDate(null);
+          }
+        } else {
+          setSettingsError(null);
+          setCashflowStartDate(nextCashflowStartDate);
+        }
+
+        const { snapshot, error: snapshotError } = snapshotResult;
+        if (snapshotError) {
+          setCashSnapshotError(snapshotError);
+          if (!background) {
+            setCashSnapshot(null);
+          }
+        } else {
+          setCashSnapshotError(null);
+          setCashSnapshot(snapshot);
+        }
+
+        const { error: billsError, data: billsData } = billsResult;
+        if (billsError) {
+          if (!background) {
+            setBills([]);
+          }
+        } else if (billsData) {
+          const fetchedBills = billsData as BillInstance[];
+          setBills(
+            filterBillInstancesByCashflowStart(fetchedBills, nextCashflowStartDate)
+          );
+        }
+
+        const { expenses, error: expensesError } = expensesResult;
+        if (expensesError) {
+          setManualExpensesError(expensesError);
+          if (!background) {
+            setManualExpenses([]);
+          }
+        } else {
+          setManualExpensesError(null);
+          setManualExpenses(expenses);
+        }
+
+        const { transactions, error: transactionsError } = transactionsResult;
+        if (transactionsError) {
+          setPaymentTransactionsError(transactionsError);
+          if (!background) {
+            setPaymentTransactions([]);
+          }
+        } else {
+          setPaymentTransactionsError(null);
+          setPaymentTransactions(transactions);
+        }
+
+        const { participants, error: participantsError } = participantsResult;
+        if (participantsError) {
+          setSavingsParticipantsError(participantsError);
+          if (!background) {
+            setSavingsParticipants([]);
+          }
+        } else {
+          setSavingsParticipantsError(null);
+          setSavingsParticipants(participants);
+        }
+
+        const { contributions, error: contributionsError } = contributionsResult;
+        if (contributionsError) {
+          setSavingsContributionsError(contributionsError);
+          if (!background) {
+            setSavingsContributions([]);
+          }
+        } else {
+          setSavingsContributionsError(null);
+          setSavingsContributions(contributions);
+        }
+      } finally {
+        refreshInFlightRef.current = false;
+      }
+    },
+    [household, user, year, month]
+  );
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      skipInitialFocusRef.current = false;
+    }, 0);
+
+    const handleFocus = () => {
+      if (skipInitialFocusRef.current) return;
+      void refreshDashboardData({ background: true });
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void refreshDashboardData({ background: true });
+      }
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.clearTimeout(timer);
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [refreshDashboardData]);
 
   useEffect(() => {
     fetchSettings();
