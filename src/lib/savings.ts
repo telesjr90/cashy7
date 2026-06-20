@@ -1,3 +1,4 @@
+import type { PeriodView } from "@/lib/periods";
 import { supabase } from "@/lib/supabase";
 import type {
   SavingsContribution,
@@ -5,6 +6,48 @@ import type {
   SavingsGoalParticipant,
   SavingsGoalType,
 } from "@/lib/types";
+
+function toSafeNumber(value: number | string): number | null {
+  const num = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(num) ? num : null;
+}
+
+function participantMatchesView(
+  contributionPeriod: SavingsGoalParticipant["contribution_period"],
+  periodView: PeriodView
+): boolean {
+  if (periodView === "full") {
+    return (
+      contributionPeriod === "1_14" ||
+      contributionPeriod === "15_eom" ||
+      contributionPeriod === "monthly"
+    );
+  }
+
+  return contributionPeriod === periodView;
+}
+
+/** Sum the signed-in user's savings target for the selected dashboard period view. */
+export function sumMySavingsTargetForView(
+  participants: SavingsGoalParticipant[],
+  periodView: PeriodView
+): number {
+  return participants.reduce((sum, participant) => {
+    if (!participantMatchesView(participant.contribution_period, periodView)) {
+      return sum;
+    }
+
+    const amount = toSafeNumber(participant.target_contribution_amount);
+    return amount === null ? sum : sum + amount;
+  }, 0);
+}
+
+export function calculateSafeToSpendAfterSavings(
+  beforeSavings: number,
+  savingsTarget: number
+): number {
+  return beforeSavings - savingsTarget;
+}
 
 export async function getSavingsGoals(householdId: string): Promise<{
   goals: SavingsGoal[];

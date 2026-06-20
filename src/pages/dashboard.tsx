@@ -39,6 +39,12 @@ import {
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { formatCurrency } from "@/lib/format";
+import {
+  calculateSafeToSpendAfterSavings,
+  getMySavingsGoalParticipants,
+  sumMySavingsTargetForView,
+} from "@/lib/savings";
+import type { SavingsGoalParticipant } from "@/lib/types";
 import { filterBillInstancesByCashflowStart } from "@/lib/cashflow-filter";
 import { getHouseholdSettings, getMyLatestCashSnapshot } from "@/lib/cashflow-settings";
 import type { CashSnapshot } from "@/lib/types";
@@ -81,6 +87,9 @@ export function DashboardPage() {
   );
   const [people, setPeople] = useState<Person[]>([]);
   const [peopleLoaded, setPeopleLoaded] = useState(false);
+  const [savingsParticipants, setSavingsParticipants] = useState<SavingsGoalParticipant[]>([]);
+  const [savingsParticipantsLoading, setSavingsParticipantsLoading] = useState(true);
+  const [savingsParticipantsError, setSavingsParticipantsError] = useState<string | null>(null);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth() + 1;
@@ -145,6 +154,24 @@ export function DashboardPage() {
     setPeopleLoaded(true);
   }, [household]);
 
+  const fetchSavingsParticipants = useCallback(async () => {
+    if (!household || !user) return;
+
+    setSavingsParticipantsLoading(true);
+    const { participants, error } = await getMySavingsGoalParticipants(
+      household.id,
+      user.id
+    );
+    if (error) {
+      setSavingsParticipantsError(error);
+      setSavingsParticipants([]);
+    } else {
+      setSavingsParticipantsError(null);
+      setSavingsParticipants(participants);
+    }
+    setSavingsParticipantsLoading(false);
+  }, [household, user]);
+
   useEffect(() => {
     fetchSettings();
   }, [fetchSettings]);
@@ -152,6 +179,10 @@ export function DashboardPage() {
   useEffect(() => {
     fetchPeople();
   }, [fetchPeople]);
+
+  useEffect(() => {
+    fetchSavingsParticipants();
+  }, [fetchSavingsParticipants]);
 
   useEffect(() => {
     fetchCashSnapshot();
@@ -269,6 +300,15 @@ export function DashboardPage() {
         )
       : null;
   const safeToSpendViewLabel = myBillTotalViewLabel;
+  const mySavingsTargetForView = sumMySavingsTargetForView(savingsParticipants, periodView);
+  const safeToSpendAfterSavings =
+    safeToSpendBeforeSavings !== null
+      ? calculateSafeToSpendAfterSavings(
+          safeToSpendBeforeSavings,
+          mySavingsTargetForView
+        )
+      : null;
+  const hasSavingsParticipants = savingsParticipants.length > 0;
 
   if (!household) {
     return null;
@@ -458,6 +498,96 @@ export function DashboardPage() {
                   <p className="mt-2 text-xs text-muted-foreground">
                     Savings goals, expenses, and future paychecks are not included yet.
                   </p>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="mb-6">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">Safe to spend after savings</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {savingsParticipantsError && (
+              <Alert variant="destructive" className="mb-3">
+                <AlertDescription>
+                  Could not load your savings targets. ({savingsParticipantsError})
+                </AlertDescription>
+              </Alert>
+            )}
+            {!cashSnapshot && shareKey === null ? (
+              <p className="text-sm text-muted-foreground">
+                Record your current amount and choose your budget profile in{" "}
+                <Link to="/settings" className="font-medium underline underline-offset-4">
+                  Settings
+                </Link>{" "}
+                to see safe-to-spend after savings.
+              </p>
+            ) : !cashSnapshot ? (
+              <p className="text-sm text-muted-foreground">
+                Record your current amount in{" "}
+                <Link to="/settings" className="font-medium underline underline-offset-4">
+                  Settings
+                </Link>{" "}
+                to see safe-to-spend after savings.
+              </p>
+            ) : shareKey === null ? (
+              <p className="text-sm text-muted-foreground">
+                Choose your budget profile in{" "}
+                <Link to="/settings" className="font-medium underline underline-offset-4">
+                  Settings
+                </Link>{" "}
+                to see safe-to-spend after savings.
+              </p>
+            ) : cashSnapshotLoading || loading || savingsParticipantsLoading ? (
+              <Skeleton className="h-8 w-48" />
+            ) : (
+              <div className="space-y-4">
+                <div className="space-y-1">
+                  <p className="text-2xl font-semibold">
+                    {formatCurrency(safeToSpendAfterSavings ?? 0)}
+                  </p>
+                  <p className="text-sm text-muted-foreground">{safeToSpendViewLabel}</p>
+                  <p className="text-sm text-muted-foreground">
+                    Savings target reserved for this view:{" "}
+                    {formatCurrency(mySavingsTargetForView)}
+                  </p>
+                  {!hasSavingsParticipants && (
+                    <p className="text-sm text-muted-foreground">
+                      <Link to="/settings" className="font-medium underline underline-offset-4">
+                        Set a savings target in Settings
+                      </Link>{" "}
+                      to include savings goals.
+                    </p>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Based on safe-to-spend before savings minus your own savings target for this
+                    view.
+                  </p>
+                </div>
+                <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+                  <p className="mb-2 font-medium">How this was calculated</p>
+                  <dl className="space-y-1.5">
+                    <div className="flex items-baseline justify-between gap-4">
+                      <dt className="text-muted-foreground">Safe to spend before savings</dt>
+                      <dd className="font-medium tabular-nums">
+                        {formatCurrency(safeToSpendBeforeSavings ?? 0)}
+                      </dd>
+                    </div>
+                    <div className="flex items-baseline justify-between gap-4">
+                      <dt className="text-muted-foreground">Your savings target in this view</dt>
+                      <dd className="font-medium tabular-nums">
+                        {formatCurrency(mySavingsTargetForView)}
+                      </dd>
+                    </div>
+                    <div className="flex items-baseline justify-between gap-4 border-t pt-1.5">
+                      <dt className="font-medium">Safe to spend after savings</dt>
+                      <dd className="font-semibold tabular-nums">
+                        {formatCurrency(safeToSpendAfterSavings ?? 0)}
+                      </dd>
+                    </div>
+                  </dl>
                 </div>
               </div>
             )}
