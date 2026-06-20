@@ -670,6 +670,199 @@ describe("sumMySavingsContributionsForView", () => {
       sumMySavingsContributionsForView(contributions, febParticipants, "15_eom", 2024, 2)
     ).toBe(30);
   });
+
+  it("counts contribution when date is in view and participant range overlaps selected view", () => {
+    const activeParticipants = [
+      participant({
+        savings_goal_id: goalA,
+        contribution_period: "1_14",
+        target_contribution_amount: 100,
+        period_start: "2026-01-01",
+        period_end: "2026-01-31",
+      }),
+    ];
+    const contributions = [
+      contribution({ savings_goal_id: goalA, amount: 45, contribution_date: "2026-01-10" }),
+    ];
+
+    expect(
+      sumMySavingsContributionsForView(
+        contributions,
+        activeParticipants,
+        "1_14",
+        selectedYear,
+        selectedMonth
+      )
+    ).toBe(45);
+  });
+
+  it("excludes contribution when participant range is before selected view", () => {
+    const futureOnlyParticipants = [
+      participant({
+        savings_goal_id: goalA,
+        contribution_period: "1_14",
+        target_contribution_amount: 100,
+        period_start: "2026-02-01",
+        period_end: "2026-02-28",
+      }),
+    ];
+    const contributions = [
+      contribution({ savings_goal_id: goalA, amount: 45, contribution_date: "2026-01-10" }),
+    ];
+
+    expect(
+      sumMySavingsContributionsForView(
+        contributions,
+        futureOnlyParticipants,
+        "1_14",
+        selectedYear,
+        selectedMonth
+      )
+    ).toBe(0);
+  });
+
+  it("excludes contribution when participant range is after selected view", () => {
+    const expiredParticipants = [
+      participant({
+        savings_goal_id: goalB,
+        contribution_period: "15_eom",
+        target_contribution_amount: 200,
+        period_start: "2025-11-01",
+        period_end: "2025-11-30",
+      }),
+    ];
+    const contributions = [
+      contribution({ savings_goal_id: goalB, amount: 75, contribution_date: "2026-01-20" }),
+    ];
+
+    expect(
+      sumMySavingsContributionsForView(
+        contributions,
+        expiredParticipants,
+        "15_eom",
+        selectedYear,
+        selectedMonth
+      )
+    ).toBe(0);
+  });
+
+  it("counts contribution when participant has no period_start or period_end", () => {
+    const generallyActiveParticipants = [
+      participant({
+        savings_goal_id: goalA,
+        contribution_period: "1_14",
+        target_contribution_amount: 100,
+        period_start: null,
+        period_end: null,
+      }),
+    ];
+    const contributions = [
+      contribution({ savings_goal_id: goalA, amount: 30, contribution_date: "2026-01-05" }),
+    ];
+
+    expect(
+      sumMySavingsContributionsForView(
+        contributions,
+        generallyActiveParticipants,
+        "1_14",
+        selectedYear,
+        selectedMonth
+      )
+    ).toBe(30);
+  });
+
+  it("counts contribution with only period_start when selected view end is on or after start", () => {
+    const startOnlyParticipants = [
+      participant({
+        savings_goal_id: goalA,
+        contribution_period: "1_14",
+        target_contribution_amount: 100,
+        period_start: "2026-01-10",
+        period_end: null,
+      }),
+    ];
+    const contributions = [
+      contribution({ savings_goal_id: goalA, amount: 20, contribution_date: "2026-01-12" }),
+    ];
+
+    expect(
+      sumMySavingsContributionsForView(
+        contributions,
+        startOnlyParticipants,
+        "1_14",
+        selectedYear,
+        selectedMonth
+      )
+    ).toBe(20);
+    expect(
+      sumMySavingsContributionsForView(
+        contributions,
+        startOnlyParticipants,
+        "1_14",
+        2025,
+        12
+      )
+    ).toBe(0);
+  });
+
+  it("counts contribution with only period_end when selected view start is on or before end", () => {
+    const endOnlyParticipants = [
+      participant({
+        savings_goal_id: goalB,
+        contribution_period: "15_eom",
+        target_contribution_amount: 200,
+        period_start: null,
+        period_end: "2026-01-20",
+      }),
+    ];
+    const contributions = [
+      contribution({ savings_goal_id: goalB, amount: 55, contribution_date: "2026-01-18" }),
+    ];
+
+    expect(
+      sumMySavingsContributionsForView(
+        contributions,
+        endOnlyParticipants,
+        "15_eom",
+        selectedYear,
+        selectedMonth
+      )
+    ).toBe(55);
+    expect(
+      sumMySavingsContributionsForView(
+        contributions,
+        endOnlyParticipants,
+        "15_eom",
+        2026,
+        2
+      )
+    ).toBe(0);
+  });
+
+  it("excludes contribution when date is in view but participant range does not apply", () => {
+    const nonOverlappingParticipants = [
+      participant({
+        savings_goal_id: goalA,
+        contribution_period: "1_14",
+        target_contribution_amount: 100,
+        period_start: "2026-01-20",
+        period_end: "2026-01-25",
+      }),
+    ];
+    const contributions = [
+      contribution({ savings_goal_id: goalA, amount: 40, contribution_date: "2026-01-10" }),
+    ];
+
+    expect(
+      sumMySavingsContributionsForView(
+        contributions,
+        nonOverlappingParticipants,
+        "1_14",
+        selectedYear,
+        selectedMonth
+      )
+    ).toBe(0);
+  });
 });
 
 describe("calculateRemainingSavingsObligation", () => {

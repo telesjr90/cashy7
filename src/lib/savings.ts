@@ -161,16 +161,26 @@ export function sumMySavingsContributionsForView(
   selectedYear: number,
   selectedMonth: number
 ): number {
-  const matchingGoalIds = new Set(
-    participants
-      .filter((participant) =>
-        participantMatchesView(participant.contribution_period, periodView)
-      )
-      .map((participant) => participant.savings_goal_id)
-  );
-
   return contributions.reduce((sum, contribution) => {
-    if (!matchingGoalIds.has(contribution.savings_goal_id)) {
+    const participant = participants.find(
+      (row) => row.savings_goal_id === contribution.savings_goal_id
+    );
+    if (!participant) {
+      return sum;
+    }
+
+    if (!participantMatchesView(participant.contribution_period, periodView)) {
+      return sum;
+    }
+
+    if (
+      !participantAppliesToViewDateRange(
+        participant,
+        periodView,
+        selectedYear,
+        selectedMonth
+      )
+    ) {
       return sum;
     }
 
