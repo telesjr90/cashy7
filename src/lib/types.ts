@@ -577,6 +577,50 @@ export interface Database {
           created_at?: string;
         };
       };
+      cash_adjustment_transactions: {
+        Row: {
+          id: string;
+          household_id: string;
+          user_id: string;
+          person_id: string | null;
+          source_type: "manual_expense_adjustment";
+          source_id: string;
+          amount: number;
+          previous_cash_snapshot_id: string | null;
+          new_cash_snapshot_id: string | null;
+          credited_at: string;
+          notes: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          household_id: string;
+          user_id: string;
+          person_id?: string | null;
+          source_type: "manual_expense_adjustment";
+          source_id: string;
+          amount: number;
+          previous_cash_snapshot_id?: string | null;
+          new_cash_snapshot_id?: string | null;
+          credited_at?: string;
+          notes?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          household_id?: string;
+          user_id?: string;
+          person_id?: string | null;
+          source_type?: "manual_expense_adjustment";
+          source_id?: string;
+          amount?: number;
+          previous_cash_snapshot_id?: string | null;
+          new_cash_snapshot_id?: string | null;
+          credited_at?: string;
+          notes?: string | null;
+          created_at?: string;
+        };
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -588,6 +632,14 @@ export interface Database {
         Args: {
           p_source_type: string;
           p_source_id: string;
+          p_amount: number;
+          p_notes?: string | null;
+        };
+        Returns: Json;
+      };
+      credit_manual_expense_adjustment_to_current_cash: {
+        Args: {
+          p_adjustment_manual_expense_id: string;
           p_amount: number;
           p_notes?: string | null;
         };
@@ -629,3 +681,5 @@ export type ManualExpenseAdjustmentDirection = NonNullable<
 >;
 export type CashPaymentTransaction = Tables<"cash_payment_transactions">;
 export type PaymentSourceType = CashPaymentTransaction["source_type"];
+export type CashAdjustmentTransaction = Tables<"cash_adjustment_transactions">;
+export type CashAdjustmentSourceType = CashAdjustmentTransaction["source_type"];

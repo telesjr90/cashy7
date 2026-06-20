@@ -32,7 +32,18 @@ import {
   cashDeductionStatusLabel,
   PAYMENT_UX_EXPLANATION,
 } from "@/lib/payments";
+import {
+  CASH_CREDIT_UX_NOTE,
+  canShowCashCreditActionForAdjustment,
+  creditManualExpenseAdjustmentToCurrentCash,
+  getCreditedManualExpenseAdjustmentSourceIds,
+  getManualExpenseAdjustmentCashCreditAmount,
+  getMyCashAdjustmentTransactions,
+  isAdjustmentAlreadyCredited,
+  isDecreaseManualExpenseAdjustment,
+} from "@/lib/cash-adjustments";
 import type {
+  CashAdjustmentTransaction,
   CashPaymentTransaction,
   ManualExpense,
   ManualExpenseAdjustmentDirection,
@@ -115,10 +126,16 @@ export function ExpensesPage() {
   const [paymentTransactions, setPaymentTransactions] = useState<
     CashPaymentTransaction[]
   >([]);
+  const [cashAdjustmentTransactions, setCashAdjustmentTransactions] = useState<
+    CashAdjustmentTransaction[]
+  >([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [markingPaidId, setMarkingPaidId] = useState<string | null>(null);
   const [payingExpenseId, setPayingExpenseId] = useState<string | null>(null);
+  const [creditingAdjustmentId, setCreditingAdjustmentId] = useState<
+    string | null
+  >(null);
   const [editingExpenseId, setEditingExpenseId] = useState<string | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
   const [editFormError, setEditFormError] = useState<string | null>(null);
@@ -229,6 +246,12 @@ export function ExpensesPage() {
     [paymentTransactions]
   );
 
+  const creditedAdjustmentIds = useMemo(
+    () =>
+      getCreditedManualExpenseAdjustmentSourceIds(cashAdjustmentTransactions),
+    [cashAdjustmentTransactions]
+  );
+
   const expenseById = useMemo(
     () => new Map(expenses.map((expense) => [expense.id, expense])),
     [expenses]
@@ -329,11 +352,13 @@ export function ExpensesPage() {
     setLoading(true);
     setError(null);
 
-    const [expensesResult, peopleResult, paymentsResult] = await Promise.all([
-      getManualExpenses(household.id),
-      getHouseholdPeople(household.id),
-      getMyCashPaymentTransactions(household.id, user.id),
-    ]);
+    const [expensesResult, peopleResult, paymentsResult, adjustmentsResult] =
+      await Promise.all([
+        getManualExpenses(household.id),
+        getHouseholdPeople(household.id),
+        getMyCashPaymentTransactions(household.id, user.id),
+        getMyCashAdjustmentTransactions(household.id, user.id),
+      ]);
 
     if (expensesResult.error) {
       setError(expensesResult.error);
@@ -354,6 +379,13 @@ export function ExpensesPage() {
       setPaymentTransactions([]);
     } else {
       setPaymentTransactions(paymentsResult.transactions);
+    }
+
+    if (adjustmentsResult.error) {
+      setError((current) => current ?? adjustmentsResult.error);
+      setCashAdjustmentTransactions([]);
+    } else {
+      setCashAdjustmentTransactions(adjustmentsResult.transactions);
     }
 
     setLoading(false);
@@ -677,6 +709,63 @@ export function ExpensesPage() {
           : row
       )
     );
+  };
+
+  const handleCreditAdjustment = async (expense: ManualExpense) => {
+    if (!household || !user) {
+      return;
+    }
+
+    if (!isDecreaseManualExpenseAdjustment(expense)) {
+      return;
+    }
+
+    if (isAdjustmentAlreadyCredited(expense.id, creditedAdjustmentIds)) {
+      setActionError(
+        "This adjustment has already been credited to your current amount."
+      );
+      return;
+    }
+
+    setActionError(null);
+
+    const creditAmount = getManualExpenseAdjustmentCashCreditAmount(
+      expense,
+      shareKey
+    );
+    if (creditAmount === null) {
+      setActionError(
+        "Choose your budget profile in Settings before crediting cash."
+      );
+      return;
+    }
+
+    if (creditAmount <= 0) {
+      setActionError("Your share for this adjustment is zero.");
+      return;
+    }
+
+    setCreditingAdjustmentId(expense.id);
+
+    const { result, error: creditError } =
+      await creditManualExpenseAdjustmentToCurrentCash({
+        householdId: household.id,
+        userId: user.id,
+        adjustmentManualExpenseId: expense.id,
+        amount: creditAmount,
+        notes: `Cash credit for adjustment: ${expense.description}`,
+      });
+
+    setCreditingAdjustmentId(null);
+
+    if (creditError || !result) {
+      setActionError(creditError ?? "Could not credit adjustment to current cash.");
+      return;
+    }
+
+    if (result.transaction) {
+      setCashAdjustmentTransactions((prev) => [result.transaction!, ...prev]);
+    }
   };
 
   if (!household || !user) {
@@ -1019,9 +1108,37 @@ export function ExpensesPage() {
                       </TableCell>
                       <TableCell>
                         {isAdjustment ? (
-                          <p className="text-xs text-muted-foreground">
-                            {ADJUSTMENT_PAY_DISABLED_MESSAGE}
-                          </p>
+                          isDecreaseManualExpenseAdjustment(expense) ? (
+                            <div className="space-y-1">
+                              {canShowCashCreditActionForAdjustment(
+                                expense,
+                                creditedAdjustmentIds
+                              ) ? (
+                                <Button
+                                  variant="secondary"
+                                  size="sm"
+                                  disabled={creditingAdjustmentId === expense.id}
+                                  onClick={() => void handleCreditAdjustment(expense)}
+                                >
+                                  Credit current amount
+                                </Button>
+                              ) : isAdjustmentAlreadyCredited(
+                                  expense.id,
+                                  creditedAdjustmentIds
+                                ) ? (
+                                <p className="text-xs font-medium text-muted-foreground">
+                                  Credited to current amount
+                                </p>
+                              ) : null}
+                              <p className="max-w-[12rem] text-xs text-muted-foreground">
+                                {CASH_CREDIT_UX_NOTE}
+                              </p>
+                            </div>
+                          ) : (
+                            <p className="text-xs text-muted-foreground">
+                              {ADJUSTMENT_PAY_DISABLED_MESSAGE}
+                            </p>
+                          )
                         ) : cashStatus === "unpaid" ? (
                           <Button
                             variant="secondary"
