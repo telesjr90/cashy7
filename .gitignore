@@ -26,3 +26,7 @@ dist-ssr
 .env
 
 .cursor/
+
+# Automation runner scratch files
+docs/automation/.runner-current-prompt.md
+docs/automation/last-cursor-agent-output.log

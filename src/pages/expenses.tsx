@@ -7,11 +7,19 @@ import {
   PAID_THROUGH_APP_EDIT_MESSAGE,
 } from "@/lib/expense-detail";
 import {
+  addPersistedExpenseCategory,
+  extractDistinctCategoriesFromExpenses,
+  loadPersistedExpenseCategories,
+  mergeExpenseCategories,
+  removePersistedExpenseCategory,
+} from "@/lib/expense-categories";
+import {
   DEFAULT_MANUAL_EXPENSE_FILTERS,
   filterManualExpenses,
   isManualExpenseFiltersActive,
   type ManualExpenseFilters,
 } from "@/lib/expense-filters";
+import { ExpenseCategoryInput } from "@/components/expense-category-input";
 import {
   adjustmentDirectionLabel,
   calculateExpenseSplit,
@@ -118,7 +126,22 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Eye, Loader as Loader2, Pencil, Receipt, Search, Trash2 } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import {
+  ChevronDown,
+  Eye,
+  Loader as Loader2,
+  Pencil,
+  Receipt,
+  Search,
+  Trash2,
+  X,
+} from "lucide-react";
 import { format, parseISO } from "date-fns";
 
 function todayIsoDate(): string {
@@ -181,6 +204,12 @@ export function ExpensesPage() {
   const [detailExpenseId, setDetailExpenseId] = useState<string | null>(null);
   const [filters, setFilters] = useState<ManualExpenseFilters>(
     DEFAULT_MANUAL_EXPENSE_FILTERS
+  );
+  const [persistedCategories, setPersistedCategories] = useState<string[]>([]);
+  const [categoriesOpen, setCategoriesOpen] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [categoryMgmtError, setCategoryMgmtError] = useState<string | null>(
+    null
   );
 
   const [description, setDescription] = useState("");
@@ -271,6 +300,21 @@ export function ExpensesPage() {
         paidManualExpenseIds,
       }),
     [expenses, filters, paidManualExpenseIds]
+  );
+
+  const derivedCategories = useMemo(
+    () => extractDistinctCategoriesFromExpenses(expenses),
+    [expenses]
+  );
+
+  const knownCategories = useMemo(
+    () => mergeExpenseCategories(derivedCategories, persistedCategories),
+    [derivedCategories, persistedCategories]
+  );
+
+  const derivedCategoryKeys = useMemo(
+    () => new Set(derivedCategories.map((value) => value.toLowerCase())),
+    [derivedCategories]
   );
 
   const creditedAdjustmentIds = useMemo(
@@ -463,6 +507,53 @@ export function ExpensesPage() {
   useEffect(() => {
     void fetchData();
   }, [fetchData]);
+
+  useEffect(() => {
+    if (!household) {
+      setPersistedCategories([]);
+      return;
+    }
+
+    setPersistedCategories(loadPersistedExpenseCategories(household.id));
+  }, [household?.id]);
+
+  const handleAddCategory = () => {
+    if (!household) {
+      return;
+    }
+
+    const trimmed = newCategoryName.trim();
+    if (!trimmed) {
+      setCategoryMgmtError("Enter a category name.");
+      return;
+    }
+
+    if (
+      knownCategories.some(
+        (existing) => existing.toLowerCase() === trimmed.toLowerCase()
+      )
+    ) {
+      setCategoryMgmtError("That category already exists.");
+      return;
+    }
+
+    setPersistedCategories(
+      addPersistedExpenseCategory(household.id, trimmed)
+    );
+    setNewCategoryName("");
+    setCategoryMgmtError(null);
+  };
+
+  const handleRemovePersistedCategory = (category: string) => {
+    if (!household) {
+      return;
+    }
+
+    setPersistedCategories(
+      removePersistedExpenseCategory(household.id, category)
+    );
+    setCategoryMgmtError(null);
+  };
 
   const resetForm = () => {
     setDescription("");
@@ -898,10 +989,12 @@ export function ExpensesPage() {
 
               <div className="space-y-2">
                 <Label htmlFor="expense-category">Category (optional)</Label>
-                <Input
+                <ExpenseCategoryInput
                   id="expense-category"
+                  listId="expense-create-category-list"
                   value={category}
-                  onChange={(event) => setCategory(event.target.value)}
+                  onChange={setCategory}
+                  suggestions={knownCategories}
                   placeholder="Food, transport, household..."
                 />
               </div>
@@ -1046,6 +1139,92 @@ export function ExpensesPage() {
                 Add expense
               </Button>
             </form>
+
+            <Collapsible
+              open={categoriesOpen}
+              onOpenChange={setCategoriesOpen}
+              className="mt-6 border-t pt-4"
+            >
+              <CollapsibleTrigger asChild>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="flex w-full items-center justify-between px-0 hover:bg-transparent"
+                >
+                  <span className="text-sm font-medium">Manage categories</span>
+                  <ChevronDown
+                    className={`h-4 w-4 transition-transform ${
+                      categoriesOpen ? "rotate-180" : ""
+                    }`}
+                  />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent className="space-y-3 pt-2">
+                <p className="text-xs text-muted-foreground">
+                  Suggestions come from your visible expenses plus saved
+                  household categories. Removing a saved category does not change
+                  existing expense rows.
+                </p>
+                {categoryMgmtError && (
+                  <p className="text-sm text-destructive">{categoryMgmtError}</p>
+                )}
+                <div className="flex gap-2">
+                  <Input
+                    value={newCategoryName}
+                    onChange={(event) => setNewCategoryName(event.target.value)}
+                    placeholder="Add a category..."
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        handleAddCategory();
+                      }
+                    }}
+                  />
+                  <Button type="button" variant="secondary" onClick={handleAddCategory}>
+                    Add
+                  </Button>
+                </div>
+                {knownCategories.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">
+                    No categories yet. Add one here or on your next expense.
+                  </p>
+                ) : (
+                  <ul className="flex flex-wrap gap-2">
+                    {knownCategories.map((categoryName) => {
+                      const isDerived = derivedCategoryKeys.has(
+                        categoryName.toLowerCase()
+                      );
+                      const isPersistedOnly = !isDerived;
+
+                      return (
+                        <li key={categoryName}>
+                          <Badge variant="secondary" className="gap-1 pr-1">
+                            {categoryName}
+                            {isDerived && (
+                              <span className="text-[10px] text-muted-foreground">
+                                from expenses
+                              </span>
+                            )}
+                            {isPersistedOnly && (
+                              <button
+                                type="button"
+                                className="rounded-full p-0.5 hover:bg-muted"
+                                aria-label={`Remove saved category ${categoryName}`}
+                                onClick={() =>
+                                  handleRemovePersistedCategory(categoryName)
+                                }
+                              >
+                                <X className="h-3 w-3" />
+                              </button>
+                            )}
+                          </Badge>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </CollapsibleContent>
+            </Collapsible>
           </CardContent>
         </Card>
 
@@ -1217,15 +1396,17 @@ export function ExpensesPage() {
 
                   <div className="space-y-1">
                     <Label htmlFor="expense-filter-category">Category</Label>
-                    <Input
+                    <ExpenseCategoryInput
                       id="expense-filter-category"
+                      listId="expense-filter-category-list"
                       value={filters.category}
-                      onChange={(event) =>
+                      onChange={(value) =>
                         setFilters((prev) => ({
                           ...prev,
-                          category: event.target.value,
+                          category: value,
                         }))
                       }
+                      suggestions={knownCategories}
                       placeholder="Match category..."
                     />
                   </div>
@@ -1563,15 +1744,17 @@ export function ExpensesPage() {
 
               <div className="space-y-2">
                 <Label htmlFor="edit-expense-category">Category (optional)</Label>
-                <Input
+                <ExpenseCategoryInput
                   id="edit-expense-category"
+                  listId="expense-edit-category-list"
                   value={editForm.category}
-                  onChange={(event) =>
+                  onChange={(value) =>
                     setEditForm((prev) => ({
                       ...prev,
-                      category: event.target.value,
+                      category: value,
                     }))
                   }
+                  suggestions={knownCategories}
                   disabled={savingEdit}
                 />
               </div>
