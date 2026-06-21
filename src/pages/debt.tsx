@@ -82,6 +82,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DebtScheduleReplacementDialog,
+  type DebtScheduleReplacementParams,
+} from "@/components/debt-schedule-replacement-dialog";
 
 const MONTHS = [
   { value: "1", label: "January" },
@@ -164,6 +168,11 @@ export function DebtPage() {
   const [pendingGenerateAccountId, setPendingGenerateAccountId] = useState<
     string | null
   >(null);
+  const [replacementAccountId, setReplacementAccountId] = useState<
+    string | null
+  >(null);
+  const [replacementParams, setReplacementParams] =
+    useState<DebtScheduleReplacementParams | null>(null);
   const [togglingPaymentId, setTogglingPaymentId] = useState<string | null>(
     null
   );
@@ -250,6 +259,11 @@ export function DebtPage() {
     }
     return map;
   }, [paymentTransactions]);
+
+  const cashDeductedPaymentIds = useMemo(
+    () => new Set(paymentByDebtPaymentId.keys()),
+    [paymentByDebtPaymentId]
+  );
 
   useEffect(() => {
     fetchData();
@@ -943,6 +957,68 @@ export function DebtPage() {
     ? debtAccounts.find((account) => account.id === pendingGenerateAccountId)
     : null;
 
+  const replacementAccount = replacementAccountId
+    ? debtAccounts.find((account) => account.id === replacementAccountId)
+    : null;
+
+  const buildReplacementParams = (): DebtScheduleReplacementParams | null => {
+    const paymentsLeft = parseInt(scheduleForm.paymentsLeft);
+    const regularPayment = parseFloat(scheduleForm.totalPaymentPerPayment);
+    const customTeles = parseFloat(scheduleForm.telesAmount);
+    const customNicole = parseFloat(scheduleForm.nicoleAmount);
+
+    if (isNaN(paymentsLeft) || paymentsLeft <= 0) {
+      setError("Please enter a valid number of payments");
+      return null;
+    }
+
+    if (isNaN(regularPayment) || regularPayment <= 0) {
+      setError("Please enter a valid payment amount");
+      return null;
+    }
+
+    if (scheduleForm.splitType === "custom") {
+      if (isNaN(customTeles) || isNaN(customNicole)) {
+        setError("Please enter valid custom split amounts");
+        return null;
+      }
+      if (Math.abs(customTeles + customNicole - regularPayment) > 0.01) {
+        setError("Custom split amounts must add up to the payment amount");
+        return null;
+      }
+    }
+
+    return {
+      paymentsLeft,
+      firstPaymentDate: scheduleForm.firstPaymentDate,
+      regularPayment,
+      splitType: scheduleForm.splitType,
+      customTeles:
+        scheduleForm.splitType === "custom" ? customTeles : undefined,
+      customNicole:
+        scheduleForm.splitType === "custom" ? customNicole : undefined,
+    };
+  };
+
+  const openReplacementDialog = (account: DebtAccount) => {
+    setError(null);
+    const params = buildReplacementParams();
+    if (!params) {
+      return;
+    }
+
+    const accountPayments = debtPayments.filter(
+      (payment) => payment.debt_account_id === account.id
+    );
+    if (accountPayments.length === 0) {
+      setError("This account has no scheduled payments to replace.");
+      return;
+    }
+
+    setReplacementAccountId(account.id);
+    setReplacementParams(params);
+  };
+
   const renderPaymentScheduleSection = (account?: DebtAccount) => (
     <div className="space-y-4 rounded-lg border border-dashed p-4">
       <div>
@@ -1072,7 +1148,17 @@ export function DebtPage() {
         </div>
       </div>
       {account ? (
-        <div className="flex justify-end">
+        <div className="flex flex-wrap justify-end gap-2">
+          {debtPayments.some((payment) => payment.debt_account_id === account.id) && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => openReplacementDialog(account)}
+              disabled={submitting}
+            >
+              Replace future unpaid scheduled payments
+            </Button>
+          )}
           <Button
             type="button"
             variant="secondary"
@@ -1873,6 +1959,29 @@ export function DebtPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <DebtScheduleReplacementDialog
+        open={replacementAccountId !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setReplacementAccountId(null);
+            setReplacementParams(null);
+          }
+        }}
+        account={replacementAccount ?? null}
+        accountPayments={
+          replacementAccount
+            ? debtPayments.filter(
+                (payment) => payment.debt_account_id === replacementAccount.id
+              )
+            : []
+        }
+        cashDeductedPaymentIds={cashDeductedPaymentIds}
+        scheduleParams={replacementParams}
+        onReplaced={() => {
+          void fetchData();
+        }}
+      />
 
       <AlertDialog
         open={pendingGenerateAccountId !== null}
