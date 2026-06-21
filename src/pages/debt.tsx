@@ -89,6 +89,7 @@ import {
   type DebtScheduleReplacementParams,
 } from "@/components/debt-schedule-replacement-dialog";
 import { DebtAccountArchiveDialog } from "@/components/debt-account-archive-dialog";
+import { DebtProgressDashboard } from "@/components/debt-progress-dashboard";
 import { Badge } from "@/components/ui/badge";
 import {
   buildArchivePayload,
@@ -103,6 +104,10 @@ import {
   isDebtScheduleActionAllowed,
   DEBT_ACCOUNT_REOPEN_MESSAGE,
 } from "@/lib/debt-accounts";
+import {
+  buildActiveDebtProgressTotals,
+  buildDebtAccountProgressList,
+} from "@/lib/debt-progress";
 
 const MONTHS = [
   { value: "1", label: "January" },
@@ -297,6 +302,36 @@ export function DebtPage() {
   const archivedDebtAccounts = useMemo(
     () => filterArchivedDebtAccounts(debtAccounts),
     [debtAccounts]
+  );
+
+  const debtProgressPayments = useMemo(
+    () =>
+      debtPayments.map((payment) => ({
+        id: payment.id,
+        debt_account_id: payment.debt_account_id,
+        payment_date: payment.payment_date,
+        total_payment: payment.total_payment,
+        paid_status: payment.paid_status,
+      })),
+    [debtPayments]
+  );
+
+  const activeDebtProgressTotals = useMemo(
+    () => buildActiveDebtProgressTotals(debtAccounts, debtProgressPayments),
+    [debtAccounts, debtProgressPayments]
+  );
+
+  const activeAccountProgress = useMemo(
+    () => buildDebtAccountProgressList(activeDebtAccounts, debtProgressPayments),
+    [activeDebtAccounts, debtProgressPayments]
+  );
+
+  const archivedAccountProgress = useMemo(
+    () =>
+      showArchivedAccounts
+        ? buildDebtAccountProgressList(archivedDebtAccounts, debtProgressPayments)
+        : [],
+    [archivedDebtAccounts, debtProgressPayments, showArchivedAccounts]
   );
 
   const archiveDialogAccount = archiveDialogAccountId
@@ -1425,6 +1460,13 @@ export function DebtPage() {
             <AlertDescription>{warning}</AlertDescription>
           </Alert>
         )}
+
+        <DebtProgressDashboard
+          activeTotals={activeDebtProgressTotals}
+          activeAccountProgress={activeAccountProgress}
+          archivedAccountProgress={archivedAccountProgress}
+          loading={loading}
+        />
 
         {/* Debt Accounts Section */}
         <Card>
