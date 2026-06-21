@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/lib/supabase";
-import type { BillInstance, CashPaymentTransaction, Person } from "@/lib/types";
+import type { Bill, BillInstance, CashPaymentTransaction, Person } from "@/lib/types";
 import {
   getMyBillShareAmount,
   resolveBillShareKeyForPerson,
@@ -48,6 +48,8 @@ import {
   ArrowLeft,
   Trash2,
   Pencil,
+  LayoutTemplate,
+  Archive,
 } from "lucide-react";
 import { format } from "date-fns";
 import {
@@ -64,7 +66,16 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { formatCurrency } from "@/lib/format";
 import { canEditRegularBill } from "@/lib/bill-edit";
+import {
+  billTemplateActiveStatusLabel,
+  buildBillTemplateDeactivateUpdate,
+  getBillInstanceSourceLabel,
+  getBillTemplateActiveStatus,
+  isEligibleBillTemplate,
+} from "@/lib/bill-templates";
 import { BillEditPanel } from "@/components/bill-edit-panel";
+import { BillTemplatePanel } from "@/components/bill-template-panel";
+import { Badge } from "@/components/ui/badge";
 import {
   DEBT_LINKED_BILL_DELETE_MESSAGE,
   DEBT_LINKED_BILL_EDIT_MESSAGE,
@@ -95,6 +106,13 @@ export function BillsPage() {
   const [payingBillId, setPayingBillId] = useState<string | null>(null);
   const [payError, setPayError] = useState<string | null>(null);
   const [editingBillId, setEditingBillId] = useState<string | null>(null);
+  const [templates, setTemplates] = useState<Bill[]>([]);
+  const [templatesLoading, setTemplatesLoading] = useState(true);
+  const [templatePanelOpen, setTemplatePanelOpen] = useState(false);
+  const [editingTemplate, setEditingTemplate] = useState<Bill | null>(null);
+  const [deactivatingTemplateId, setDeactivatingTemplateId] = useState<string | null>(
+    null
+  );
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth() + 1;
@@ -184,9 +202,32 @@ export function BillsPage() {
     setLoading(false);
   }, [household, user, year, month]);
 
+  const fetchTemplates = useCallback(async () => {
+    if (!household) return;
+
+    setTemplatesLoading(true);
+
+    const { data, error } = await supabase
+      .from("bills")
+      .select("*")
+      .eq("household_id", household.id)
+      .eq("recurring", true)
+      .order("name");
+
+    if (!error && data) {
+      setTemplates((data as Bill[]).filter(isEligibleBillTemplate));
+    }
+
+    setTemplatesLoading(false);
+  }, [household]);
+
   useEffect(() => {
     fetchBills();
   }, [fetchBills]);
+
+  useEffect(() => {
+    void fetchTemplates();
+  }, [fetchTemplates]);
 
   const togglePaid = async (bill: BillInstance) => {
     const newPaidStatus = !bill.is_paid;
@@ -290,6 +331,49 @@ export function BillsPage() {
       prev.map((bill) => (bill.id === updatedBill.id ? updatedBill : bill))
     );
     setEditingBillId(null);
+  };
+
+  const openCreateTemplate = () => {
+    setEditingTemplate(null);
+    setTemplatePanelOpen(true);
+  };
+
+  const openEditTemplate = (template: Bill) => {
+    setEditingTemplate(template);
+    setTemplatePanelOpen(true);
+  };
+
+  const handleTemplateSaved = (template: Bill) => {
+    setTemplates((prev) => {
+      const existingIndex = prev.findIndex((row) => row.id === template.id);
+      if (existingIndex === -1) {
+        return [...prev, template].sort((left, right) =>
+          left.name.localeCompare(right.name)
+        );
+      }
+
+      return prev.map((row) => (row.id === template.id ? template : row));
+    });
+    setEditingTemplate(null);
+  };
+
+  const deactivateTemplate = async (templateId: string) => {
+    setDeactivatingTemplateId(templateId);
+
+    const { data, error } = await supabase
+      .from("bills")
+      .update(buildBillTemplateDeactivateUpdate())
+      .eq("id", templateId)
+      .select("*")
+      .single();
+
+    setDeactivatingTemplateId(null);
+
+    if (!error && data) {
+      setTemplates((prev) =>
+        prev.map((row) => (row.id === templateId ? (data as Bill) : row))
+      );
+    }
   };
 
   const navigateMonth = (direction: "prev" | "next") => {
@@ -440,6 +524,149 @@ export function BillsPage() {
           </Card>
         </div>
 
+        <Card className="mb-6">
+          <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+            <div>
+              <CardTitle className="flex items-center gap-2">
+                <LayoutTemplate className="h-5 w-5" />
+                Bill Templates
+              </CardTitle>
+              <CardDescription className="mt-1.5 max-w-2xl">
+                Recurring templates define default name, amount, due day, and split.
+                Monthly bill instances for each month are generated separately — editing
+                a template does not change past or paid instances.
+              </CardDescription>
+            </div>
+            <Button variant="outline" onClick={openCreateTemplate}>
+              <Plus className="mr-2 h-4 w-4" />
+              New template
+            </Button>
+          </CardHeader>
+          <CardContent>
+            {templatesLoading ? (
+              <div className="space-y-2">
+                {Array.from({ length: 3 }).map((_, i) => (
+                  <Skeleton key={i} className="h-10 w-full" />
+                ))}
+              </div>
+            ) : templates.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <p className="text-muted-foreground">No recurring bill templates yet</p>
+                <Button variant="link" className="mt-2" onClick={openCreateTemplate}>
+                  Create your first template
+                </Button>
+              </div>
+            ) : (
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Template</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead>Due day</TableHead>
+                    <TableHead>Period</TableHead>
+                    <TableHead className="text-right">Default amount</TableHead>
+                    <TableHead>Category</TableHead>
+                    <TableHead className="w-28"></TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {templates.map((template) => {
+                    const status = getBillTemplateActiveStatus(template);
+                    const statusLabel = billTemplateActiveStatusLabel(status);
+
+                    return (
+                      <TableRow key={template.id}>
+                        <TableCell>
+                          <div className="font-medium">{template.name}</div>
+                          {template.is_variable && (
+                            <Badge variant="outline" className="mt-1">
+                              Variable amount
+                            </Badge>
+                          )}
+                          {template.notes && (
+                            <p className="mt-1 text-xs text-muted-foreground truncate max-w-xs">
+                              {template.notes}
+                            </p>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={
+                              status === "active"
+                                ? "default"
+                                : status === "inactive"
+                                  ? "secondary"
+                                  : "outline"
+                            }
+                          >
+                            {statusLabel}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>{template.due_day ?? "—"}</TableCell>
+                        <TableCell>
+                          {template.period_bucket === "1_14" ? "1st-14th" : "15th-EOM"}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          {template.is_variable && template.default_amount == null
+                            ? "Varies"
+                            : formatCurrency(Number(template.default_amount ?? 0))}
+                        </TableCell>
+                        <TableCell className="capitalize">
+                          {template.category || "other"}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center justify-end gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              aria-label="Edit template"
+                              onClick={() => openEditTemplate(template)}
+                            >
+                              <Pencil className="h-4 w-4 text-muted-foreground" />
+                            </Button>
+                            {template.is_active && (
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    aria-label="Deactivate template"
+                                    disabled={deactivatingTemplateId === template.id}
+                                  >
+                                    <Archive className="h-4 w-4 text-muted-foreground" />
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Deactivate template</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      Deactivating "{template.name}" stops it from being
+                                      used for new bill generation. Existing monthly bill
+                                      instances are unchanged.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction
+                                      onClick={() => void deactivateTemplate(template.id)}
+                                    >
+                                      Deactivate
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            )}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            )}
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader>
             <CardTitle>Bills for {MONTHS[month - 1]} {year}</CardTitle>
@@ -499,6 +726,15 @@ export function BillsPage() {
                       </TableCell>
                       <TableCell className={bill.is_paid ? "line-through text-muted-foreground" : ""}>
                         {bill.name}
+                        {!debtLinked && (
+                          <p className="text-xs text-muted-foreground">
+                            Source:{" "}
+                            {getBillInstanceSourceLabel({
+                              billId: bill.bill_id,
+                              name: bill.name,
+                            })}
+                          </p>
+                        )}
                         {debtLinked && (
                           <p className="text-xs text-muted-foreground max-w-xs">
                             {DEBT_LINKED_BILL_EDIT_MESSAGE}{" "}
@@ -611,6 +847,18 @@ export function BillsPage() {
           }
         }}
         onSaved={handleBillSaved}
+      />
+
+      <BillTemplatePanel
+        template={editingTemplate}
+        open={templatePanelOpen}
+        onOpenChange={(open) => {
+          setTemplatePanelOpen(open);
+          if (!open) {
+            setEditingTemplate(null);
+          }
+        }}
+        onSaved={handleTemplateSaved}
       />
     </div>
   );
