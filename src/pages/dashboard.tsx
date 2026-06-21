@@ -62,9 +62,24 @@ import {
   calculateSafeToSpendAfterSavings,
   getMySavingsContributions,
   getMySavingsGoalParticipants,
+  getSavingsGoals,
   sumMySavingsContributionsForView,
   sumMySavingsTargetForView,
 } from "@/lib/savings";
+import {
+  buildBillDrilldownRows,
+  buildExpenseDrilldownRows,
+  buildMySavingsDrilldownRows,
+  filterBillsForDashboardView,
+  filterManualExpensesCountedInDashboardView,
+} from "@/lib/dashboard-drilldowns";
+import {
+  DashboardDrilldownPanel,
+  type DashboardDrilldownKind,
+  type SafeToSpendBreakdown,
+} from "@/components/dashboard-drilldown-panel";
+import { fetchDebtLinkedBillContext } from "@/lib/sync-bill-paid-status";
+import type { SavingsGoal } from "@/lib/types";
 import type { SavingsContribution, SavingsGoalParticipant } from "@/lib/types";
 import { filterBillInstancesByCashflowStart } from "@/lib/cashflow-filter";
 import { getHouseholdSettings, getMyLatestCashSnapshot } from "@/lib/cashflow-settings";
@@ -129,6 +144,15 @@ export function DashboardPage() {
   >([]);
   const [recentCashActivityLoading, setRecentCashActivityLoading] = useState(true);
   const [recentCashActivityError, setRecentCashActivityError] = useState<string | null>(null);
+  const [drilldownKind, setDrilldownKind] = useState<DashboardDrilldownKind | null>(
+    null
+  );
+  const [debtLinkedBillIds, setDebtLinkedBillIds] = useState<Set<string>>(new Set());
+  const [savingsGoalsForDrilldown, setSavingsGoalsForDrilldown] = useState<
+    Pick<SavingsGoal, "id" | "name" | "goal_type">[]
+  >([]);
+  const [savingsGoalsForDrilldownLoading, setSavingsGoalsForDrilldownLoading] =
+    useState(false);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth() + 1;
@@ -551,6 +575,72 @@ export function DashboardPage() {
     fetchBills();
   }, [fetchBills]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadDebtLinkedBillIds() {
+      if (bills.length === 0) {
+        if (!cancelled) {
+          setDebtLinkedBillIds(new Set());
+        }
+        return;
+      }
+
+      const { linkedIds } = await fetchDebtLinkedBillContext(
+        bills.map((bill) => bill.id)
+      );
+      if (!cancelled) {
+        setDebtLinkedBillIds(linkedIds);
+      }
+    }
+
+    void loadDebtLinkedBillIds();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [bills]);
+
+  useEffect(() => {
+    if (drilldownKind !== "savings") {
+      return;
+    }
+
+    const householdId = household?.id;
+    if (!householdId) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadSavingsGoalsForDrilldown(resolvedHouseholdId: string) {
+      setSavingsGoalsForDrilldownLoading(true);
+      const { goals, error } = await getSavingsGoals(resolvedHouseholdId);
+      if (!cancelled) {
+        if (!error) {
+          setSavingsGoalsForDrilldown(
+            goals.map((goal) => ({
+              id: goal.id,
+              name: goal.name,
+              goal_type: goal.goal_type,
+            }))
+          );
+        }
+        setSavingsGoalsForDrilldownLoading(false);
+      }
+    }
+
+    void loadSavingsGoalsForDrilldown(householdId);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [drilldownKind, household]);
+
+  const openDrilldown = (kind: DashboardDrilldownKind) => {
+    setDrilldownKind(kind);
+  };
+
   const togglePaid = async (bill: BillInstance) => {
     const newPaidStatus = !bill.is_paid;
     const { error } = await syncBillPaidStatusWithDebt(
@@ -699,6 +789,81 @@ export function DashboardPage() {
       : null;
   const hasSavingsParticipants = savingsParticipants.length > 0;
 
+  const drilldownBills = filterBillsForDashboardView(bills, periodView);
+  const drilldownUnpaidBills = filterBillsForDashboardView(bills, periodView, {
+    unpaidOnly: true,
+  });
+  const drilldownExpenses = filterManualExpensesCountedInDashboardView(
+    manualExpenses,
+    periodView,
+    year,
+    month,
+    cashSnapshot?.snapshot_date ?? null,
+    paymentTransactionsLoading ? undefined : deductedManualExpenseIds
+  );
+  const drilldownBillRows = buildBillDrilldownRows(
+    drilldownKind === "unpaid-bills" ? drilldownUnpaidBills : drilldownBills,
+    shareKey,
+    debtLinkedBillIds
+  );
+  const drilldownExpenseRows = buildExpenseDrilldownRows(
+    drilldownExpenses,
+    shareKey
+  );
+  const drilldownSavingsRows = buildMySavingsDrilldownRows(
+    savingsParticipants,
+    savingsContributions,
+    savingsGoalsForDrilldown,
+    periodView,
+    year,
+    month
+  );
+  const safeToSpendBreakdown: SafeToSpendBreakdown | null =
+    cashSnapshot && safeToSpendBeforeSavings !== null && safeToSpendAfterSavings !== null
+      ? {
+          currentAmount: Number(cashSnapshot.amount),
+          unpaidBillTotal: myUnpaidBillTotal ?? 0,
+          manualExpenseTotal: myManualExpenseTotalForView ?? 0,
+          safeToSpendBeforeSavings,
+          savingsTarget: mySavingsTargetForView,
+          savingsContributions: myContributionsForView,
+          remainingSavingsObligation: remainingSavingsObligationForView,
+          safeToSpendAfterSavings,
+        }
+      : null;
+  const drilldownEmptyMessage =
+    shareKey === null &&
+    (drilldownKind === "bills" ||
+      drilldownKind === "unpaid-bills" ||
+      drilldownKind === "expenses" ||
+      drilldownKind === "safe-to-spend-before" ||
+      drilldownKind === "safe-to-spend-after")
+      ? "Choose your budget profile in Settings to see private drilldown details."
+      : !cashSnapshot &&
+          (drilldownKind === "expenses" ||
+            drilldownKind === "safe-to-spend-before" ||
+            drilldownKind === "safe-to-spend-after")
+        ? "Record your current amount in Settings to see expense and safe-to-spend details."
+        : undefined;
+  const drilldownLoading =
+    drilldownKind === "savings"
+      ? savingsGoalsForDrilldownLoading ||
+        savingsParticipantsLoading ||
+        savingsContributionsLoading
+      : drilldownKind === "bills" || drilldownKind === "unpaid-bills"
+        ? loading
+        : drilldownKind === "expenses"
+          ? manualExpensesLoading || paymentTransactionsLoading || cashSnapshotLoading
+          : drilldownKind === "safe-to-spend-before" ||
+              drilldownKind === "safe-to-spend-after"
+            ? cashSnapshotLoading ||
+              loading ||
+              manualExpensesLoading ||
+              paymentTransactionsLoading ||
+              savingsParticipantsLoading ||
+              savingsContributionsLoading
+            : false;
+
   if (!household) {
     return null;
   }
@@ -842,7 +1007,16 @@ export function DashboardPage() {
 
         <Card className="mb-6">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">My bill total for this view</CardTitle>
+            <div className="flex items-center justify-between gap-2">
+              <CardTitle className="text-base">My bill total for this view</CardTitle>
+              <Button
+                variant="link"
+                className="h-auto p-0 text-sm"
+                onClick={() => openDrilldown("bills")}
+              >
+                View bills
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             {shareKey === null ? (
@@ -868,7 +1042,16 @@ export function DashboardPage() {
 
         <Card className="mb-6">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">My unpaid bills for this view</CardTitle>
+            <div className="flex items-center justify-between gap-2">
+              <CardTitle className="text-base">My unpaid bills for this view</CardTitle>
+              <Button
+                variant="link"
+                className="h-auto p-0 text-sm"
+                onClick={() => openDrilldown("unpaid-bills")}
+              >
+                View unpaid bills
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             {shareKey === null ? (
@@ -897,7 +1080,16 @@ export function DashboardPage() {
 
         <Card className="mb-6">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">My manual expenses for this view</CardTitle>
+            <div className="flex items-center justify-between gap-2">
+              <CardTitle className="text-base">My manual expenses for this view</CardTitle>
+              <Button
+                variant="link"
+                className="h-auto p-0 text-sm"
+                onClick={() => openDrilldown("expenses")}
+              >
+                View expenses
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             {manualExpensesError && (
@@ -950,7 +1142,16 @@ export function DashboardPage() {
 
         <Card className="mb-6">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Safe to spend before savings</CardTitle>
+            <div className="flex items-center justify-between gap-2">
+              <CardTitle className="text-base">Safe to spend before savings</CardTitle>
+              <Button
+                variant="link"
+                className="h-auto p-0 text-sm"
+                onClick={() => openDrilldown("safe-to-spend-before")}
+              >
+                Why this amount?
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             {manualExpensesError && (
@@ -1042,7 +1243,23 @@ export function DashboardPage() {
 
         <Card className="mb-6">
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Safe to spend after savings</CardTitle>
+            <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
+              <CardTitle className="mr-auto text-base">Safe to spend after savings</CardTitle>
+              <Button
+                variant="link"
+                className="h-auto p-0 text-sm"
+                onClick={() => openDrilldown("savings")}
+              >
+                View savings
+              </Button>
+              <Button
+                variant="link"
+                className="h-auto p-0 text-sm"
+                onClick={() => openDrilldown("safe-to-spend-after")}
+              >
+                Why this amount?
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             {savingsParticipantsError && (
@@ -1262,8 +1479,19 @@ export function DashboardPage() {
         <div className="mt-6">
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">{summaryTitle}</CardTitle>
-              <CardDescription>{summaryDescription}</CardDescription>
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <CardTitle className="text-lg">{summaryTitle}</CardTitle>
+                  <CardDescription>{summaryDescription}</CardDescription>
+                </div>
+                <Button
+                  variant="link"
+                  className="h-auto shrink-0 p-0 text-sm"
+                  onClick={() => openDrilldown("bills")}
+                >
+                  View bills
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="grid gap-4 md:grid-cols-3">
@@ -1323,6 +1551,23 @@ export function DashboardPage() {
           </Card>
         </div>
       </div>
+
+      <DashboardDrilldownPanel
+        open={drilldownKind !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDrilldownKind(null);
+          }
+        }}
+        kind={drilldownKind}
+        viewLabel={myBillTotalViewLabel}
+        billRows={drilldownBillRows}
+        expenseRows={drilldownExpenseRows}
+        savingsRows={drilldownSavingsRows}
+        safeToSpendBreakdown={safeToSpendBreakdown}
+        loading={drilldownLoading}
+        emptyMessage={drilldownEmptyMessage}
+      />
     </div>
   );
 }
