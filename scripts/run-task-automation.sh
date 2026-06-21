@@ -115,6 +115,9 @@ for ((i=1; i<=MAX_TASKS; i++)); do
     exit 0
   fi
 
+  echo "== Advancing task queue =="
+  node scripts/advance-active-task.mjs
+
   echo "== Staging task files =="
   git add -u
 
