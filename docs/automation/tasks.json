@@ -1,5 +1,5 @@
 {
-  "activeTaskId": null,
+  "activeTaskId": "CASHFLOW-CURSOR-064",
   "stopOn": {
     "partial": true,
     "blocked": true,
@@ -39,6 +39,34 @@
       "browserSmokeRequired": true,
       "requiresHumanReview": false,
       "status": "completed"
+    },
+    {
+      "id": "CASHFLOW-CURSOR-064",
+      "title": "Dashboard bill/expense/savings drilldowns",
+      "promptPath": "docs/automation/task_prompts/CASHFLOW-CURSOR-064.md",
+      "reportPath": "docs/automation/task_reports/CASHFLOW-CURSOR-064.md",
+      "jsonReportPath": "docs/automation/task_reports/CASHFLOW-CURSOR-064.result.json",
+      "commitMessage": "Add dashboard drilldowns",
+      "expectedFiles": [
+        "src/pages/dashboard.tsx",
+        "src/components/dashboard-drilldown-panel.tsx",
+        "src/lib/dashboard-drilldowns.ts",
+        "src/lib/dashboard-drilldowns.test.ts",
+        "docs/automation/task_reports/CASHFLOW-CURSOR-064.md",
+        "docs/automation/task_reports/CASHFLOW-CURSOR-064.result.json"
+      ],
+      "suspiciousFiles": [
+        "supabase/migrations/",
+        "src/App.tsx",
+        "src/pages/bills.tsx",
+        "src/pages/debt.tsx",
+        "src/pages/settings.tsx",
+        "src/pages/expenses.tsx"
+      ],
+      "allowMigrations": false,
+      "browserSmokeRequired": true,
+      "requiresHumanReview": false,
+      "status": "active"
     }
   ]
 }
