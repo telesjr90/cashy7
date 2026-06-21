@@ -1,0 +1,36 @@
+{
+  "taskId": "CASHFLOW-CURSOR-073",
+  "result": "PASS",
+  "filesChanged": [
+    "supabase/migrations/20260621000000_019_debt_account_archive.sql",
+    "src/lib/types.ts",
+    "src/lib/debt-accounts.ts",
+    "src/lib/debt-accounts.test.ts",
+    "src/lib/sync-bill-paid-status.ts",
+    "src/lib/bill-detail.ts",
+    "src/lib/bill-detail.test.ts",
+    "src/components/debt-account-archive-dialog.tsx",
+    "src/components/debt-schedule-replacement-dialog.tsx",
+    "src/components/bill-detail-panel.tsx",
+    "src/pages/debt.tsx",
+    "src/pages/bills.tsx",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-073.md",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-073.result.json"
+  ],
+  "migrationsCreated": [
+    "supabase/migrations/20260621000000_019_debt_account_archive.sql"
+  ],
+  "validation": {
+    "typecheck": "PASS",
+    "build": "PASS",
+    "testRun": "PASS"
+  },
+  "browserSmoke": {
+    "required": true,
+    "result": "PASS"
+  },
+  "privacy": "PASS",
+  "productRules": "PASS",
+  "readyToCommit": true,
+  "nextTaskId": "CASHFLOW-CURSOR-074"
+}

@@ -18,6 +18,7 @@ import {
   DEBT_LINKED_BILL_DELETE_MESSAGE,
   DEBT_LINKED_BILL_EDIT_MESSAGE,
 } from "@/lib/sync-bill-paid-status";
+import { BILL_DETAIL_DEBT_ACCOUNT_ARCHIVED_MESSAGE } from "@/lib/debt-accounts";
 import type { Bill, BillInstance, CashPaymentTransaction } from "@/lib/types";
 import {
   isGeneratedVariableBillInstance,
@@ -110,6 +111,8 @@ export interface BillInstanceDetailView {
   isDebtLinked: boolean;
   debtLinkedLabel: string | null;
   debtManagedExplanation: string | null;
+  isDebtAccountArchived: boolean;
+  debtAccountArchivedLabel: string | null;
   isGeneratedFromTemplate: boolean;
   templateName: string | null;
   templateStatusLabel: string | null;
@@ -130,6 +133,7 @@ export type BuildBillInstanceDetailViewInput = {
   hasCashDeduction: boolean;
   paymentTransaction: CashPaymentTransaction | null;
   debtPaymentId: string | null;
+  isDebtAccountArchived?: boolean;
   variableBillContext: VariableBillContext;
   referenceDate?: Date;
 };
@@ -302,6 +306,7 @@ function buildPaymentAudit(
 
 function buildInformationalGuards(input: {
   isDebtLinked: boolean;
+  isDebtAccountArchived: boolean;
   hasCashDeduction: boolean;
   isPaid: boolean;
   needsRecurringBranching: boolean;
@@ -311,6 +316,9 @@ function buildInformationalGuards(input: {
 
   if (input.isDebtLinked) {
     guards.push(BILL_DETAIL_DEBT_MANAGED_MESSAGE);
+    if (input.isDebtAccountArchived) {
+      guards.push(BILL_DETAIL_DEBT_ACCOUNT_ARCHIVED_MESSAGE);
+    }
     guards.push(DEBT_LINKED_BILL_EDIT_MESSAGE);
     guards.push(DEBT_LINKED_BILL_DELETE_MESSAGE);
   }
@@ -441,6 +449,10 @@ export function buildBillInstanceDetailView(
     isDebtLinked,
     debtLinkedLabel: isDebtLinked ? resolveDebtLinkedLabel(bill) : null,
     debtManagedExplanation: isDebtLinked ? BILL_DETAIL_DEBT_MANAGED_MESSAGE : null,
+    isDebtAccountArchived: Boolean(input.isDebtAccountArchived),
+    debtAccountArchivedLabel: isDebtLinked && input.isDebtAccountArchived
+      ? "Debt account archived"
+      : null,
     isGeneratedFromTemplate,
     templateName: template?.name ?? (bill.bill_id ? bill.name : null),
     templateStatusLabel: templateStatus
@@ -469,6 +481,7 @@ export function buildBillInstanceDetailView(
     }),
     informationalGuards: buildInformationalGuards({
       isDebtLinked,
+      isDebtAccountArchived: Boolean(input.isDebtAccountArchived),
       hasCashDeduction,
       isPaid: bill.is_paid,
       needsRecurringBranching,
@@ -509,6 +522,7 @@ export function collectBillDetailUserFacingStrings(
     detail.needsConfirmationMessage,
     detail.debtLinkedLabel,
     detail.debtManagedExplanation,
+    detail.debtAccountArchivedLabel,
     detail.templateName,
     detail.templateStatusLabel,
     detail.generatedNoteLabel,

@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import type { DebtAccount, DebtPayment } from "@/lib/types";
 import { supabase } from "@/lib/supabase";
 import { debtBillInstanceName } from "@/lib/format";
+import { isDebtAccountArchived } from "@/lib/debt-accounts";
 import {
   debtScheduleReplacementSummaryMessage,
   getDebtScheduleReplacementMutation,
@@ -83,6 +84,11 @@ export function DebtScheduleReplacementDialog({
 
   const handleConfirm = async () => {
     if (!account || !previewPlan || previewPlan.errors.length > 0) {
+      return;
+    }
+
+    if (isDebtAccountArchived(account)) {
+      setError("Reopen this archived account before replacing its payment schedule.");
       return;
     }
 

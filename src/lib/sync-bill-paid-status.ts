@@ -19,35 +19,50 @@ export async function fetchDebtLinkedBillContext(
 ): Promise<{
   linkedIds: Set<string>;
   debtPaymentIdByBillId: Map<string, string>;
+  archivedDebtBillIds: Set<string>;
   error: string | null;
 }> {
   if (billInstanceIds.length === 0) {
-    return { linkedIds: new Set(), debtPaymentIdByBillId: new Map(), error: null };
+    return {
+      linkedIds: new Set(),
+      debtPaymentIdByBillId: new Map(),
+      archivedDebtBillIds: new Set(),
+      error: null,
+    };
   }
 
   const { data, error } = await supabase
     .from("debt_payments")
-    .select("id, linked_bill_instance_id")
+    .select("id, linked_bill_instance_id, debt_accounts(is_archived)")
     .in("linked_bill_instance_id", billInstanceIds);
 
   if (error) {
     return {
       linkedIds: new Set(),
       debtPaymentIdByBillId: new Map(),
+      archivedDebtBillIds: new Set(),
       error: error.message,
     };
   }
 
   const linkedIds = new Set<string>();
   const debtPaymentIdByBillId = new Map<string, string>();
+  const archivedDebtBillIds = new Set<string>();
   for (const row of data ?? []) {
     if (row.linked_bill_instance_id) {
       linkedIds.add(row.linked_bill_instance_id);
       debtPaymentIdByBillId.set(row.linked_bill_instance_id, row.id);
+
+      const debtAccount = Array.isArray(row.debt_accounts)
+        ? row.debt_accounts[0]
+        : row.debt_accounts;
+      if (debtAccount?.is_archived) {
+        archivedDebtBillIds.add(row.linked_bill_instance_id);
+      }
     }
   }
 
-  return { linkedIds, debtPaymentIdByBillId, error: null };
+  return { linkedIds, debtPaymentIdByBillId, archivedDebtBillIds, error: null };
 }
 
 export async function syncBillPaidStatusWithDebt(

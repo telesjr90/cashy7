@@ -154,6 +154,11 @@ export function BillDetailPanel({
                     {detail.debtLinkedLabel && (
                       <p className="font-medium">{detail.debtLinkedLabel}</p>
                     )}
+                    {detail.debtAccountArchivedLabel && (
+                      <p className="font-medium text-muted-foreground">
+                        {detail.debtAccountArchivedLabel}
+                      </p>
+                    )}
                     <p className="text-muted-foreground">
                       {detail.debtManagedExplanation}
                     </p>

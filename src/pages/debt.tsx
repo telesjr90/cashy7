@@ -50,6 +50,8 @@ import {
   CreditCard,
   Trash2,
   Pencil,
+  Archive,
+  ArchiveRestore,
 } from "lucide-react";
 import { format, addMonths, parseISO } from "date-fns";
 import {
@@ -86,6 +88,21 @@ import {
   DebtScheduleReplacementDialog,
   type DebtScheduleReplacementParams,
 } from "@/components/debt-schedule-replacement-dialog";
+import { DebtAccountArchiveDialog } from "@/components/debt-account-archive-dialog";
+import { Badge } from "@/components/ui/badge";
+import {
+  buildArchivePayload,
+  buildReopenPayload,
+  computeDebtAccountTotalPaid,
+  filterActiveDebtAccounts,
+  filterArchivedDebtAccounts,
+  formatDebtAccountArchivedDate,
+  getDebtAccountArchiveStatus,
+  getDebtAccountArchivedBadgeLabel,
+  isDebtAccountArchived,
+  isDebtScheduleActionAllowed,
+  DEBT_ACCOUNT_REOPEN_MESSAGE,
+} from "@/lib/debt-accounts";
 
 const MONTHS = [
   { value: "1", label: "January" },
@@ -184,6 +201,13 @@ export function DebtPage() {
     telesAmount: "",
     nicoleAmount: "",
   });
+  const [showArchivedAccounts, setShowArchivedAccounts] = useState(false);
+  const [archiveDialogAccountId, setArchiveDialogAccountId] = useState<
+    string | null
+  >(null);
+  const [reopenDialogAccountId, setReopenDialogAccountId] = useState<
+    string | null
+  >(null);
 
   const now = new Date();
   const currentMonth = now.getMonth() + 1;
@@ -264,6 +288,26 @@ export function DebtPage() {
     () => new Set(paymentByDebtPaymentId.keys()),
     [paymentByDebtPaymentId]
   );
+
+  const activeDebtAccounts = useMemo(
+    () => filterActiveDebtAccounts(debtAccounts),
+    [debtAccounts]
+  );
+
+  const archivedDebtAccounts = useMemo(
+    () => filterArchivedDebtAccounts(debtAccounts),
+    [debtAccounts]
+  );
+
+  const archiveDialogAccount = archiveDialogAccountId
+    ? (debtAccounts.find((account) => account.id === archiveDialogAccountId) ??
+      null)
+    : null;
+
+  const reopenDialogAccount = reopenDialogAccountId
+    ? (debtAccounts.find((account) => account.id === reopenDialogAccountId) ??
+      null)
+    : null;
 
   useEffect(() => {
     fetchData();
@@ -606,6 +650,11 @@ export function DebtPage() {
   ) => {
     setError(null);
 
+    if (!isDebtScheduleActionAllowed(account)) {
+      setError("Reopen this archived account before generating a payment schedule.");
+      return;
+    }
+
     if (!household) {
       setError("No household found");
       return;
@@ -803,6 +852,36 @@ export function DebtPage() {
     }
   };
 
+  const archiveDebtAccount = async (accountId: string, archiveReason: string) => {
+    const { error } = await supabase
+      .from("debt_accounts")
+      .update(buildArchivePayload(archiveReason))
+      .eq("id", accountId);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    if (editingAccountId === accountId) {
+      resetAccountForm();
+    }
+
+    await fetchData();
+  };
+
+  const reopenDebtAccount = async (accountId: string) => {
+    const { error } = await supabase
+      .from("debt_accounts")
+      .update(buildReopenPayload())
+      .eq("id", accountId);
+
+    if (error) {
+      throw new Error(error.message);
+    }
+
+    await fetchData();
+  };
+
   const toggleDebtPaymentPaidStatus = async (payment: DebtPayment) => {
     setError(null);
 
@@ -953,6 +1032,120 @@ export function DebtPage() {
     return account?.name || "Unknown";
   };
 
+  const renderAccountArchiveBadge = (account: DebtAccount) => {
+    const badgeLabel = getDebtAccountArchivedBadgeLabel(account);
+    if (!badgeLabel) {
+      return null;
+    }
+
+    return (
+      <Badge variant="secondary" className="ml-2">
+        {badgeLabel}
+      </Badge>
+    );
+  };
+
+  const renderDebtAccountRow = (
+    account: DebtAccount,
+    options: { archived: boolean }
+  ) => {
+    const totalPaid = computeDebtAccountTotalPaid(account);
+    const archivedDateLabel = formatDebtAccountArchivedDate(account.archived_at);
+    const archiveStatus = getDebtAccountArchiveStatus(account);
+
+    return (
+      <TableRow key={account.id}>
+        <TableCell className="font-medium">
+          <div className="flex flex-wrap items-center gap-2">
+            <span>{account.name}</span>
+            {options.archived && renderAccountArchiveBadge(account)}
+          </div>
+          {options.archived && account.archive_reason && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Reason: {account.archive_reason}
+            </p>
+          )}
+        </TableCell>
+        <TableCell className="text-right">
+          {formatCurrency(account.original_amount)}
+        </TableCell>
+        <TableCell className="text-right">
+          {formatCurrency(totalPaid)}
+        </TableCell>
+        <TableCell className="text-right font-semibold">
+          {formatCurrency(account.current_balance)}
+        </TableCell>
+        <TableCell>
+          {options.archived ? (
+            archivedDateLabel ?? "-"
+          ) : account.target_payoff_date ? (
+            format(new Date(account.target_payoff_date), "MMM d, yyyy")
+          ) : (
+            "-"
+          )}
+        </TableCell>
+        <TableCell>
+          <div className="flex justify-end gap-1">
+            {options.archived ? (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setReopenDialogAccountId(account.id)}
+              >
+                <ArchiveRestore className="mr-2 h-4 w-4" />
+                Reopen
+              </Button>
+            ) : (
+              <>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => startEditAccount(account)}
+                  aria-label={`Edit ${account.name}`}
+                >
+                  <Pencil className="h-4 w-4 text-muted-foreground" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setArchiveDialogAccountId(account.id)}
+                  aria-label={archiveStatus.closeActionLabel}
+                >
+                  <Archive className="h-4 w-4 text-muted-foreground" />
+                </Button>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="ghost" size="icon" aria-label={`Delete ${account.name}`}>
+                      <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Delete Debt Account</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Are you sure you want to delete "{account.name}"? All associated
+                        payments will also be deleted. This action cannot be undone.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={() => deleteDebtAccount(account.id)}
+                        className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                      >
+                        Delete
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </>
+            )}
+          </div>
+        </TableCell>
+      </TableRow>
+    );
+  };
+
   const pendingGenerateAccount = pendingGenerateAccountId
     ? debtAccounts.find((account) => account.id === pendingGenerateAccountId)
     : null;
@@ -1002,6 +1195,11 @@ export function DebtPage() {
 
   const openReplacementDialog = (account: DebtAccount) => {
     setError(null);
+    if (!isDebtScheduleActionAllowed(account)) {
+      setError("Reopen this archived account before replacing its payment schedule.");
+      return;
+    }
+
     const params = buildReplacementParams();
     if (!params) {
       return;
@@ -1149,25 +1347,33 @@ export function DebtPage() {
       </div>
       {account ? (
         <div className="flex flex-wrap justify-end gap-2">
-          {debtPayments.some((payment) => payment.debt_account_id === account.id) && (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => openReplacementDialog(account)}
-              disabled={submitting}
-            >
-              Replace future unpaid scheduled payments
-            </Button>
+          {isDebtAccountArchived(account) ? (
+            <p className="w-full text-sm text-muted-foreground">
+              This account is archived. Reopen it to generate or replace scheduled payments.
+            </p>
+          ) : (
+            <>
+              {debtPayments.some((payment) => payment.debt_account_id === account.id) && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => openReplacementDialog(account)}
+                  disabled={submitting}
+                >
+                  Replace future unpaid scheduled payments
+                </Button>
+              )}
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => generatePaymentSchedule(account)}
+                disabled={submitting}
+              >
+                {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Generate Payment Schedule
+              </Button>
+            </>
           )}
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={() => generatePaymentSchedule(account)}
-            disabled={submitting}
-          >
-            {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-            Generate Payment Schedule
-          </Button>
         </div>
       ) : (
         <p className="text-sm text-muted-foreground">
@@ -1229,7 +1435,11 @@ export function DebtPage() {
                 Debt Accounts
               </CardTitle>
               <CardDescription>
-                {debtAccounts.length} account{debtAccounts.length !== 1 ? "s" : ""}
+                {activeDebtAccounts.length} active account
+                {activeDebtAccounts.length !== 1 ? "s" : ""}
+                {archivedDebtAccounts.length > 0
+                  ? ` · ${archivedDebtAccounts.length} archived`
+                  : ""}
               </CardDescription>
             </div>
             <Button
@@ -1255,6 +1465,21 @@ export function DebtPage() {
             </Button>
           </CardHeader>
           <CardContent>
+            {archivedDebtAccounts.length > 0 && (
+              <div className="mb-4 flex items-center gap-2">
+                <Checkbox
+                  id="showArchivedAccounts"
+                  checked={showArchivedAccounts}
+                  onCheckedChange={(checked) =>
+                    setShowArchivedAccounts(checked === true)
+                  }
+                />
+                <Label htmlFor="showArchivedAccounts">
+                  Show archived/closed accounts ({archivedDebtAccounts.length})
+                </Label>
+              </div>
+            )}
+
             {showAccountForm && (
               <form onSubmit={createDebtAccount} className="mb-6 space-y-4 rounded-lg border p-4">
                 <div className="grid gap-4 md:grid-cols-2">
@@ -1476,9 +1701,11 @@ export function DebtPage() {
 
             {loading ? (
               <div className="text-center py-8 text-muted-foreground">Loading...</div>
-            ) : debtAccounts.length === 0 ? (
+            ) : activeDebtAccounts.length === 0 && !showArchivedAccounts ? (
               <div className="text-center py-8 text-muted-foreground">
-                No debt accounts yet. Click "Add Account" to create one.
+                {archivedDebtAccounts.length > 0
+                  ? "No active debt accounts. Enable “Show archived/closed accounts” to view archived debts."
+                  : 'No debt accounts yet. Click "Add Account" to create one.'}
               </div>
             ) : (
               <Table>
@@ -1486,66 +1713,41 @@ export function DebtPage() {
                   <TableRow>
                     <TableHead>Name</TableHead>
                     <TableHead className="text-right">Original</TableHead>
-                    <TableHead className="text-right">Current Balance</TableHead>
+                    <TableHead className="text-right">Total Paid</TableHead>
+                    <TableHead className="text-right">Remaining</TableHead>
                     <TableHead>Target Payoff</TableHead>
-                    <TableHead className="w-24"></TableHead>
+                    <TableHead className="w-36"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {debtAccounts.map((account) => (
-                    <TableRow key={account.id}>
-                      <TableCell className="font-medium">{account.name}</TableCell>
-                      <TableCell className="text-right">
-                        {formatCurrency(account.original_amount)}
-                      </TableCell>
-                      <TableCell className="text-right font-semibold">
-                        {formatCurrency(account.current_balance)}
-                      </TableCell>
-                      <TableCell>
-                        {account.target_payoff_date
-                          ? format(new Date(account.target_payoff_date), "MMM d, yyyy")
-                          : "-"}
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex justify-end gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => startEditAccount(account)}
-                          >
-                            <Pencil className="h-4 w-4 text-muted-foreground" />
-                          </Button>
-                          <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="ghost" size="icon">
-                              <Trash2 className="h-4 w-4 text-muted-foreground hover:text-destructive" />
-                            </Button>
-                          </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Delete Debt Account</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                Are you sure you want to delete "{account.name}"? All associated
-                                payments will also be deleted. This action cannot be undone.
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel>Cancel</AlertDialogCancel>
-                              <AlertDialogAction
-                                onClick={() => deleteDebtAccount(account.id)}
-                                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                              >
-                                Delete
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
-                          </AlertDialogContent>
-                        </AlertDialog>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {activeDebtAccounts.map((account) =>
+                    renderDebtAccountRow(account, { archived: false })
+                  )}
                 </TableBody>
               </Table>
+            )}
+
+            {showArchivedAccounts && archivedDebtAccounts.length > 0 && (
+              <div className="mt-6 space-y-3">
+                <h3 className="text-sm font-medium">Archived / closed accounts</h3>
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead className="text-right">Original</TableHead>
+                      <TableHead className="text-right">Total Paid</TableHead>
+                      <TableHead className="text-right">Remaining</TableHead>
+                      <TableHead>Archived</TableHead>
+                      <TableHead className="w-36"></TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {archivedDebtAccounts.map((account) =>
+                      renderDebtAccountRow(account, { archived: true })
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
             )}
           </CardContent>
         </Card>
@@ -1562,16 +1764,16 @@ export function DebtPage() {
             </div>
             <Button
               onClick={() => setShowPaymentForm(!showPaymentForm)}
-              disabled={debtAccounts.length === 0}
+              disabled={activeDebtAccounts.length === 0}
             >
               <Plus className="mr-2 h-4 w-4" />
               Add Payment
             </Button>
           </CardHeader>
           <CardContent>
-            {debtAccounts.length === 0 && (
+            {activeDebtAccounts.length === 0 && (
               <div className="text-center py-4 text-muted-foreground mb-4">
-                Create a debt account first before adding payments.
+                Create an active debt account first before adding payments.
               </div>
             )}
 
@@ -1590,7 +1792,7 @@ export function DebtPage() {
                         <SelectValue placeholder="Select account..." />
                       </SelectTrigger>
                       <SelectContent>
-                        {debtAccounts.map((account) => (
+                        {activeDebtAccounts.map((account) => (
                           <SelectItem key={account.id} value={account.id}>
                             {account.name} ({formatCurrency(account.current_balance)})
                           </SelectItem>
@@ -1787,7 +1989,17 @@ export function DebtPage() {
                           aria-label="Mark paid"
                         />
                       </TableCell>
-                      <TableCell>{getAccountName(payment.debt_account_id)}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span>{getAccountName(payment.debt_account_id)}</span>
+                          {(() => {
+                            const account = debtAccounts.find(
+                              (row) => row.id === payment.debt_account_id
+                            );
+                            return account ? renderAccountArchiveBadge(account) : null;
+                          })()}
+                        </div>
+                      </TableCell>
                       <TableCell>
                         {format(new Date(payment.payment_date), "MMM d, yyyy")}
                       </TableCell>
@@ -2008,6 +2220,56 @@ export function DebtPage() {
               }}
             >
               Generate Anyway
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <DebtAccountArchiveDialog
+        account={archiveDialogAccount}
+        open={archiveDialogAccountId !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setArchiveDialogAccountId(null);
+          }
+        }}
+        onConfirm={async (archiveReason) => {
+          if (!archiveDialogAccountId) {
+            return;
+          }
+          await archiveDebtAccount(archiveDialogAccountId, archiveReason);
+        }}
+      />
+
+      <AlertDialog
+        open={reopenDialogAccountId !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setReopenDialogAccountId(null);
+          }
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Reopen debt account</AlertDialogTitle>
+            <AlertDialogDescription>
+              {reopenDialogAccount
+                ? `Restore "${reopenDialogAccount.name}" to the active debt list? ${DEBT_ACCOUNT_REOPEN_MESSAGE}`
+                : DEBT_ACCOUNT_REOPEN_MESSAGE}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (reopenDialogAccountId) {
+                  void reopenDebtAccount(reopenDialogAccountId).finally(() => {
+                    setReopenDialogAccountId(null);
+                  });
+                }
+              }}
+            >
+              Reopen account
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

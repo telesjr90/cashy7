@@ -226,6 +226,9 @@ export interface Database {
           current_balance: number;
           target_payoff_date: string | null;
           notes: string | null;
+          is_archived: boolean;
+          archived_at: string | null;
+          archive_reason: string | null;
           created_at: string;
         };
         Insert: {
@@ -236,6 +239,9 @@ export interface Database {
           current_balance?: number;
           target_payoff_date?: string | null;
           notes?: string | null;
+          is_archived?: boolean;
+          archived_at?: string | null;
+          archive_reason?: string | null;
           created_at?: string;
         };
         Update: {
@@ -246,6 +252,9 @@ export interface Database {
           current_balance?: number;
           target_payoff_date?: string | null;
           notes?: string | null;
+          is_archived?: boolean;
+          archived_at?: string | null;
+          archive_reason?: string | null;
           created_at?: string;
         };
       };

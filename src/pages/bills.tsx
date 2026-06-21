@@ -129,6 +129,9 @@ export function BillsPage() {
   const [debtPaymentIdByBillId, setDebtPaymentIdByBillId] = useState<
     Map<string, string>
   >(() => new Map());
+  const [archivedDebtBillIds, setArchivedDebtBillIds] = useState<Set<string>>(
+    () => new Set()
+  );
   const [loading, setLoading] = useState(true);
   const [payingBillId, setPayingBillId] = useState<string | null>(null);
   const [payError, setPayError] = useState<string | null>(null);
@@ -215,12 +218,13 @@ export function BillsPage() {
       const billRows = billsRes.data as BillInstance[];
       setBills(billRows);
 
-      const { linkedIds, debtPaymentIdByBillId, error: linkedError } =
+      const { linkedIds, debtPaymentIdByBillId, archivedDebtBillIds, error: linkedError } =
         await fetchDebtLinkedBillContext(billRows.map((bill) => bill.id));
 
       if (!linkedError) {
         setDebtLinkedBillIds(linkedIds);
         setDebtPaymentIdByBillId(debtPaymentIdByBillId);
+        setArchivedDebtBillIds(archivedDebtBillIds);
       }
     }
 
@@ -577,6 +581,7 @@ export function BillsPage() {
             null)
         : null,
       isDebtLinked: isDebtLinkedBill(detailBill.id),
+      isDebtAccountArchived: archivedDebtBillIds.has(detailBill.id),
       hasCashDeduction: billHasCashDeduction(detailBill.id),
       paymentTransaction: resolveBillPaymentTransaction(
         detailBill.id,
@@ -592,6 +597,7 @@ export function BillsPage() {
     templates,
     templateCategoryByBillId,
     debtLinkedBillIds,
+    archivedDebtBillIds,
     debtPaymentIdByBillId,
     paymentByBillId,
     paymentByDebtPaymentId,

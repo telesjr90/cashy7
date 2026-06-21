@@ -92,6 +92,7 @@ function buildDetail(
     template,
     templateCategory: options?.templateCategory ?? template?.category ?? null,
     isDebtLinked: options?.isDebtLinked ?? false,
+    isDebtAccountArchived: options?.isDebtAccountArchived ?? false,
     hasCashDeduction: options?.hasCashDeduction ?? false,
     paymentTransaction: options?.paymentTransaction ?? null,
     debtPaymentId: options?.debtPaymentId ?? null,
@@ -206,6 +207,24 @@ describe("buildBillInstanceDetailView", () => {
 
     const editGuard = detail.actionGuards.find((row) => row.action === "edit");
     expect(editGuard?.available).toBe(false);
+  });
+
+  it("shows archived debt account context when provided", () => {
+    const bill = makeBill({
+      bill_id: null,
+      name: "Debt: Store card",
+    });
+    const detail = buildDetail(bill, {
+      template: null,
+      templateCategory: null,
+      isDebtLinked: true,
+      isDebtAccountArchived: true,
+    });
+
+    expect(detail.debtAccountArchivedLabel).toBe("Debt account archived");
+    expect(detail.informationalGuards.some((guard) => guard.includes("archived"))).toBe(
+      true
+    );
   });
 
   it("maps variable bill needing confirmation detail", () => {
