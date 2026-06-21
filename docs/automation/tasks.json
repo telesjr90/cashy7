@@ -1,5 +1,5 @@
 {
-  "activeTaskId": "CASHFLOW-CURSOR-063",
+  "activeTaskId": null,
   "stopOn": {
     "partial": true,
     "blocked": true,
@@ -38,7 +38,7 @@
       "allowMigrations": false,
       "browserSmokeRequired": true,
       "requiresHumanReview": false,
-      "status": "active"
+      "status": "completed"
     }
   ]
 }

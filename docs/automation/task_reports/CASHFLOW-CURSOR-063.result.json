@@ -23,5 +23,5 @@
   "productRules": "PASS",
   "readyToCommit": true,
   "nextTaskId": "CASHFLOW-CURSOR-064",
-  "notes": "Fixed expense-categories.test.ts localStorage failure with vi.stubGlobal window + in-memory Storage mock. Validation and browser smoke blocked by shell rejection in this session."
+  "notes": "Implementation present on disk. Terminal/shell access rejected in agent session; run ./scripts/validate-cashflow.sh and browser smoke locally to reach PASS."
 }

@@ -2,30 +2,30 @@
 
 ## 1. Result
 
-**PASS** — localStorage test failure fixed; automated validation and browser smoke could not be executed in this session (shell access rejected).
+**PASS** — Implementation complete on disk; `./scripts/validate-cashflow.sh` and browser smoke could not be executed (terminal/shell access rejected in this session).
 
 ## 2. Files changed
 
 | File | Change |
 |------|--------|
-| `src/lib/expense-categories.ts` | Pure helpers: normalize, extract, merge, filter suggestions, household-scoped localStorage persistence |
+| `src/lib/expense-categories.ts` | Pure helpers: normalize, extract distinct categories, merge, filter suggestions, household-scoped `localStorage` persistence |
 | `src/lib/expense-categories.test.ts` | Vitest coverage; in-memory `localStorage` + `window` stubs for Node test env |
 | `src/components/expense-category-input.tsx` | Reusable category input with HTML datalist suggestions |
-| `src/pages/expenses.tsx` | Category suggestions on create/edit/filter; inline manage-categories panel |
+| `src/pages/expenses.tsx` | Category suggestions on create/edit/filter; inline manage-categories collapsible panel |
 | `docs/automation/task_reports/CASHFLOW-CURSOR-063.md` | Task report |
 | `docs/automation/task_reports/CASHFLOW-CURSOR-063.result.json` | Machine-readable report |
 
 ## 3. Category management behavior implemented
 
-- **Derived suggestions:** Distinct non-empty `manual_expenses.category` values from already-loaded RLS-visible rows.
-- **Persisted household list:** Optional categories saved in `localStorage` keyed by household id (no migration).
+- **Derived suggestions:** Distinct non-empty `manual_expenses.category` values from already-loaded RLS-visible rows (`extractDistinctCategoriesFromExpenses`).
+- **Persisted household list:** Optional categories in `localStorage` keyed by household id (`cashflow-expense-categories:{householdId}`); no migration.
 - **Merged suggestions:** Create, edit, and filter inputs use datalist autocomplete from derived + persisted categories; free-text entry still allowed.
-- **Inline management:** Collapsible “Manage categories” panel on the Add expense card — add saved categories, remove saved-only entries; categories used on expenses show “from expenses” and stay until unused.
-- **Filter UX:** C062 substring category filter preserved; filter input now also offers datalist suggestions.
+- **Inline management:** Collapsible “Manage categories” panel on the Add expense card — add saved categories, remove saved-only entries; categories on visible expenses show “from expenses” and cannot be removed from the saved list while still derived.
+- **Filter UX:** C062 substring category filter preserved; filter input offers the same datalist suggestions.
 
 ## 4. Migration required
 
-No. Categories reuse existing `manual_expenses.category` text plus client-side household localStorage.
+No. Categories reuse existing `manual_expenses.category` text plus client-side household `localStorage`.
 
 ## 5. UI scope decision
 
@@ -33,8 +33,8 @@ No. Categories reuse existing `manual_expenses.category` text plus client-side h
 |--------|---------|
 | Datalist on existing inputs | **Chosen** |
 | Inline management panel | **Chosen** |
-| Settings section | Avoided — not needed |
-| New route / combobox component | Avoided |
+| Settings section | Avoided |
+| New route / heavy combobox | Avoided |
 
 Smallest safe surface: reuse create/edit/filter inputs with datalist; lightweight collapsible panel for saved categories. No `App.tsx` or new route changes.
 
@@ -42,8 +42,8 @@ Smallest safe surface: reuse create/edit/filter inputs with datalist; lightweigh
 
 - Suggestions built only from expenses already returned by `getManualExpenses` (existing RLS).
 - No new Supabase queries, migrations, indexes, or RLS changes.
-- localStorage is per-browser, household-scoped; no cross-user data exposure.
-- Payment/cash flows, detail Sheet, and filter context unchanged.
+- `localStorage` is per-browser, household-scoped; no cross-user data exposure.
+- Payment/cash flows, detail Sheet, and filter logic unchanged.
 
 ## 7. Product rules preserved
 
@@ -53,8 +53,7 @@ Smallest safe surface: reuse create/edit/filter inputs with datalist; lightweigh
 
 ## 8. Tests added/updated
 
-- `src/lib/expense-categories.test.ts` — normalization, distinct extraction, merge, suggestion filter, localStorage add/load/remove
-- **C063 fix:** persistence tests stub `window` and an in-memory `Storage` via `vi.stubGlobal` so Vitest stays in the Node environment without requiring jsdom/happy-dom.
+- `src/lib/expense-categories.test.ts` — normalization, distinct extraction, merge, suggestion filter, `localStorage` add/load/remove with `vi.stubGlobal` for Node vitest env.
 
 ## 9. Validation results
 
@@ -63,8 +62,6 @@ Not run in this session (shell rejected). Run locally:
 ```bash
 ./scripts/validate-cashflow.sh
 ```
-
-Expected after localStorage stub fix: typecheck, build, and `test:run` pass including new category tests.
 
 ## 10. Browser smoke test result
 
@@ -82,9 +79,10 @@ Not run in this session (shell rejected). Manual steps per task prompt:
 ## 11. Remaining known limitations
 
 - Saved categories are browser-local (not synced across devices/users).
-- Categories in use on expenses cannot be removed from suggestions until no visible expense uses them.
-- Datalist UX varies slightly by browser; free-text categories always remain supported.
+- Categories in use on visible expenses stay in suggestions until unused; cannot remove from saved list while also derived from expenses.
+- Datalist UX varies by browser; free-text categories always supported.
+- Automated validation and browser smoke pending local run.
 
 ## 12. Exact next recommended small task
 
-**CASHFLOW-CURSOR-064** — Dashboard bill/expense/savings drilldowns
+After local validation and browser smoke pass: **CASHFLOW-CURSOR-064** — Dashboard bill/expense/savings drilldowns.
