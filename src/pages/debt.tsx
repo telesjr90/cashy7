@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/lib/supabase";
-import type { CashPaymentTransaction, DebtAccount, DebtPayment, Person } from "@/lib/types";
+import type { BillInstance, CashPaymentTransaction, DebtAccount, DebtPayment, Person } from "@/lib/types";
 import {
   getMyBillShareAmount,
   resolveBillShareKeyForPerson,
@@ -52,6 +52,7 @@ import {
   Pencil,
   Archive,
   ArchiveRestore,
+  Eye,
 } from "lucide-react";
 import { format, addMonths, parseISO } from "date-fns";
 import {
@@ -90,6 +91,8 @@ import {
 } from "@/components/debt-schedule-replacement-dialog";
 import { DebtAccountArchiveDialog } from "@/components/debt-account-archive-dialog";
 import { DebtProgressDashboard } from "@/components/debt-progress-dashboard";
+import { DebtPaymentDetailPanel } from "@/components/debt-payment-detail-panel";
+import { buildDebtPaymentDetailView } from "@/lib/debt-payment-detail";
 import { Badge } from "@/components/ui/badge";
 import {
   buildArchivePayload,
@@ -213,6 +216,10 @@ export function DebtPage() {
   const [reopenDialogAccountId, setReopenDialogAccountId] = useState<
     string | null
   >(null);
+  const [linkedBillInstances, setLinkedBillInstances] = useState<BillInstance[]>(
+    []
+  );
+  const [detailPaymentId, setDetailPaymentId] = useState<string | null>(null);
 
   const now = new Date();
   const currentMonth = now.getMonth() + 1;
@@ -261,7 +268,35 @@ export function DebtPage() {
     ]);
 
     if (accountsRes.data) setDebtAccounts(accountsRes.data as DebtAccount[]);
-    if (paymentsRes.data) setDebtPayments(paymentsRes.data as DebtPayment[]);
+    if (paymentsRes.data) {
+      setDebtPayments(paymentsRes.data as DebtPayment[]);
+
+      const linkedBillIds = [
+        ...new Set(
+          paymentsRes.data
+            .map((payment) => payment.linked_bill_instance_id)
+            .filter((id): id is string => id != null)
+        ),
+      ];
+
+      if (linkedBillIds.length > 0) {
+        const linkedBillsRes = await supabase
+          .from("bill_instances")
+          .select("*")
+          .in("id", linkedBillIds);
+
+        if (linkedBillsRes.data) {
+          setLinkedBillInstances(linkedBillsRes.data as BillInstance[]);
+        } else {
+          setLinkedBillInstances([]);
+        }
+      } else {
+        setLinkedBillInstances([]);
+      }
+    } else {
+      setDebtPayments([]);
+      setLinkedBillInstances([]);
+    }
     if (!peopleRes.error) setPeople(peopleRes.people);
     if (!paymentTxRes.error) setPaymentTransactions(paymentTxRes.transactions);
     setLoading(false);
@@ -293,6 +328,49 @@ export function DebtPage() {
     () => new Set(paymentByDebtPaymentId.keys()),
     [paymentByDebtPaymentId]
   );
+
+  const linkedBillById = useMemo(() => {
+    const map = new Map<string, BillInstance>();
+    for (const bill of linkedBillInstances) {
+      map.set(bill.id, bill);
+    }
+    return map;
+  }, [linkedBillInstances]);
+
+  const detailPayment = detailPaymentId
+    ? (debtPayments.find((payment) => payment.id === detailPaymentId) ?? null)
+    : null;
+
+  const detailPaymentView = useMemo(() => {
+    if (!detailPayment) {
+      return null;
+    }
+
+    const account =
+      debtAccounts.find((row) => row.id === detailPayment.debt_account_id) ??
+      null;
+    if (!account) {
+      return null;
+    }
+
+    return buildDebtPaymentDetailView({
+      payment: detailPayment,
+      account,
+      linkedBill: detailPayment.linked_bill_instance_id
+        ? (linkedBillById.get(detailPayment.linked_bill_instance_id) ?? null)
+        : null,
+      paymentTransaction: paymentByDebtPaymentId.get(detailPayment.id) ?? null,
+      accountPayments: debtPayments,
+      cashDeductedPaymentIds,
+    });
+  }, [
+    cashDeductedPaymentIds,
+    debtAccounts,
+    debtPayments,
+    detailPayment,
+    linkedBillById,
+    paymentByDebtPaymentId,
+  ]);
 
   const activeDebtAccounts = useMemo(
     () => filterActiveDebtAccounts(debtAccounts),
@@ -2007,7 +2085,7 @@ export function DebtPage() {
                     </TableHead>
                     <TableHead>Status</TableHead>
                     <TableHead className="w-44">Pay & deduct cash</TableHead>
-                    <TableHead className="w-24"></TableHead>
+                    <TableHead className="w-28"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -2085,6 +2163,14 @@ export function DebtPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label={`View details for ${getAccountName(payment.debt_account_id)} payment`}
+                            onClick={() => setDetailPaymentId(payment.id)}
+                          >
+                            <Eye className="h-4 w-4 text-muted-foreground" />
+                          </Button>
                           <Button
                             variant="ghost"
                             size="icon"
@@ -2316,6 +2402,16 @@ export function DebtPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <DebtPaymentDetailPanel
+        detail={detailPaymentView}
+        open={detailPaymentId !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDetailPaymentId(null);
+          }
+        }}
+      />
     </div>
   );
 }
