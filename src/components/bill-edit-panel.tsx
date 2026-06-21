@@ -46,12 +46,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Loader as Loader2 } from "lucide-react";
+import { VARIABLE_AMOUNT_CONFIRMATION_MESSAGE } from "@/lib/variable-bills";
 
 type BillEditPanelProps = {
   bill: BillInstance | null;
   template: Bill | null;
   householdId: string | null;
   isDebtLinked: boolean;
+  needsAmountConfirmation?: boolean;
   hasCashDeduction: (billId: string) => boolean;
   debtLinkedBillIds: ReadonlySet<string>;
   open: boolean;
@@ -68,6 +70,7 @@ export function BillEditPanel({
   template,
   householdId,
   isDebtLinked,
+  needsAmountConfirmation = false,
   hasCashDeduction,
   debtLinkedBillIds,
   open,
@@ -299,15 +302,28 @@ export function BillEditPanel({
       <Dialog open={open} onOpenChange={onOpenChange}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Edit bill</DialogTitle>
+            <DialogTitle>
+              {needsAmountConfirmation ? "Confirm bill amount" : "Edit bill"}
+            </DialogTitle>
             <DialogDescription>
-              {bill
-                ? `Update "${bill.name}" for this month. Paid status is unchanged.`
-                : "Update bill details for this month."}
+              {needsAmountConfirmation
+                ? `Enter the confirmed amount for "${bill?.name ?? "this bill"}". ${VARIABLE_AMOUNT_CONFIRMATION_MESSAGE}`
+                : bill
+                  ? `Update "${bill.name}" for this month. Paid status is unchanged.`
+                  : "Update bill details for this month."}
             </DialogDescription>
           </DialogHeader>
 
           <div className="grid gap-4 py-2">
+            {needsAmountConfirmation && (
+              <Alert className="border-amber-500/50 bg-amber-50 text-amber-950 dark:bg-amber-950/20 dark:text-amber-100">
+                <AlertDescription>
+                  Variable bills need an explicit confirmed amount before the forecast
+                  is complete. Save the real amount when you know it.
+                </AlertDescription>
+              </Alert>
+            )}
+
             {error && (
               <Alert variant="destructive">
                 <AlertDescription>{error}</AlertDescription>
@@ -457,7 +473,11 @@ export function BillEditPanel({
             </Button>
             <Button type="button" onClick={() => void handleSave()} disabled={saving}>
               {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {saving ? "Saving..." : "Save changes"}
+              {saving
+                ? "Saving..."
+                : needsAmountConfirmation
+                  ? "Confirm amount"
+                  : "Save changes"}
             </Button>
           </DialogFooter>
         </DialogContent>

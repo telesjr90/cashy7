@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { Link } from "react-router-dom";
 import {
   calculateSafeToSpendBeforeSavings,
@@ -28,7 +28,7 @@ import { getHouseholdPeople } from "@/lib/user-person";
 import type { Person } from "@/lib/types";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/lib/supabase";
-import type { BillInstance, CashPaymentTransaction, ManualExpense } from "@/lib/types";
+import type { Bill, BillInstance, CashPaymentTransaction, ManualExpense } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -54,6 +54,7 @@ import {
   DollarSign,
   User,
   Calendar,
+  AlertTriangle,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { formatCurrency, formatDeductionAmount } from "@/lib/format";
@@ -86,6 +87,12 @@ import { getHouseholdSettings, getMyLatestCashSnapshot } from "@/lib/cashflow-se
 import type { CashSnapshot } from "@/lib/types";
 import { syncBillPaidStatusWithDebt } from "@/lib/sync-bill-paid-status";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { isEligibleBillTemplate } from "@/lib/bill-templates";
+import {
+  buildBillTemplateLookup,
+  countVariableBillsNeedingConfirmationForDashboardView,
+  VARIABLE_AMOUNT_DASHBOARD_WARNING,
+} from "@/lib/variable-bills";
 import {
   activePeriodView,
   defaultPeriodViewForMonth,
@@ -148,6 +155,9 @@ export function DashboardPage() {
     null
   );
   const [debtLinkedBillIds, setDebtLinkedBillIds] = useState<Set<string>>(new Set());
+  const [billTemplates, setBillTemplates] = useState<
+    Pick<Bill, "id" | "is_variable" | "default_amount">[]
+  >([]);
   const [savingsGoalsForDrilldown, setSavingsGoalsForDrilldown] = useState<
     Pick<SavingsGoal, "id" | "name" | "goal_type">[]
   >([]);
@@ -206,6 +216,26 @@ export function DashboardPage() {
     }
     setLoading(false);
   }, [household, year, month, cashflowStartDate, settingsLoaded]);
+
+  const fetchBillTemplates = useCallback(async () => {
+    if (!household) return;
+
+    const { data, error } = await supabase
+      .from("bills")
+      .select("id, is_variable, default_amount")
+      .eq("household_id", household.id)
+      .eq("recurring", true);
+
+    if (!error && data) {
+      setBillTemplates(
+        (data as Bill[]).filter(isEligibleBillTemplate).map((template) => ({
+          id: template.id,
+          is_variable: template.is_variable,
+          default_amount: template.default_amount,
+        }))
+      );
+    }
+  }, [household]);
 
   const fetchPeople = useCallback(async () => {
     if (!household) return;
@@ -548,6 +578,10 @@ export function DashboardPage() {
   }, [fetchPeople]);
 
   useEffect(() => {
+    void fetchBillTemplates();
+  }, [fetchBillTemplates]);
+
+  useEffect(() => {
     fetchSavingsParticipants();
   }, [fetchSavingsParticipants]);
 
@@ -636,6 +670,26 @@ export function DashboardPage() {
       cancelled = true;
     };
   }, [drilldownKind, household]);
+
+  const variableBillContext = useMemo(
+    () => ({
+      templateByBillId: buildBillTemplateLookup(billTemplates),
+      debtLinkedBillIds,
+    }),
+    [billTemplates, debtLinkedBillIds]
+  );
+
+  const variableConfirmationCountForView = useMemo(
+    () =>
+      countVariableBillsNeedingConfirmationForDashboardView({
+        instances: bills,
+        context: variableBillContext,
+        periodView,
+        year,
+        month,
+      }),
+    [bills, variableBillContext, periodView, year, month]
+  );
 
   const openDrilldown = (kind: DashboardDrilldownKind) => {
     setDrilldownKind(kind);
@@ -917,6 +971,23 @@ export function DashboardPage() {
                 Settings
               </Link>{" "}
               to enable private calculations.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {variableConfirmationCountForView > 0 && (
+          <Alert className="mb-4 border-amber-500/50 bg-amber-50 text-amber-950 dark:bg-amber-950/20 dark:text-amber-100">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              {variableConfirmationCountForView} variable bill
+              {variableConfirmationCountForView === 1 ? "" : "s"} in this view still
+              need a confirmed amount. {VARIABLE_AMOUNT_DASHBOARD_WARNING}{" "}
+              <Link
+                to="/bills"
+                className="font-medium underline underline-offset-4 text-amber-950 dark:text-amber-100"
+              >
+                Confirm on Bills
+              </Link>
             </AlertDescription>
           </Alert>
         )}

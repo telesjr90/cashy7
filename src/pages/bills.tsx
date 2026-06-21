@@ -51,6 +51,7 @@ import {
   LayoutTemplate,
   Archive,
   Sparkles,
+  AlertTriangle,
 } from "lucide-react";
 import { format } from "date-fns";
 import {
@@ -84,6 +85,14 @@ import {
   fetchDebtLinkedBillContext,
   syncBillPaidStatusWithDebt,
 } from "@/lib/sync-bill-paid-status";
+import {
+  buildBillTemplateLookup,
+  countVariableBillsNeedingConfirmation,
+  filterVariableBillsNeedingConfirmation,
+  isGeneratedVariableBillInstance,
+  needsVariableAmountConfirmation,
+  VARIABLE_AMOUNT_CONFIRMATION_MESSAGE,
+} from "@/lib/variable-bills";
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -117,6 +126,7 @@ export function BillsPage() {
   );
   const [generationDialogOpen, setGenerationDialogOpen] = useState(false);
   const [generationMessage, setGenerationMessage] = useState<string | null>(null);
+  const [showNeedsConfirmationOnly, setShowNeedsConfirmationOnly] = useState(false);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth() + 1;
@@ -453,6 +463,27 @@ export function BillsPage() {
     setCurrentDate(new Date());
   };
 
+  const variableBillContext = useMemo(
+    () => ({
+      templateByBillId: buildBillTemplateLookup(templates),
+      debtLinkedBillIds,
+    }),
+    [templates, debtLinkedBillIds]
+  );
+
+  const variableConfirmationCount = useMemo(
+    () => countVariableBillsNeedingConfirmation(bills, variableBillContext),
+    [bills, variableBillContext]
+  );
+
+  const displayedBills = useMemo(() => {
+    if (!showNeedsConfirmationOnly) {
+      return bills;
+    }
+
+    return filterVariableBillsNeedingConfirmation(bills, variableBillContext);
+  }, [bills, showNeedsConfirmationOnly, variableBillContext]);
+
   const period1Bills = bills.filter((b) => b.period_bucket === "1_14");
   const period2Bills = bills.filter((b) => b.period_bucket === "15_eom");
 
@@ -503,6 +534,24 @@ export function BillsPage() {
         {generationMessage && (
           <Alert className="mb-4">
             <AlertDescription>{generationMessage}</AlertDescription>
+          </Alert>
+        )}
+
+        {variableConfirmationCount > 0 && (
+          <Alert className="mb-4 border-amber-500/50 bg-amber-50 text-amber-950 dark:bg-amber-950/20 dark:text-amber-100">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              {variableConfirmationCount} variable bill
+              {variableConfirmationCount === 1 ? "" : "s"} in this month still need
+              a confirmed amount. {VARIABLE_AMOUNT_CONFIRMATION_MESSAGE}{" "}
+              <Button
+                variant="link"
+                className="h-auto p-0 text-amber-950 underline dark:text-amber-100"
+                onClick={() => setShowNeedsConfirmationOnly(true)}
+              >
+                Show bills needing confirmation
+              </Button>
+            </AlertDescription>
           </Alert>
         )}
 
@@ -748,12 +797,23 @@ export function BillsPage() {
         </Card>
 
         <Card>
-          <CardHeader>
-            <CardTitle>Bills for {MONTHS[month - 1]} {year}</CardTitle>
-            <CardDescription>
-              {bills.length} bill{bills.length !== 1 ? "s" : ""} total.{" "}
-              {PAYMENT_UX_EXPLANATION}
-            </CardDescription>
+          <CardHeader className="flex flex-row items-start justify-between gap-4 space-y-0">
+            <div>
+              <CardTitle>Bills for {MONTHS[month - 1]} {year}</CardTitle>
+              <CardDescription>
+                {bills.length} bill{bills.length !== 1 ? "s" : ""} total.{" "}
+                {PAYMENT_UX_EXPLANATION}
+              </CardDescription>
+            </div>
+            {variableConfirmationCount > 0 && (
+              <Button
+                variant={showNeedsConfirmationOnly ? "default" : "outline"}
+                size="sm"
+                onClick={() => setShowNeedsConfirmationOnly((prev) => !prev)}
+              >
+                Needs confirmation ({variableConfirmationCount})
+              </Button>
+            )}
           </CardHeader>
           <CardContent>
             {loading ? (
@@ -770,6 +830,19 @@ export function BillsPage() {
                     Add your first bill
                   </Button>
                 </Link>
+              </div>
+            ) : displayedBills.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12 text-center">
+                <p className="text-muted-foreground">
+                  No bills need amount confirmation in this month.
+                </p>
+                <Button
+                  variant="link"
+                  className="mt-2"
+                  onClick={() => setShowNeedsConfirmationOnly(false)}
+                >
+                  Show all bills
+                </Button>
               </div>
             ) : (
               <Table>
@@ -788,12 +861,20 @@ export function BillsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {bills.map((bill) => {
+                  {displayedBills.map((bill) => {
                     const debtLinked = isDebtLinkedBill(bill.id);
                     const cashStatus = getCashDeductionStatus({
                       isMarkedPaid: bill.is_paid,
                       hasPaymentTransaction: billHasCashDeduction(bill.id),
                     });
+                    const needsConfirmation = needsVariableAmountConfirmation(
+                      bill,
+                      variableBillContext
+                    );
+                    const isGeneratedVariable = isGeneratedVariableBillInstance(
+                      bill,
+                      variableBillContext
+                    );
 
                     return (
                     <TableRow key={bill.id}>
@@ -814,6 +895,20 @@ export function BillsPage() {
                               name: bill.name,
                               notes: bill.notes,
                             })}
+                            {isGeneratedVariable ? " · Variable amount" : ""}
+                          </p>
+                        )}
+                        {needsConfirmation && (
+                          <Badge
+                            variant="outline"
+                            className="mt-1 border-amber-500 text-amber-700 dark:text-amber-300"
+                          >
+                            Confirm amount
+                          </Badge>
+                        )}
+                        {needsConfirmation && (
+                          <p className="mt-1 text-xs text-amber-700 dark:text-amber-300 max-w-xs">
+                            {VARIABLE_AMOUNT_CONFIRMATION_MESSAGE}
                           </p>
                         )}
                         {debtLinked && (
@@ -864,6 +959,15 @@ export function BillsPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center justify-end gap-1">
+                          {canEditRegularBill(debtLinked) && needsConfirmation && (
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => startEditBill(bill)}
+                            >
+                              Confirm amount
+                            </Button>
+                          )}
                           {canEditRegularBill(debtLinked) && (
                             <Button
                               variant="ghost"
@@ -924,6 +1028,11 @@ export function BillsPage() {
         template={editingBillTemplate}
         householdId={household?.id ?? null}
         isDebtLinked={editingBill ? isDebtLinkedBill(editingBill.id) : false}
+        needsAmountConfirmation={
+          editingBill
+            ? needsVariableAmountConfirmation(editingBill, variableBillContext)
+            : false
+        }
         hasCashDeduction={billHasCashDeduction}
         debtLinkedBillIds={debtLinkedBillIds}
         open={editingBillId !== null}
