@@ -292,6 +292,16 @@ describe("bill instance source labels", () => {
     ).toBe("template");
   });
 
+  it("labels generated template instances", () => {
+    expect(
+      getBillInstanceSourceLabel({
+        billId: "bill-1",
+        name: "Electric",
+        notes: "[Generated for June 2026]",
+      })
+    ).toBe("generated from template");
+  });
+
   it("labels manual instances", () => {
     expect(
       getBillInstanceSourceLabel({ billId: null, name: "One-off bill" })

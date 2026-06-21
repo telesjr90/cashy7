@@ -17,7 +17,17 @@ export type BillTemplateFormValues = {
 
 export type BillTemplateActiveStatus = "active" | "inactive" | "scheduled" | "expired";
 
-export type BillInstanceSourceLabel = "template" | "manual instance" | "debt";
+export type BillInstanceSourceLabel =
+  | "generated from template"
+  | "template"
+  | "manual instance"
+  | "debt";
+
+export const GENERATED_BILL_INSTANCE_NOTE_PREFIX = "[Generated for ";
+
+export function isGeneratedBillInstanceNotes(notes: string | null): boolean {
+  return notes?.startsWith(GENERATED_BILL_INSTANCE_NOTE_PREFIX) ?? false;
+}
 
 export function isEligibleBillTemplate(bill: Pick<Bill, "recurring">): boolean {
   return bill.recurring;
@@ -26,8 +36,12 @@ export function isEligibleBillTemplate(bill: Pick<Bill, "recurring">): boolean {
 export function getBillInstanceSourceLabel(input: {
   billId: string | null;
   name: string;
+  notes?: string | null;
 }): BillInstanceSourceLabel {
   if (input.billId) {
+    if (isGeneratedBillInstanceNotes(input.notes ?? null)) {
+      return "generated from template";
+    }
     return "template";
   }
 

@@ -50,6 +50,7 @@ import {
   Pencil,
   LayoutTemplate,
   Archive,
+  Sparkles,
 } from "lucide-react";
 import { format } from "date-fns";
 import {
@@ -74,6 +75,7 @@ import {
   isEligibleBillTemplate,
 } from "@/lib/bill-templates";
 import { BillEditPanel } from "@/components/bill-edit-panel";
+import { BillGenerationDialog } from "@/components/bill-generation-dialog";
 import { BillTemplatePanel } from "@/components/bill-template-panel";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -113,6 +115,8 @@ export function BillsPage() {
   const [deactivatingTemplateId, setDeactivatingTemplateId] = useState<string | null>(
     null
   );
+  const [generationDialogOpen, setGenerationDialogOpen] = useState(false);
+  const [generationMessage, setGenerationMessage] = useState<string | null>(null);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth() + 1;
@@ -376,6 +380,27 @@ export function BillsPage() {
     }
   };
 
+  const handleBillsGenerated = (instances: BillInstance[], summaryMessage: string) => {
+    setGenerationMessage(summaryMessage);
+    setBills((prev) => {
+      const merged = [...prev];
+      for (const instance of instances) {
+        const existingIndex = merged.findIndex((row) => row.id === instance.id);
+        if (existingIndex === -1) {
+          merged.push(instance);
+        } else {
+          merged[existingIndex] = instance;
+        }
+      }
+      return merged.sort((left, right) => {
+        if (left.period_bucket !== right.period_bucket) {
+          return left.period_bucket.localeCompare(right.period_bucket);
+        }
+        return left.name.localeCompare(right.name);
+      });
+    });
+  };
+
   const navigateMonth = (direction: "prev" | "next") => {
     setCurrentDate((prev) => {
       const newDate = new Date(prev);
@@ -436,6 +461,12 @@ export function BillsPage() {
         {payError && (
           <Alert variant="destructive" className="mb-4">
             <AlertDescription>{payError}</AlertDescription>
+          </Alert>
+        )}
+
+        {generationMessage && (
+          <Alert className="mb-4">
+            <AlertDescription>{generationMessage}</AlertDescription>
           </Alert>
         )}
 
@@ -537,10 +568,23 @@ export function BillsPage() {
                 a template does not change past or paid instances.
               </CardDescription>
             </div>
-            <Button variant="outline" onClick={openCreateTemplate}>
-              <Plus className="mr-2 h-4 w-4" />
-              New template
-            </Button>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Button variant="outline" onClick={openCreateTemplate}>
+                <Plus className="mr-2 h-4 w-4" />
+                New template
+              </Button>
+              <Button
+                variant="default"
+                onClick={() => {
+                  setGenerationMessage(null);
+                  setGenerationDialogOpen(true);
+                }}
+                disabled={templatesLoading || templates.length === 0}
+              >
+                <Sparkles className="mr-2 h-4 w-4" />
+                Generate monthly bills
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             {templatesLoading ? (
@@ -732,6 +776,7 @@ export function BillsPage() {
                             {getBillInstanceSourceLabel({
                               billId: bill.bill_id,
                               name: bill.name,
+                              notes: bill.notes,
                             })}
                           </p>
                         )}
@@ -859,6 +904,15 @@ export function BillsPage() {
           }
         }}
         onSaved={handleTemplateSaved}
+      />
+
+      <BillGenerationDialog
+        open={generationDialogOpen}
+        onOpenChange={setGenerationDialogOpen}
+        year={year}
+        month={month}
+        templates={templates}
+        onGenerated={handleBillsGenerated}
       />
     </div>
   );
