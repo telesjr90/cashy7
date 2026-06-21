@@ -53,6 +53,7 @@ import {
   Sparkles,
   AlertTriangle,
   Search,
+  Eye,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -86,9 +87,14 @@ import {
   getBillTemplateActiveStatus,
   isEligibleBillTemplate,
 } from "@/lib/bill-templates";
+import { BillDetailPanel } from "@/components/bill-detail-panel";
 import { BillEditPanel } from "@/components/bill-edit-panel";
 import { BillGenerationDialog } from "@/components/bill-generation-dialog";
 import { BillTemplatePanel } from "@/components/bill-template-panel";
+import {
+  buildBillInstanceDetailView,
+  resolveBillPaymentTransaction,
+} from "@/lib/bill-detail";
 import { Badge } from "@/components/ui/badge";
 import {
   DEBT_LINKED_BILL_DELETE_MESSAGE,
@@ -139,6 +145,7 @@ export function BillsPage() {
   const [filters, setFilters] = useState<BillInstanceFilters>(
     DEFAULT_BILL_INSTANCE_FILTERS
   );
+  const [detailBillId, setDetailBillId] = useState<string | null>(null);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth() + 1;
@@ -545,6 +552,52 @@ export function BillsPage() {
     () => filterBillInstances(bills, filters, billFilterContext),
     [bills, filters, billFilterContext]
   );
+
+  const detailBill =
+    detailBillId !== null
+      ? (bills.find((bill) => bill.id === detailBillId) ?? null)
+      : null;
+
+  const detailView = useMemo(() => {
+    if (!detailBill) {
+      return null;
+    }
+
+    const template =
+      detailBill.bill_id != null
+        ? (templates.find((row) => row.id === detailBill.bill_id) ?? null)
+        : null;
+
+    return buildBillInstanceDetailView({
+      bill: detailBill,
+      template,
+      templateCategory: detailBill.bill_id
+        ? (templateCategoryByBillId.get(detailBill.bill_id) ??
+            template?.category ??
+            null)
+        : null,
+      isDebtLinked: isDebtLinkedBill(detailBill.id),
+      hasCashDeduction: billHasCashDeduction(detailBill.id),
+      paymentTransaction: resolveBillPaymentTransaction(
+        detailBill.id,
+        paymentByBillId,
+        debtPaymentIdByBillId,
+        paymentByDebtPaymentId
+      ),
+      debtPaymentId: debtPaymentIdByBillId.get(detailBill.id) ?? null,
+      variableBillContext,
+    });
+  }, [
+    detailBill,
+    templates,
+    templateCategoryByBillId,
+    debtLinkedBillIds,
+    debtPaymentIdByBillId,
+    paymentByBillId,
+    paymentByDebtPaymentId,
+    variableBillContext,
+    billHasCashDeduction,
+  ]);
 
   const resetFilters = () => {
     setFilters(DEFAULT_BILL_INSTANCE_FILTERS);
@@ -1247,6 +1300,14 @@ export function BillsPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label={`View details for ${bill.name}`}
+                            onClick={() => setDetailBillId(bill.id)}
+                          >
+                            <Eye className="h-4 w-4 text-muted-foreground" />
+                          </Button>
                           {canEditRegularBill(debtLinked) && needsConfirmation && (
                             <Button
                               variant="secondary"
@@ -1352,6 +1413,16 @@ export function BillsPage() {
         month={month}
         templates={templates}
         onGenerated={handleBillsGenerated}
+      />
+
+      <BillDetailPanel
+        detail={detailView}
+        open={detailBillId !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDetailBillId(null);
+          }
+        }}
       />
     </div>
   );
