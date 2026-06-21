@@ -52,7 +52,18 @@ import {
   Archive,
   Sparkles,
   AlertTriangle,
+  Search,
 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  DEFAULT_BILL_INSTANCE_FILTERS,
+  extractDistinctBillCategories,
+  filterBillInstances,
+  getActiveBillFilterLabels,
+  isBillInstanceFiltersActive,
+  type BillInstanceFilters,
+} from "@/lib/bill-filters";
 import { format } from "date-fns";
 import {
   AlertDialog,
@@ -88,7 +99,6 @@ import {
 import {
   buildBillTemplateLookup,
   countVariableBillsNeedingConfirmation,
-  filterVariableBillsNeedingConfirmation,
   isGeneratedVariableBillInstance,
   needsVariableAmountConfirmation,
   VARIABLE_AMOUNT_CONFIRMATION_MESSAGE,
@@ -126,7 +136,9 @@ export function BillsPage() {
   );
   const [generationDialogOpen, setGenerationDialogOpen] = useState(false);
   const [generationMessage, setGenerationMessage] = useState<string | null>(null);
-  const [showNeedsConfirmationOnly, setShowNeedsConfirmationOnly] = useState(false);
+  const [filters, setFilters] = useState<BillInstanceFilters>(
+    DEFAULT_BILL_INSTANCE_FILTERS
+  );
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth() + 1;
@@ -476,13 +488,67 @@ export function BillsPage() {
     [bills, variableBillContext]
   );
 
-  const displayedBills = useMemo(() => {
-    if (!showNeedsConfirmationOnly) {
-      return bills;
-    }
+  const templateCategoryByBillId = useMemo(
+    () =>
+      new Map(
+        templates.map((template) => [template.id, template.category ?? "other"])
+      ),
+    [templates]
+  );
 
-    return filterVariableBillsNeedingConfirmation(bills, variableBillContext);
-  }, [bills, showNeedsConfirmationOnly, variableBillContext]);
+  const cashDeductedBillIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const bill of bills) {
+      if (billHasCashDeduction(bill.id)) {
+        ids.add(bill.id);
+      }
+    }
+    return ids;
+  }, [bills, billHasCashDeduction]);
+
+  const billFilterContext = useMemo(
+    () => ({
+      debtLinkedBillIds,
+      cashDeductedBillIds,
+      templateCategoryByBillId,
+      variableBillContext,
+    }),
+    [
+      debtLinkedBillIds,
+      cashDeductedBillIds,
+      templateCategoryByBillId,
+      variableBillContext,
+    ]
+  );
+
+  const filtersActive = useMemo(
+    () => isBillInstanceFiltersActive(filters),
+    [filters]
+  );
+
+  const activeFilterLabels = useMemo(
+    () => getActiveBillFilterLabels(filters),
+    [filters]
+  );
+
+  const derivedCategories = useMemo(
+    () =>
+      extractDistinctBillCategories(
+        bills,
+        templateCategoryByBillId,
+        templates
+      ),
+    [bills, templateCategoryByBillId, templates]
+  );
+
+  const displayedBills = useMemo(
+    () => filterBillInstances(bills, filters, billFilterContext),
+    [bills, filters, billFilterContext]
+  );
+
+  const resetFilters = () => {
+    setFilters(DEFAULT_BILL_INSTANCE_FILTERS);
+  };
 
   const period1Bills = bills.filter((b) => b.period_bucket === "1_14");
   const period2Bills = bills.filter((b) => b.period_bucket === "15_eom");
@@ -547,7 +613,12 @@ export function BillsPage() {
               <Button
                 variant="link"
                 className="h-auto p-0 text-amber-950 underline dark:text-amber-100"
-                onClick={() => setShowNeedsConfirmationOnly(true)}
+                onClick={() =>
+                  setFilters((prev) => ({
+                    ...prev,
+                    variable: "needs_confirmation",
+                  }))
+                }
               >
                 Show bills needing confirmation
               </Button>
@@ -803,19 +874,242 @@ export function BillsPage() {
               <CardDescription>
                 {bills.length} bill{bills.length !== 1 ? "s" : ""} total.{" "}
                 {PAYMENT_UX_EXPLANATION}
+                {filtersActive && bills.length > 0 && (
+                  <>
+                    {" "}
+                    Showing {displayedBills.length} of {bills.length} bills.
+                  </>
+                )}
               </CardDescription>
             </div>
             {variableConfirmationCount > 0 && (
               <Button
-                variant={showNeedsConfirmationOnly ? "default" : "outline"}
+                variant={
+                  filters.variable === "needs_confirmation" ? "default" : "outline"
+                }
                 size="sm"
-                onClick={() => setShowNeedsConfirmationOnly((prev) => !prev)}
+                onClick={() =>
+                  setFilters((prev) => ({
+                    ...prev,
+                    variable:
+                      prev.variable === "needs_confirmation"
+                        ? "all"
+                        : "needs_confirmation",
+                  }))
+                }
               >
                 Needs confirmation ({variableConfirmationCount})
               </Button>
             )}
           </CardHeader>
           <CardContent>
+            {!loading && bills.length > 0 && (
+              <div className="mb-4 space-y-3">
+                <div className="flex flex-wrap items-end gap-2">
+                  <div className="min-w-[12rem] flex-1 space-y-1">
+                    <Label htmlFor="bill-search">Search</Label>
+                    <div className="relative">
+                      <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                      <Input
+                        id="bill-search"
+                        value={filters.searchText}
+                        onChange={(event) =>
+                          setFilters((prev) => ({
+                            ...prev,
+                            searchText: event.target.value,
+                          }))
+                        }
+                        placeholder="Name, category, notes, source..."
+                        className="pl-9"
+                      />
+                    </div>
+                  </div>
+                  {filtersActive && (
+                    <Button type="button" variant="outline" onClick={resetFilters}>
+                      Clear filters
+                    </Button>
+                  )}
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="space-y-1">
+                    <Label htmlFor="bill-filter-period">Period bucket</Label>
+                    <Select
+                      value={filters.periodBucket}
+                      onValueChange={(value) =>
+                        setFilters((prev) => ({
+                          ...prev,
+                          periodBucket: value as BillInstanceFilters["periodBucket"],
+                        }))
+                      }
+                    >
+                      <SelectTrigger id="bill-filter-period">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All periods</SelectItem>
+                        <SelectItem value="1_14">1st–14th</SelectItem>
+                        <SelectItem value="15_eom">15th–end of month</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label htmlFor="bill-filter-paid">Paid status</Label>
+                    <Select
+                      value={filters.paidStatus}
+                      onValueChange={(value) =>
+                        setFilters((prev) => ({
+                          ...prev,
+                          paidStatus: value as BillInstanceFilters["paidStatus"],
+                        }))
+                      }
+                    >
+                      <SelectTrigger id="bill-filter-paid">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All statuses</SelectItem>
+                        <SelectItem value="paid">Paid</SelectItem>
+                        <SelectItem value="unpaid">Unpaid</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label htmlFor="bill-filter-cash">Cash deducted</Label>
+                    <Select
+                      value={filters.cashDeducted}
+                      onValueChange={(value) =>
+                        setFilters((prev) => ({
+                          ...prev,
+                          cashDeducted: value as BillInstanceFilters["cashDeducted"],
+                        }))
+                      }
+                    >
+                      <SelectTrigger id="bill-filter-cash">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All</SelectItem>
+                        <SelectItem value="cash_deducted">Cash deducted</SelectItem>
+                        <SelectItem value="not_cash_deducted">
+                          Not cash deducted
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label htmlFor="bill-filter-debt">Debt-linked</Label>
+                    <Select
+                      value={filters.debtLinked}
+                      onValueChange={(value) =>
+                        setFilters((prev) => ({
+                          ...prev,
+                          debtLinked: value as BillInstanceFilters["debtLinked"],
+                        }))
+                      }
+                    >
+                      <SelectTrigger id="bill-filter-debt">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All bills</SelectItem>
+                        <SelectItem value="debt_linked">Debt-linked</SelectItem>
+                        <SelectItem value="regular_only">Regular only</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label htmlFor="bill-filter-source">Source</Label>
+                    <Select
+                      value={filters.source}
+                      onValueChange={(value) =>
+                        setFilters((prev) => ({
+                          ...prev,
+                          source: value as BillInstanceFilters["source"],
+                        }))
+                      }
+                    >
+                      <SelectTrigger id="bill-filter-source">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All sources</SelectItem>
+                        <SelectItem value="generated_from_template">
+                          Generated from template
+                        </SelectItem>
+                        <SelectItem value="manual_instance">Manual instance</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label htmlFor="bill-filter-variable">Variable amount</Label>
+                    <Select
+                      value={filters.variable}
+                      onValueChange={(value) =>
+                        setFilters((prev) => ({
+                          ...prev,
+                          variable: value as BillInstanceFilters["variable"],
+                        }))
+                      }
+                    >
+                      <SelectTrigger id="bill-filter-variable">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All bills</SelectItem>
+                        <SelectItem value="variable">Variable</SelectItem>
+                        <SelectItem value="fixed">Fixed</SelectItem>
+                        <SelectItem value="needs_confirmation">
+                          Needs confirmation
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label htmlFor="bill-filter-category">Category</Label>
+                    <Select
+                      value={filters.category || "all"}
+                      onValueChange={(value) =>
+                        setFilters((prev) => ({
+                          ...prev,
+                          category: value === "all" ? "" : value,
+                        }))
+                      }
+                    >
+                      <SelectTrigger id="bill-filter-category">
+                        <SelectValue placeholder="All categories" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">All categories</SelectItem>
+                        {derivedCategories.map((categoryName) => (
+                          <SelectItem key={categoryName} value={categoryName}>
+                            {categoryName}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {filtersActive && activeFilterLabels.length > 0 && (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Active filters:</span>
+                    {activeFilterLabels.map((label) => (
+                      <Badge key={label} variant="secondary">
+                        {label}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             {loading ? (
               <div className="space-y-2">
                 {Array.from({ length: 5 }).map((_, i) => (
@@ -833,15 +1127,9 @@ export function BillsPage() {
               </div>
             ) : displayedBills.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-center">
-                <p className="text-muted-foreground">
-                  No bills need amount confirmation in this month.
-                </p>
-                <Button
-                  variant="link"
-                  className="mt-2"
-                  onClick={() => setShowNeedsConfirmationOnly(false)}
-                >
-                  Show all bills
+                <p className="text-muted-foreground">No bills match your filters.</p>
+                <Button variant="link" className="mt-2" onClick={resetFilters}>
+                  Clear filters
                 </Button>
               </div>
             ) : (
