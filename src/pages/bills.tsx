@@ -323,6 +323,14 @@ export function BillsPage() {
 
   const editingBill = bills.find((bill) => bill.id === editingBillId) ?? null;
 
+  const editingBillTemplate = useMemo(() => {
+    if (!editingBill?.bill_id) {
+      return null;
+    }
+
+    return templates.find((template) => template.id === editingBill.bill_id) ?? null;
+  }, [editingBill, templates]);
+
   const startEditBill = (bill: BillInstance) => {
     if (!canEditRegularBill(isDebtLinkedBill(bill.id))) {
       return;
@@ -334,6 +342,34 @@ export function BillsPage() {
     setBills((prev) =>
       prev.map((bill) => (bill.id === updatedBill.id ? updatedBill : bill))
     );
+    setEditingBillId(null);
+  };
+
+  const handleTemplateAndFutureSaved = ({
+    template,
+    updatedInstances,
+  }: {
+    template: Bill;
+    updatedInstances: BillInstance[];
+  }) => {
+    setTemplates((prev) =>
+      prev.map((row) => (row.id === template.id ? template : row))
+    );
+
+    setBills((prev) => {
+      const byId = new Map(prev.map((bill) => [bill.id, bill]));
+      for (const instance of updatedInstances) {
+        if (instance.year === year && instance.month === month) {
+          byId.set(instance.id, instance);
+        }
+      }
+      return Array.from(byId.values()).sort((left, right) => {
+        if (left.period_bucket !== right.period_bucket) {
+          return left.period_bucket.localeCompare(right.period_bucket);
+        }
+        return left.name.localeCompare(right.name);
+      });
+    });
     setEditingBillId(null);
   };
 
@@ -885,6 +921,11 @@ export function BillsPage() {
 
       <BillEditPanel
         bill={editingBill}
+        template={editingBillTemplate}
+        householdId={household?.id ?? null}
+        isDebtLinked={editingBill ? isDebtLinkedBill(editingBill.id) : false}
+        hasCashDeduction={billHasCashDeduction}
+        debtLinkedBillIds={debtLinkedBillIds}
         open={editingBillId !== null}
         onOpenChange={(open) => {
           if (!open) {
@@ -892,6 +933,7 @@ export function BillsPage() {
           }
         }}
         onSaved={handleBillSaved}
+        onTemplateAndFutureSaved={handleTemplateAndFutureSaved}
       />
 
       <BillTemplatePanel
