@@ -1,0 +1,44 @@
+{
+  "activeTaskId": "CASHFLOW-CURSOR-063",
+  "stopOn": {
+    "partial": true,
+    "blocked": true,
+    "validationFailure": true,
+    "unexpectedMigration": true,
+    "unexpectedFiles": true,
+    "browserSmokeFailure": true
+  },
+  "tasks": [
+    {
+      "id": "CASHFLOW-CURSOR-063",
+      "title": "Expense category management",
+      "promptPath": "docs/automation/task_prompts/CASHFLOW-CURSOR-063.md",
+      "reportPath": "docs/automation/task_reports/CASHFLOW-CURSOR-063.md",
+      "jsonReportPath": "docs/automation/task_reports/CASHFLOW-CURSOR-063.result.json",
+      "commitMessage": "Add expense category management",
+      "expectedFiles": [
+        "src/pages/expenses.tsx",
+        "src/lib/expenses.ts",
+        "src/lib/expenses.test.ts",
+        "src/lib/expense-categories.ts",
+        "src/lib/expense-categories.test.ts",
+        "src/lib/expense-filters.ts",
+        "src/lib/expense-filters.test.ts",
+        "docs/automation/task_reports/CASHFLOW-CURSOR-063.md",
+        "docs/automation/task_reports/CASHFLOW-CURSOR-063.result.json"
+      ],
+      "suspiciousFiles": [
+        "supabase/migrations/",
+        "src/App.tsx",
+        "src/pages/dashboard.tsx",
+        "src/pages/bills.tsx",
+        "src/pages/debt.tsx",
+        "src/pages/settings.tsx"
+      ],
+      "allowMigrations": false,
+      "browserSmokeRequired": true,
+      "requiresHumanReview": false,
+      "status": "active"
+    }
+  ]
+}

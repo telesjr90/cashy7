@@ -1,0 +1,123 @@
+---
+description: Cashflow task implementation workflow
+alwaysApply: true
+---
+
+# Cashflow Task Workflow
+
+For every CASHFLOW-CURSOR task, follow this process.
+
+## UI Scope Decision Gate
+
+For UI tasks, choose the smallest UI surface that satisfies the requirement.
+
+Default order:
+1. Reuse existing page/component
+2. Inline panel
+3. Dialog/drawer
+4. New route
+5. New page-level workflow
+
+Do not add a new route unless the task requires at least one of:
+- deep-linking
+- browser back/forward navigation
+- direct URL sharing
+- route-level data loading
+- a standalone page that users will revisit independently
+
+For read-only details inside an existing workflow, prefer drawer, dialog, or inline panel.
+
+Before editing UI files, include a UI scope decision in the pre-edit plan:
+
+- Options considered
+- Chosen UI pattern
+- Why this is the smallest safe option
+- Files expected to change
+- Files intentionally avoided
+
+If choosing a new route, explicitly explain why drawer/dialog/inline panel is insufficient.
+
+Avoid modifying `src/App.tsx` unless route-level navigation is required.
+
+## Filtering/Search Scope Gate
+
+For filter/search tasks, prefer client-side filtering of already loaded page data first.
+
+Do not add database indexes, pagination, RLS changes, or Supabase query rewrites unless the task explicitly requires them or inspection proves the current data volume makes client-side filtering unsafe.
+
+Before editing filter/search UI, include:
+- fields being filtered
+- whether filtering is client-side or server-side
+- why that choice is smallest/safest
+- how empty results are shown
+- how filters can be reset
+
+## Before editing
+1. Run `git status`.
+2. Refuse to continue if tracked files are modified from a previous task unless the user explicitly says to continue.
+3. Read the task prompt completely.
+4. Inspect only relevant files first.
+5. Return a pre-edit plan with:
+   - current git status
+   - files inspected
+   - files planned for modification
+   - migrations planned, if any
+   - validation commands planned
+   - browser smoke test needed or not needed
+
+## During implementation
+1. Keep the task narrow.
+2. Do not scaffold unrelated features.
+3. Do not expose `.env` values.
+4. Do not commit credentials.
+5. Preserve payment rules:
+   - Mark paid = status only
+   - Pay & deduct cash = cash snapshot + audit transaction
+6. Preserve privacy:
+   - never expose another user's current cash
+   - never expose another user's private savings
+   - never expose another user's private payment/credit transactions
+7. Prefer pure helpers + Vitest tests for calculation logic.
+8. Use Supabase migrations for schema changes.
+9. Do not touch migrations unless the task explicitly needs schema changes.
+
+## Required validation
+Run:
+- `npm run typecheck`
+- `npm run build`
+- `npm run test:run`
+
+## Browser smoke tests
+If browser smoke testing is required:
+1. Use the provided test account only in the browser.
+2. Never store credentials in files.
+3. Never print `.env` values.
+4. Report browser console errors.
+
+## Required task report
+Always return:
+
+1. Result: PASS / PARTIAL / BLOCKED
+2. Files changed
+3. Migration created, if any
+4. Behavior implemented
+5. Privacy guarantees preserved
+6. Tests added/updated
+7. Validation results
+8. Supabase validation result, if any
+9. Browser smoke test result, if any
+10. Remaining known limitations
+11. Exact next recommended small task
+
+## Commit gate
+Only commit if all are true:
+- Result is PASS
+- typecheck passes
+- build passes
+- tests pass
+- browser smoke passes when required
+- changed files match task scope
+- no credentials or secrets changed
+- no unrelated refactor
+
+Do not push unless the user or supervisor prompt explicitly says pushing is allowed.
