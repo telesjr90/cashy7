@@ -61,18 +61,10 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { formatCurrency } from "@/lib/format";
+import { canEditRegularBill } from "@/lib/bill-edit";
+import { BillEditPanel } from "@/components/bill-edit-panel";
 import {
   DEBT_LINKED_BILL_DELETE_MESSAGE,
   DEBT_LINKED_BILL_EDIT_MESSAGE,
@@ -103,11 +95,6 @@ export function BillsPage() {
   const [payingBillId, setPayingBillId] = useState<string | null>(null);
   const [payError, setPayError] = useState<string | null>(null);
   const [editingBillId, setEditingBillId] = useState<string | null>(null);
-  const [billEditForm, setBillEditForm] = useState({
-    amount: "",
-    telesAmount: "",
-    nicoleAmount: "",
-  });
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth() + 1;
@@ -292,12 +279,17 @@ export function BillsPage() {
   const editingBill = bills.find((bill) => bill.id === editingBillId) ?? null;
 
   const startEditBill = (bill: BillInstance) => {
+    if (!canEditRegularBill(isDebtLinkedBill(bill.id))) {
+      return;
+    }
     setEditingBillId(bill.id);
-    setBillEditForm({
-      amount: bill.amount.toString(),
-      telesAmount: bill.teles_amount.toString(),
-      nicoleAmount: bill.nicole_amount.toString(),
-    });
+  };
+
+  const handleBillSaved = (updatedBill: BillInstance) => {
+    setBills((prev) =>
+      prev.map((bill) => (bill.id === updatedBill.id ? updatedBill : bill))
+    );
+    setEditingBillId(null);
   };
 
   const navigateMonth = (direction: "prev" | "next") => {
@@ -555,10 +547,11 @@ export function BillsPage() {
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center justify-end gap-1">
-                          {debtLinked && (
+                          {canEditRegularBill(debtLinked) && (
                             <Button
                               variant="ghost"
                               size="icon"
+                              aria-label="Edit bill"
                               onClick={() => startEditBill(bill)}
                             >
                               <Pencil className="h-4 w-4 text-muted-foreground" />
@@ -609,78 +602,16 @@ export function BillsPage() {
         </Card>
       </div>
 
-      <Dialog
+      <BillEditPanel
+        bill={editingBill}
         open={editingBillId !== null}
         onOpenChange={(open) => {
-          if (!open) setEditingBillId(null);
+          if (!open) {
+            setEditingBillId(null);
+          }
         }}
-      >
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Debt-Linked Bill</DialogTitle>
-            <DialogDescription>
-              {editingBill
-                ? `${editingBill.name} is linked to a debt payment.`
-                : "This bill is linked to a debt payment."}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <Alert>
-              <AlertDescription>
-                {DEBT_LINKED_BILL_EDIT_MESSAGE}{" "}
-                <Link to="/debt" className="underline underline-offset-2">
-                  Go to Debt page
-                </Link>
-              </AlertDescription>
-            </Alert>
-            <div className="space-y-2">
-              <Label htmlFor="editBillAmount">Total Amount (CA$)</Label>
-              <Input
-                id="editBillAmount"
-                type="number"
-                step="0.01"
-                min="0"
-                value={billEditForm.amount}
-                disabled
-                readOnly
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="editBillTelesAmount">Teles Amount (CA$)</Label>
-              <Input
-                id="editBillTelesAmount"
-                type="number"
-                step="0.01"
-                min="0"
-                value={billEditForm.telesAmount}
-                disabled
-                readOnly
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="editBillNicoleAmount">Nicole Amount (CA$)</Label>
-              <Input
-                id="editBillNicoleAmount"
-                type="number"
-                step="0.01"
-                min="0"
-                value={billEditForm.nicoleAmount}
-                disabled
-                readOnly
-              />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setEditingBillId(null)}
-            >
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+        onSaved={handleBillSaved}
+      />
     </div>
   );
 }
