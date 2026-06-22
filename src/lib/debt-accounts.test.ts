@@ -11,6 +11,7 @@ import {
   getDebtAccountArchiveStatus,
   getDebtAccountArchivedBadgeLabel,
   isDebtAccountArchived,
+  isDebtScheduleActionAllowed,
 } from "@/lib/debt-accounts";
 
 function makeAccount(
@@ -106,5 +107,12 @@ describe("debt account archive helpers", () => {
   it("allows reopen only for archived accounts", () => {
     expect(canReopenDebtAccount(makeAccount({ is_archived: true }))).toBe(true);
     expect(canReopenDebtAccount(makeAccount())).toBe(false);
+  });
+
+  it("blocks schedule replacement on archived accounts", () => {
+    expect(isDebtScheduleActionAllowed(makeAccount())).toBe(true);
+    expect(isDebtScheduleActionAllowed(makeAccount({ is_archived: true }))).toBe(
+      false
+    );
   });
 });

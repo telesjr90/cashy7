@@ -1,0 +1,24 @@
+{
+  "taskId": "CASHFLOW-CURSOR-076",
+  "result": "PASS",
+  "filesChanged": [
+    "src/lib/debt-edge-cases.test.ts",
+    "src/lib/debt-accounts.test.ts",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-076.md",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-076.result.json"
+  ],
+  "migrationsCreated": [],
+  "validation": {
+    "typecheck": "PASS",
+    "build": "PASS",
+    "testRun": "PASS"
+  },
+  "browserSmoke": {
+    "required": true,
+    "result": "PASS"
+  },
+  "privacy": "PASS",
+  "productRules": "PASS",
+  "readyToCommit": true,
+  "nextTaskId": "CASHFLOW-CURSOR-077"
+}
