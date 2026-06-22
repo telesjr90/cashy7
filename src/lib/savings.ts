@@ -337,6 +337,116 @@ export async function getMySavingsContributions(
   };
 }
 
+export async function updateSavingsGoal(
+  goalId: string,
+  input: {
+    name: string;
+    goalType: SavingsGoalType;
+    targetAmount: number;
+    startDate: string;
+    endDate: string;
+  }
+): Promise<{ goal: SavingsGoal | null; error: string | null }> {
+  const { data, error } = await supabase
+    .from("savings_goals")
+    .update({
+      name: input.name,
+      goal_type: input.goalType,
+      target_amount: input.targetAmount,
+      start_date: input.startDate,
+      end_date: input.endDate,
+    })
+    .eq("id", goalId)
+    .select()
+    .single();
+
+  if (error) {
+    return { goal: null, error: error.message };
+  }
+
+  return { goal: data as SavingsGoal, error: null };
+}
+
+export async function deleteSavingsGoal(
+  goalId: string
+): Promise<{ error: string | null }> {
+  const { error } = await supabase.from("savings_goals").delete().eq("id", goalId);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  return { error: null };
+}
+
+export async function updateMySavingsContribution(
+  householdId: string,
+  userId: string,
+  contributionId: string,
+  input: {
+    amount: number;
+    contributionDate: string;
+    notes?: string | null;
+  }
+): Promise<{ contribution: SavingsContribution | null; error: string | null }> {
+  const { data, error } = await supabase
+    .from("savings_contributions")
+    .update({
+      amount: input.amount,
+      contribution_date: input.contributionDate,
+      notes: input.notes ?? null,
+    })
+    .eq("id", contributionId)
+    .eq("household_id", householdId)
+    .eq("user_id", userId)
+    .select()
+    .single();
+
+  if (error) {
+    return { contribution: null, error: error.message };
+  }
+
+  return { contribution: data as SavingsContribution, error: null };
+}
+
+export async function deleteMySavingsContribution(
+  householdId: string,
+  userId: string,
+  contributionId: string
+): Promise<{ error: string | null }> {
+  const { error } = await supabase
+    .from("savings_contributions")
+    .delete()
+    .eq("id", contributionId)
+    .eq("household_id", householdId)
+    .eq("user_id", userId);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  return { error: null };
+}
+
+export async function deleteMySavingsGoalParticipant(
+  householdId: string,
+  userId: string,
+  participantId: string
+): Promise<{ error: string | null }> {
+  const { error } = await supabase
+    .from("savings_goal_participants")
+    .delete()
+    .eq("id", participantId)
+    .eq("household_id", householdId)
+    .eq("user_id", userId);
+
+  if (error) {
+    return { error: error.message };
+  }
+
+  return { error: null };
+}
+
 export async function upsertMySavingsGoalParticipant(
   householdId: string,
   userId: string,

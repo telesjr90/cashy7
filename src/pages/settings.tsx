@@ -38,8 +38,15 @@ import {
   getParticipantSummaryMonthHint,
   getSavingsGoals,
   sumMyContributionsForGoal,
-  upsertMySavingsGoalParticipant,
 } from "@/lib/savings";
+import {
+  buildPrivacySafeSharedGoalDisplay,
+  canUserEditGoal,
+  OTHER_USER_TARGET_PRIVACY_LABEL,
+} from "@/lib/savings-edit";
+import { SavingsContributionEditDialog } from "@/components/savings-contribution-edit-dialog";
+import { SavingsGoalEditDialog } from "@/components/savings-goal-edit-dialog";
+import { SavingsTargetEditDialog } from "@/components/savings-target-edit-dialog";
 import type {
   CashSnapshot,
   HouseholdSettings,
@@ -110,21 +117,11 @@ function SavingsGoalPanel({
   userId,
   onRefresh,
 }: SavingsGoalPanelProps) {
-  const [targetAmountInput, setTargetAmountInput] = useState(
-    participant ? String(participant.target_contribution_amount) : ""
-  );
-  const [contributionPeriod, setContributionPeriod] = useState<
-    SavingsContributionPeriod | ""
-  >(participant?.contribution_period ?? "");
-  const [periodStartInput, setPeriodStartInput] = useState(
-    participant?.period_start ?? ""
-  );
-  const [periodEndInput, setPeriodEndInput] = useState(
-    participant?.period_end ?? ""
-  );
-  const [targetSaving, setTargetSaving] = useState(false);
-  const [targetError, setTargetError] = useState<string | null>(null);
-  const [targetSuccess, setTargetSuccess] = useState<string | null>(null);
+  const [goalEditOpen, setGoalEditOpen] = useState(false);
+  const [targetEditOpen, setTargetEditOpen] = useState(false);
+  const [contributionEditOpen, setContributionEditOpen] = useState(false);
+  const [editingContribution, setEditingContribution] =
+    useState<SavingsContribution | null>(null);
 
   const [contributionAmountInput, setContributionAmountInput] = useState("");
   const [contributionDateInput, setContributionDateInput] = useState(todayIsoDate());
@@ -134,15 +131,6 @@ function SavingsGoalPanel({
   const [contributionSuccess, setContributionSuccess] = useState<string | null>(
     null
   );
-
-  useEffect(() => {
-    setTargetAmountInput(
-      participant ? String(participant.target_contribution_amount) : ""
-    );
-    setContributionPeriod(participant?.contribution_period ?? "");
-    setPeriodStartInput(participant?.period_start ?? "");
-    setPeriodEndInput(participant?.period_end ?? "");
-  }, [participant]);
 
   const goalContributions = useMemo(
     () => filterMyContributionsForGoal(contributions, goal.id),
@@ -164,50 +152,18 @@ function SavingsGoalPanel({
     [participant]
   );
   const recentContributions = goalContributions.slice(0, 5);
-
-  const handleSaveTarget = async () => {
-    setTargetError(null);
-    setTargetSuccess(null);
-
-    const targetAmount = Number.parseFloat(targetAmountInput);
-    if (targetAmountInput.trim() === "" || Number.isNaN(targetAmount)) {
-      setTargetError("Please enter a valid target contribution amount.");
-      return;
-    }
-    if (targetAmount < 0) {
-      setTargetError("Target contribution amount must be zero or greater.");
-      return;
-    }
-    if (
-      contributionPeriod !== "1_14" &&
-      contributionPeriod !== "15_eom" &&
-      contributionPeriod !== "monthly"
-    ) {
-      setTargetError("Please select a contribution period.");
-      return;
-    }
-
-    setTargetSaving(true);
-
-    const { error } = await upsertMySavingsGoalParticipant(householdId, userId, {
-      savingsGoalId: goal.id,
-      targetContributionAmount: targetAmount,
-      contributionPeriod,
-      personId,
-      periodStart: periodStartInput.trim() || null,
-      periodEnd: periodEndInput.trim() || null,
-    });
-
-    setTargetSaving(false);
-
-    if (error) {
-      setTargetError(error);
-      return;
-    }
-
-    await onRefresh();
-    setTargetSuccess("Your contribution target saved.");
-  };
+  const isGoalCreator = canUserEditGoal(goal, userId);
+  const sharedGoalDisplay = useMemo(
+    () =>
+      goal.goal_type === "shared"
+        ? buildPrivacySafeSharedGoalDisplay({
+            goal,
+            myParticipant: participant,
+            mySavedAmount: myTotalContributed,
+          })
+        : null,
+    [goal, participant, myTotalContributed]
+  );
 
   const handleLogContribution = async () => {
     setContributionError(null);
@@ -253,97 +209,56 @@ function SavingsGoalPanel({
 
   return (
     <div className="space-y-6 rounded-lg border p-4">
-      <div className="space-y-1">
-        <h3 className="text-lg font-medium">{goal.name}</h3>
-        <div className="grid gap-1 text-sm text-muted-foreground">
-          <p>Type: {goalTypeLabel(goal.goal_type)}</p>
-          <p>Target: {formatCurrency(Number(goal.target_amount))}</p>
-          <p>
-            {formatDisplayDate(goal.start_date)} – {formatDisplayDate(goal.end_date)}
-          </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-1">
+          <h3 className="text-lg font-medium">{goal.name}</h3>
+          <div className="grid gap-1 text-sm text-muted-foreground">
+            <p>Type: {goalTypeLabel(goal.goal_type)}</p>
+            <p>Target: {formatCurrency(Number(goal.target_amount))}</p>
+            <p>
+              {formatDisplayDate(goal.start_date)} – {formatDisplayDate(goal.end_date)}
+            </p>
+          </div>
         </div>
+        {isGoalCreator && (
+          <Button type="button" variant="outline" size="sm" onClick={() => setGoalEditOpen(true)}>
+            Edit goal
+          </Button>
+        )}
       </div>
 
+      {sharedGoalDisplay && (
+        <div className="space-y-1 rounded-md bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+          <p>{sharedGoalDisplay.privacyCopy}</p>
+          <p>{OTHER_USER_TARGET_PRIVACY_LABEL}</p>
+        </div>
+      )}
+
       <div className="space-y-4 border-t pt-4">
-        <div>
-          <h4 className="text-sm font-medium">My contribution target</h4>
-          {!participant && (
-            <p className="mt-1 text-sm text-muted-foreground">
-              No target set for you yet.
-            </p>
-          )}
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor={`target-amount-${goal.id}`}>Target contribution amount</Label>
-          <Input
-            id={`target-amount-${goal.id}`}
-            type="number"
-            min="0"
-            step="0.01"
-            placeholder="0.00"
-            value={targetAmountInput}
-            onChange={(e) => setTargetAmountInput(e.target.value)}
-          />
-        </div>
-
-        <div className="space-y-2">
-          <Label htmlFor={`contribution-period-${goal.id}`}>Contribution period</Label>
-          <Select
-            value={contributionPeriod || undefined}
-            onValueChange={(value) =>
-              setContributionPeriod(value as SavingsContributionPeriod)
-            }
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h4 className="text-sm font-medium">My contribution target</h4>
+            {!participant && (
+              <p className="mt-1 text-sm text-muted-foreground">
+                No target set for you yet.
+              </p>
+            )}
+            {participant && (
+              <p className="mt-1 text-sm text-muted-foreground">
+                Target: {formatCurrency(Number(participant.target_contribution_amount))}{" "}
+                · {CONTRIBUTION_PERIOD_LABELS[participant.contribution_period]}
+              </p>
+            )}
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setTargetEditOpen(true)}
           >
-            <SelectTrigger id={`contribution-period-${goal.id}`} className="w-full">
-              <SelectValue placeholder="Select contribution period" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="1_14">{CONTRIBUTION_PERIOD_LABELS["1_14"]}</SelectItem>
-              <SelectItem value="15_eom">
-                {CONTRIBUTION_PERIOD_LABELS["15_eom"]}
-              </SelectItem>
-              <SelectItem value="monthly">{CONTRIBUTION_PERIOD_LABELS.monthly}</SelectItem>
-            </SelectContent>
-          </Select>
+            Edit my target
+          </Button>
         </div>
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor={`period-start-${goal.id}`}>Period start (optional)</Label>
-            <Input
-              id={`period-start-${goal.id}`}
-              type="date"
-              value={periodStartInput}
-              onChange={(e) => setPeriodStartInput(e.target.value)}
-            />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor={`period-end-${goal.id}`}>Period end (optional)</Label>
-            <Input
-              id={`period-end-${goal.id}`}
-              type="date"
-              value={periodEndInput}
-              onChange={(e) => setPeriodEndInput(e.target.value)}
-            />
-          </div>
-        </div>
-
-        {targetError && (
-          <Alert variant="destructive">
-            <AlertDescription>{targetError}</AlertDescription>
-          </Alert>
-        )}
-        {targetSuccess && (
-          <Alert>
-            <AlertDescription>{targetSuccess}</AlertDescription>
-          </Alert>
-        )}
-
-        <Button onClick={handleSaveTarget} disabled={targetSaving}>
-          {targetSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Save my target
-        </Button>
       </div>
 
       <div className="space-y-4 border-t pt-4">
@@ -472,25 +387,74 @@ function SavingsGoalPanel({
 
         {recentContributions.length > 0 && (
           <ul className="space-y-2 text-sm">
-            {recentContributions.map((contribution) => (
+            {recentContributions.map((contributionRow) => (
               <li
-                key={contribution.id}
+                key={contributionRow.id}
                 className="flex flex-wrap items-baseline justify-between gap-2 rounded-md bg-muted/40 px-3 py-2"
               >
                 <span className="font-medium">
-                  {formatCurrency(Number(contribution.amount))}
+                  {formatCurrency(Number(contributionRow.amount))}
                 </span>
                 <span className="text-muted-foreground">
-                  {formatDisplayDate(contribution.contribution_date)}
+                  {formatDisplayDate(contributionRow.contribution_date)}
                 </span>
-                {contribution.notes && (
-                  <span className="w-full text-muted-foreground">{contribution.notes}</span>
+                {contributionRow.notes && (
+                  <span className="w-full text-muted-foreground">
+                    {contributionRow.notes}
+                  </span>
                 )}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="ml-auto h-8 px-2"
+                  onClick={() => {
+                    setEditingContribution(contributionRow);
+                    setContributionEditOpen(true);
+                  }}
+                >
+                  Edit contribution
+                </Button>
               </li>
             ))}
           </ul>
         )}
       </div>
+
+      <SavingsGoalEditDialog
+        goal={goal}
+        userId={userId}
+        open={goalEditOpen}
+        onOpenChange={setGoalEditOpen}
+        onSaved={onRefresh}
+        onDeleted={onRefresh}
+      />
+
+      <SavingsTargetEditDialog
+        participant={participant ?? null}
+        savingsGoalId={goal.id}
+        householdId={householdId}
+        userId={userId}
+        personId={personId}
+        open={targetEditOpen}
+        onOpenChange={setTargetEditOpen}
+        onSaved={onRefresh}
+      />
+
+      <SavingsContributionEditDialog
+        contribution={editingContribution}
+        householdId={householdId}
+        userId={userId}
+        open={contributionEditOpen}
+        onOpenChange={(open) => {
+          setContributionEditOpen(open);
+          if (!open) {
+            setEditingContribution(null);
+          }
+        }}
+        onSaved={onRefresh}
+        onDeleted={onRefresh}
+      />
     </div>
   );
 }
