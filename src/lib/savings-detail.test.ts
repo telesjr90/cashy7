@@ -137,7 +137,14 @@ describe("buildSavingsGoalDetailView", () => {
     const detail = buildSavingsGoalDetailView({
       goal: goal({ goal_type: "shared" }),
       participant: participant(),
-      contributions: [contribution({ amount: 50, user_id: userA })],
+      contributions: [
+        contribution({ amount: 50, user_id: userA }),
+        contribution({
+          id: "contrib-other",
+          amount: 125,
+          user_id: userB,
+        }),
+      ],
       userId: userA,
     });
 

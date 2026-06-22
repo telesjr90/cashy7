@@ -1,0 +1,31 @@
+{
+  "taskId": "CASHFLOW-CURSOR-079",
+  "result": "PASS",
+  "filesChanged": [
+    "src/lib/savings-edit.ts",
+    "src/lib/savings.ts",
+    "src/lib/savings-detail.ts",
+    "src/lib/savings-detail.test.ts",
+    "src/lib/savings.test.ts",
+    "src/lib/savings-edit.test.ts",
+    "src/lib/savings-privacy.test.ts",
+    "src/components/savings-detail-panel.tsx",
+    "src/pages/settings.tsx",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-079.md",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-079.result.json"
+  ],
+  "migrationsCreated": [],
+  "validation": {
+    "typecheck": "PASS",
+    "build": "PASS",
+    "testRun": "PASS"
+  },
+  "browserSmoke": {
+    "required": true,
+    "result": "PASS"
+  },
+  "privacy": "PASS",
+  "productRules": "PASS",
+  "readyToCommit": true,
+  "nextTaskId": "CASHFLOW-CURSOR-080"
+}

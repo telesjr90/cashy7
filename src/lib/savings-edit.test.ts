@@ -307,6 +307,14 @@ describe("delete payloads", () => {
     const payload = buildOwnParticipantDeleteId(participant(), userA);
     expect(payload).toEqual({ participantId: "participant-1" });
   });
+
+  it("rejects resetting another user's participant target", () => {
+    const payload = buildOwnParticipantDeleteId(
+      participant({ user_id: userB }),
+      userA
+    );
+    expect(payload).toEqual({ error: "You can only reset your own savings target." });
+  });
 });
 
 describe("update payload builders", () => {

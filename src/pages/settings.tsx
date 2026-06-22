@@ -43,6 +43,7 @@ import {
   buildPrivacySafeSharedGoalDisplay,
   canUserEditGoal,
   OTHER_USER_TARGET_PRIVACY_LABEL,
+  SHARED_GOAL_METADATA_ONLY_COPY,
 } from "@/lib/savings-edit";
 import { SavingsContributionEditDialog } from "@/components/savings-contribution-edit-dialog";
 import { SavingsDetailPanel } from "@/components/savings-detail-panel";
@@ -136,12 +137,12 @@ function SavingsGoalPanel({
   );
 
   const goalContributions = useMemo(
-    () => filterMyContributionsForGoal(contributions, goal.id),
-    [contributions, goal.id]
+    () => filterMyContributionsForGoal(contributions, goal.id, userId),
+    [contributions, goal.id, userId]
   );
   const myTotalContributed = useMemo(
-    () => sumMyContributionsForGoal(contributions, goal.id),
-    [contributions, goal.id]
+    () => sumMyContributionsForGoal(contributions, goal.id, userId),
+    [contributions, goal.id, userId]
   );
   const targetPeriodSummary = useMemo(
     () =>
@@ -227,7 +228,13 @@ function SavingsGoalPanel({
           <h3 className="text-lg font-medium">{goal.name}</h3>
           <div className="grid gap-1 text-sm text-muted-foreground">
             <p>Type: {goalTypeLabel(goal.goal_type)}</p>
-            <p>Target: {formatCurrency(Number(goal.target_amount))}</p>
+            <p>
+              {goal.goal_type === "shared" ? "Household target" : "Target"}:{" "}
+              {formatCurrency(Number(goal.target_amount))}
+            </p>
+            {goal.goal_type === "shared" && (
+              <p className="text-xs">{SHARED_GOAL_METADATA_ONLY_COPY}</p>
+            )}
             <p>
               {formatDisplayDate(goal.start_date)} – {formatDisplayDate(goal.end_date)}
             </p>

@@ -1,4 +1,5 @@
 import type { SavingsGoalDetailView } from "@/lib/savings-detail";
+import { SHARED_GOAL_METADATA_ONLY_COPY } from "@/lib/savings-edit";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -61,12 +62,21 @@ export function SavingsDetailPanel({
               )}
 
               <section className="space-y-3">
-                <h3 className="text-sm font-semibold">Goal metadata</h3>
+                <div>
+                  <h3 className="text-sm font-semibold">Goal metadata</h3>
+                  {detail.isSharedGoal && (
+                    <p className="text-xs text-muted-foreground">
+                      {SHARED_GOAL_METADATA_ONLY_COPY}
+                    </p>
+                  )}
+                </div>
                 <dl className="grid gap-2 text-sm">
                   <DetailRow label="Goal name" value={detail.goalName} />
                   <DetailRow label="Type" value={detail.goalTypeLabel} />
                   <DetailRow
-                    label="Target amount"
+                    label={
+                      detail.isSharedGoal ? "Household target" : "Target amount"
+                    }
                     value={detail.householdTargetAmountLabel}
                   />
                   <DetailRow label="Start date" value={detail.startDateLabel} />

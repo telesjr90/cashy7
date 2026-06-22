@@ -145,8 +145,12 @@ export function buildSavingsGoalDetailView(
 ): SavingsGoalDetailView {
   const { goal, participant, contributions, userId } = input;
   const referenceDate = input.referenceDate ?? new Date();
-  const goalContributions = filterMyContributionsForGoal(contributions, goal.id);
-  const allTimeTotal = sumMyContributionsForGoal(contributions, goal.id);
+  const goalContributions = filterMyContributionsForGoal(
+    contributions,
+    goal.id,
+    userId
+  );
+  const allTimeTotal = sumMyContributionsForGoal(contributions, goal.id, userId);
   const targetPeriodSummary = participant
     ? getMySavingsGoalTargetPeriodSummary(participant, contributions, referenceDate)
     : null;

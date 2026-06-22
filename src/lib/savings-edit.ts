@@ -12,6 +12,7 @@ export const OTHER_USER_TARGET_PRIVACY_LABEL =
   "The other user's target and saved amount remain private.";
 export const OTHER_USER_SAVED_AMOUNT_FALLBACK =
   "Private — only visible to the other member";
+export const SHARED_GOAL_METADATA_ONLY_COPY = "Shared goal metadata only.";
 
 export type GoalEditFormValues = {
   name: string;

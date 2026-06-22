@@ -486,18 +486,22 @@ export async function upsertMySavingsGoalParticipant(
 
 export function filterMyContributionsForGoal(
   contributions: SavingsContribution[],
-  savingsGoalId: string
+  savingsGoalId: string,
+  userId: string
 ): SavingsContribution[] {
   return contributions.filter(
-    (contribution) => contribution.savings_goal_id === savingsGoalId
+    (contribution) =>
+      contribution.savings_goal_id === savingsGoalId &&
+      contribution.user_id === userId
   );
 }
 
 export function sumMyContributionsForGoal(
   contributions: SavingsContribution[],
-  savingsGoalId: string
+  savingsGoalId: string,
+  userId: string
 ): number {
-  return filterMyContributionsForGoal(contributions, savingsGoalId).reduce(
+  return filterMyContributionsForGoal(contributions, savingsGoalId, userId).reduce(
     (total, contribution) => total + Number(contribution.amount),
     0
   );
@@ -579,7 +583,8 @@ export function getMySavingsGoalTargetPeriodSummary(
   const participants = [participant];
   const goalContributions = filterMyContributionsForGoal(
     contributions,
-    participant.savings_goal_id
+    participant.savings_goal_id,
+    participant.user_id
   );
 
   const targetAmount = sumMySavingsTargetForView(participants, periodView, year, month);

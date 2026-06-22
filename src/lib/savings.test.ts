@@ -32,14 +32,22 @@ function contribution(
 }
 
 describe("filterMyContributionsForGoal", () => {
-  it("returns only contributions for the requested goal", () => {
+  const userId = "user-1";
+
+  it("returns only contributions for the requested goal and user", () => {
     const contributions = [
-      contribution({ id: "1", savings_goal_id: goalA, amount: 100 }),
-      contribution({ id: "2", savings_goal_id: goalB, amount: 50 }),
-      contribution({ id: "3", savings_goal_id: goalA, amount: 25 }),
+      contribution({ id: "1", savings_goal_id: goalA, amount: 100, user_id: userId }),
+      contribution({ id: "2", savings_goal_id: goalB, amount: 50, user_id: userId }),
+      contribution({ id: "3", savings_goal_id: goalA, amount: 25, user_id: userId }),
+      contribution({
+        id: "4",
+        savings_goal_id: goalA,
+        amount: 999,
+        user_id: "other-user",
+      }),
     ];
 
-    expect(filterMyContributionsForGoal(contributions, goalA)).toEqual([
+    expect(filterMyContributionsForGoal(contributions, goalA, userId)).toEqual([
       contributions[0],
       contributions[2],
     ]);
@@ -47,22 +55,25 @@ describe("filterMyContributionsForGoal", () => {
 
   it("returns an empty array when no contributions match", () => {
     const contributions = [
-      contribution({ savings_goal_id: goalB, amount: 50 }),
+      contribution({ savings_goal_id: goalB, amount: 50, user_id: userId }),
     ];
 
-    expect(filterMyContributionsForGoal(contributions, goalA)).toEqual([]);
+    expect(filterMyContributionsForGoal(contributions, goalA, userId)).toEqual([]);
   });
 });
 
 describe("sumMyContributionsForGoal", () => {
-  it("sums numeric amounts for the requested goal", () => {
+  const userId = "user-1";
+
+  it("sums numeric amounts for the requested goal and user", () => {
     const contributions = [
-      contribution({ savings_goal_id: goalA, amount: 100 }),
-      contribution({ savings_goal_id: goalA, amount: 25.5 }),
-      contribution({ savings_goal_id: goalB, amount: 999 }),
+      contribution({ savings_goal_id: goalA, amount: 100, user_id: userId }),
+      contribution({ savings_goal_id: goalA, amount: 25.5, user_id: userId }),
+      contribution({ savings_goal_id: goalB, amount: 999, user_id: userId }),
+      contribution({ savings_goal_id: goalA, amount: 500, user_id: "other-user" }),
     ];
 
-    expect(sumMyContributionsForGoal(contributions, goalA)).toBe(125.5);
+    expect(sumMyContributionsForGoal(contributions, goalA, userId)).toBe(125.5);
   });
 
   it("coerces string amounts from the database", () => {
@@ -70,18 +81,20 @@ describe("sumMyContributionsForGoal", () => {
       contribution({
         savings_goal_id: goalA,
         amount: "40" as unknown as number,
+        user_id: userId,
       }),
       contribution({
         savings_goal_id: goalA,
         amount: "10.25" as unknown as number,
+        user_id: userId,
       }),
     ];
 
-    expect(sumMyContributionsForGoal(contributions, goalA)).toBe(50.25);
+    expect(sumMyContributionsForGoal(contributions, goalA, userId)).toBe(50.25);
   });
 
   it("returns zero when there are no contributions for the goal", () => {
-    expect(sumMyContributionsForGoal([], goalA)).toBe(0);
+    expect(sumMyContributionsForGoal([], goalA, userId)).toBe(0);
   });
 });
 
