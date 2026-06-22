@@ -48,8 +48,13 @@ import {
 import { SavingsContributionEditDialog } from "@/components/savings-contribution-edit-dialog";
 import { SavingsDetailPanel } from "@/components/savings-detail-panel";
 import { SavingsGoalEditDialog } from "@/components/savings-goal-edit-dialog";
+import {
+  SavingsContinuePeriodDialog,
+  SavingsRolloverPanel,
+} from "@/components/savings-rollover-panel";
 import { SavingsTargetEditDialog } from "@/components/savings-target-edit-dialog";
 import { buildSavingsGoalDetailView } from "@/lib/savings-detail";
+import { buildSavingsRolloverDisplayView } from "@/lib/savings-rollover";
 import type {
   CashSnapshot,
   HouseholdSettings,
@@ -124,6 +129,7 @@ function SavingsGoalPanel({
   const [goalEditOpen, setGoalEditOpen] = useState(false);
   const [targetEditOpen, setTargetEditOpen] = useState(false);
   const [contributionEditOpen, setContributionEditOpen] = useState(false);
+  const [continuePeriodOpen, setContinuePeriodOpen] = useState(false);
   const [editingContribution, setEditingContribution] =
     useState<SavingsContribution | null>(null);
 
@@ -176,6 +182,18 @@ function SavingsGoalPanel({
         contributions,
         userId,
       }),
+    [goal, participant, contributions, userId]
+  );
+  const rolloverDisplay = useMemo(
+    () =>
+      participant
+        ? buildSavingsRolloverDisplayView({
+            goal,
+            participant,
+            contributions,
+            userId,
+          })
+        : null,
     [goal, participant, contributions, userId]
   );
 
@@ -401,6 +419,25 @@ function SavingsGoalPanel({
             </p>
           </div>
         </div>
+      )}
+
+      {participant && rolloverDisplay && (
+        <SavingsRolloverPanel
+          display={rolloverDisplay}
+          continueDialog={
+            <SavingsContinuePeriodDialog
+              participant={participant}
+              contributions={contributions}
+              householdId={householdId}
+              userId={userId}
+              personId={personId}
+              display={rolloverDisplay}
+              open={continuePeriodOpen}
+              onOpenChange={setContinuePeriodOpen}
+              onSaved={onRefresh}
+            />
+          }
+        />
       )}
 
       <div className="space-y-3 border-t pt-4">

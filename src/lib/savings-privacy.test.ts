@@ -18,6 +18,10 @@ import {
   savingsDetailViewContainsRawUuid,
 } from "@/lib/savings-detail";
 import {
+  buildSavingsRolloverDisplayView,
+  collectSavingsRolloverUserFacingStrings,
+} from "@/lib/savings-rollover";
+import {
   sumMySavingsContributionsForView,
   sumMySavingsTargetForView,
 } from "@/lib/savings";
@@ -272,5 +276,28 @@ describe("edit/delete payload privacy guards", () => {
     expect(
       buildOwnContributionDeleteId(contribution({ user_id: userB }), userA)
     ).toEqual({ error: "You can only delete your own contributions." });
+  });
+});
+
+describe("savings rollover privacy", () => {
+  it("rollover display excludes other-user target and combined saved totals", () => {
+    const view = buildSavingsRolloverDisplayView({
+      goal: goal(),
+      participant: participant({ target_contribution_amount: 200 }),
+      contributions: [
+        contribution({ amount: 50, user_id: userA }),
+        contribution({ id: "b1", amount: 125, user_id: userB }),
+      ],
+      userId: userA,
+      referenceDate: new Date("2026-06-15T12:00:00.000Z"),
+    });
+
+    const strings = collectSavingsRolloverUserFacingStrings(view).join(" ");
+    expect(strings).toContain(SHARED_GOAL_PRIVACY_COPY);
+    expect(strings).toContain(OTHER_USER_TARGET_PRIVACY_LABEL);
+    expect(strings).toContain(SHARED_GOAL_METADATA_ONLY_COPY);
+    expect(strings).not.toContain(formatCurrency(125));
+    expect(strings).not.toContain(formatCurrency(300));
+    expect(strings.toLowerCase()).not.toContain("combined");
   });
 });
