@@ -55,6 +55,7 @@ describe("paymentSourceLabel", () => {
     expect(paymentSourceLabel("bill_instance")).toBe("bill");
     expect(paymentSourceLabel("debt_payment")).toBe("debt payment");
     expect(paymentSourceLabel("manual_expense")).toBe("expense");
+    expect(paymentSourceLabel("savings_contribution")).toBe("savings contribution");
   });
 });
 
@@ -63,6 +64,7 @@ describe("cashPaymentSourceTypeLabel", () => {
     expect(cashPaymentSourceTypeLabel("bill_instance")).toBe("Bill");
     expect(cashPaymentSourceTypeLabel("debt_payment")).toBe("Debt payment");
     expect(cashPaymentSourceTypeLabel("manual_expense")).toBe("Manual expense");
+    expect(cashPaymentSourceTypeLabel("savings_contribution")).toBe("Savings contribution");
   });
 });
 
@@ -141,6 +143,15 @@ describe("getLinkedPaymentSourceDescription", () => {
     ).toBe("Coffee");
   });
 
+  it("uses savings contribution goal names when available", () => {
+    expect(
+      getLinkedPaymentSourceDescription("savings_contribution", "contrib-1", {
+        ...lookups,
+        savingsContributionGoalNameById: new Map([["contrib-1", "Emergency fund"]]),
+      })
+    ).toBe("Emergency fund");
+  });
+
   it("uses fallback labels when descriptions are missing", () => {
     expect(
       getLinkedPaymentSourceDescription("bill_instance", "missing", lookups)
@@ -151,6 +162,9 @@ describe("getLinkedPaymentSourceDescription", () => {
     expect(
       getLinkedPaymentSourceDescription("manual_expense", "missing", lookups)
     ).toBe(MANUAL_EXPENSE_PAYMENT_DEDUCTION_FALLBACK_LABEL);
+    expect(
+      getLinkedPaymentSourceDescription("savings_contribution", "missing", lookups)
+    ).toBe("Savings contribution");
   });
 
   it("does not use raw UUIDs as fallback labels", () => {

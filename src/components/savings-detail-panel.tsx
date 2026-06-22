@@ -200,6 +200,11 @@ export function SavingsDetailPanel({
                               {contribution.notes}
                             </p>
                           )}
+                          {contribution.cashDeductionLabel && (
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              {contribution.cashDeductionLabel}
+                            </p>
+                          )}
                         </li>
                       ))}
                     </ul>

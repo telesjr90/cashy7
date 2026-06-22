@@ -6,6 +6,10 @@ import type {
   SavingsGoalParticipant,
 } from "@/lib/types";
 import {
+  SAVINGS_CONTRIBUTION_CASH_DEDUCTED_LABEL,
+  SAVINGS_CONTRIBUTION_NO_CASH_DEDUCTION_VISIBLE_LABEL,
+} from "@/lib/savings-cash-actions";
+import {
   SAVINGS_DETAIL_NO_CONTRIBUTIONS_FALLBACK,
   SAVINGS_DETAIL_NO_OWN_TARGET_FALLBACK,
   SAVINGS_DETAIL_OTHER_USER_PRIVACY_COPY,
@@ -226,6 +230,34 @@ describe("buildSavingsGoalDetailView", () => {
     expect(detail.contributions).toHaveLength(0);
     expect(detail.noContributionsFallback).toBe(SAVINGS_DETAIL_NO_CONTRIBUTIONS_FALLBACK);
     expect(detail.allTimeContributionsTotalLabel).toBeNull();
+  });
+
+  it("shows cash-deduction context when audit record exists", () => {
+    const detail = buildSavingsGoalDetailView({
+      goal: goal(),
+      participant: participant(),
+      contributions: [contribution({ id: "contrib-1" })],
+      userId: userA,
+      cashDeductionSourceIds: new Set(["contrib-1"]),
+    });
+
+    expect(detail.contributions[0]?.cashDeductionLabel).toBe(
+      SAVINGS_CONTRIBUTION_CASH_DEDUCTED_LABEL
+    );
+  });
+
+  it("shows privacy-safe fallback when no cash deduction record exists", () => {
+    const detail = buildSavingsGoalDetailView({
+      goal: goal(),
+      participant: participant(),
+      contributions: [contribution({ id: "contrib-1" })],
+      userId: userA,
+      cashDeductionSourceIds: new Set(),
+    });
+
+    expect(detail.contributions[0]?.cashDeductionLabel).toBe(
+      SAVINGS_CONTRIBUTION_NO_CASH_DEDUCTION_VISIBLE_LABEL
+    );
   });
 
   it("does not expose raw UUIDs in user-facing fields", () => {

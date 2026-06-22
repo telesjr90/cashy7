@@ -127,6 +127,8 @@ export function paymentSourceLabel(sourceType: PaymentSourceType): string {
       return "debt payment";
     case "manual_expense":
       return "expense";
+    case "savings_contribution":
+      return "savings contribution";
   }
 }
 
@@ -135,6 +137,8 @@ export const DEFAULT_CASH_PAYMENT_DEDUCTION_HISTORY_LIMIT = 10;
 export const BILL_PAYMENT_DEDUCTION_FALLBACK_LABEL = "Bill payment";
 export const DEBT_PAYMENT_DEDUCTION_FALLBACK_LABEL = "Debt payment";
 export const MANUAL_EXPENSE_PAYMENT_DEDUCTION_FALLBACK_LABEL = "Manual expense";
+export const SAVINGS_CONTRIBUTION_PAYMENT_DEDUCTION_FALLBACK_LABEL =
+  "Savings contribution";
 export const PAYMENT_DEDUCTION_FALLBACK_LABEL = "Payment deduction";
 
 export function cashPaymentSourceTypeLabel(sourceType: PaymentSourceType): string {
@@ -145,6 +149,8 @@ export function cashPaymentSourceTypeLabel(sourceType: PaymentSourceType): strin
       return "Debt payment";
     case "manual_expense":
       return "Manual expense";
+    case "savings_contribution":
+      return "Savings contribution";
   }
 }
 
@@ -158,6 +164,8 @@ export function getPaymentDeductionFallbackLabel(
       return DEBT_PAYMENT_DEDUCTION_FALLBACK_LABEL;
     case "manual_expense":
       return MANUAL_EXPENSE_PAYMENT_DEDUCTION_FALLBACK_LABEL;
+    case "savings_contribution":
+      return SAVINGS_CONTRIBUTION_PAYMENT_DEDUCTION_FALLBACK_LABEL;
   }
 }
 
@@ -207,6 +215,7 @@ export function getLinkedPaymentSourceDescription(
     billInstanceNameById: ReadonlyMap<string, string>;
     debtPaymentDescriptionById: ReadonlyMap<string, string>;
     manualExpenseDescriptionById: ReadonlyMap<string, string>;
+    savingsContributionGoalNameById?: ReadonlyMap<string, string>;
   }
 ): string {
   switch (sourceType) {
@@ -224,6 +233,11 @@ export function getLinkedPaymentSourceDescription(
       return (
         lookups.manualExpenseDescriptionById.get(sourceId) ??
         MANUAL_EXPENSE_PAYMENT_DEDUCTION_FALLBACK_LABEL
+      );
+    case "savings_contribution":
+      return (
+        lookups.savingsContributionGoalNameById?.get(sourceId) ??
+        SAVINGS_CONTRIBUTION_PAYMENT_DEDUCTION_FALLBACK_LABEL
       );
   }
 }
@@ -243,6 +257,7 @@ export function mapCashPaymentDeductionsForDisplay(
     billInstanceNameById: ReadonlyMap<string, string>;
     debtPaymentDescriptionById: ReadonlyMap<string, string>;
     manualExpenseDescriptionById: ReadonlyMap<string, string>;
+    savingsContributionGoalNameById?: ReadonlyMap<string, string>;
   },
   options?: { limit?: number }
 ): CashPaymentDeductionDisplayRow[] {

@@ -9,6 +9,10 @@ import {
   type OwnContributionEditFormValues,
 } from "@/lib/savings-edit";
 import {
+  SAVINGS_CONTRIBUTION_CASH_DEDUCTION_SEPARATE_LABEL,
+  SAVINGS_CONTRIBUTION_EDIT_NO_CASH_ADJUST_LABEL,
+} from "@/lib/savings-cash-actions";
+import {
   deleteMySavingsContribution,
   updateMySavingsContribution,
 } from "@/lib/savings";
@@ -38,6 +42,7 @@ import { Loader as Loader2 } from "lucide-react";
 
 type SavingsContributionEditDialogProps = {
   contribution: SavingsContribution | null;
+  hasCashDeduction?: boolean;
   householdId: string;
   userId: string;
   open: boolean;
@@ -48,6 +53,7 @@ type SavingsContributionEditDialogProps = {
 
 export function SavingsContributionEditDialog({
   contribution,
+  hasCashDeduction = false,
   householdId,
   userId,
   open,
@@ -171,6 +177,15 @@ export function SavingsContributionEditDialog({
           </DialogHeader>
 
           <div className="space-y-4">
+            {hasCashDeduction && (
+              <Alert>
+                <AlertDescription>
+                  {SAVINGS_CONTRIBUTION_CASH_DEDUCTION_SEPARATE_LABEL}{" "}
+                  {SAVINGS_CONTRIBUTION_EDIT_NO_CASH_ADJUST_LABEL}
+                </AlertDescription>
+              </Alert>
+            )}
+
             <div className="space-y-2">
               <Label htmlFor="edit-contribution-amount">Amount</Label>
               <Input

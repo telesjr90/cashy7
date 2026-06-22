@@ -1,4 +1,11 @@
 import type { PeriodView } from "@/lib/periods";
+import { paySourceFromCurrentCash } from "@/lib/payments";
+import {
+  buildSavingsContributionCashDeductionPayload,
+  buildSavingsContributionInsertPayload,
+  shouldDeductCashForSavingsContribution,
+  type SavingsContributionCashAction,
+} from "@/lib/savings-cash-actions";
 import { supabase } from "@/lib/supabase";
 import type {
   SavingsContribution,
@@ -313,6 +320,78 @@ export async function addMySavingsContribution(
   }
 
   return { contribution: data as SavingsContribution, error: null };
+}
+
+export async function addMySavingsContributionWithCashAction(
+  householdId: string,
+  userId: string,
+  input: {
+    savingsGoalId: string;
+    amount: number;
+    contributionDate?: string;
+    personId?: string | null;
+    notes?: string | null;
+    goalName: string;
+    cashAction: SavingsContributionCashAction;
+  }
+): Promise<{
+  contribution: SavingsContribution | null;
+  cashDeducted: boolean;
+  error: string | null;
+}> {
+  const contributionPayload = buildSavingsContributionInsertPayload({
+    savingsGoalId: input.savingsGoalId,
+    amount: input.amount,
+    contributionDate: input.contributionDate,
+    personId: input.personId,
+    notes: input.notes,
+  });
+
+  const { contribution, error: contributionError } = await addMySavingsContribution(
+    householdId,
+    userId,
+    contributionPayload
+  );
+
+  if (contributionError || !contribution) {
+    return {
+      contribution: null,
+      cashDeducted: false,
+      error: contributionError ?? "Failed to log savings contribution.",
+    };
+  }
+
+  if (!shouldDeductCashForSavingsContribution(input.cashAction)) {
+    return { contribution, cashDeducted: false, error: null };
+  }
+
+  const cashPayload = buildSavingsContributionCashDeductionPayload({
+    householdId,
+    userId,
+    contributionId: contribution.id,
+    amount: input.amount,
+    goalName: input.goalName,
+  });
+
+  const { error: cashError } = await paySourceFromCurrentCash({
+    householdId: cashPayload.householdId,
+    userId: cashPayload.userId,
+    personId: input.personId ?? null,
+    sourceType: cashPayload.sourceType,
+    sourceId: cashPayload.sourceId,
+    amount: cashPayload.amount,
+    notes: cashPayload.notes,
+  });
+
+  if (cashError) {
+    return {
+      contribution,
+      cashDeducted: false,
+      error: cashError,
+    };
+  }
+
+  return { contribution, cashDeducted: true, error: null };
 }
 
 export async function getMySavingsContributions(

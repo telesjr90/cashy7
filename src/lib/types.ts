@@ -548,7 +548,11 @@ export interface Database {
           household_id: string;
           user_id: string;
           person_id: string | null;
-          source_type: "bill_instance" | "debt_payment" | "manual_expense";
+          source_type:
+            | "bill_instance"
+            | "debt_payment"
+            | "manual_expense"
+            | "savings_contribution";
           source_id: string;
           amount: number;
           previous_cash_snapshot_id: string | null;
@@ -562,7 +566,11 @@ export interface Database {
           household_id: string;
           user_id: string;
           person_id?: string | null;
-          source_type: "bill_instance" | "debt_payment" | "manual_expense";
+          source_type:
+            | "bill_instance"
+            | "debt_payment"
+            | "manual_expense"
+            | "savings_contribution";
           source_id: string;
           amount: number;
           previous_cash_snapshot_id?: string | null;
@@ -576,7 +584,11 @@ export interface Database {
           household_id?: string;
           user_id?: string;
           person_id?: string | null;
-          source_type?: "bill_instance" | "debt_payment" | "manual_expense";
+          source_type?:
+            | "bill_instance"
+            | "debt_payment"
+            | "manual_expense"
+            | "savings_contribution";
           source_id?: string;
           amount?: number;
           previous_cash_snapshot_id?: string | null;

@@ -29,7 +29,7 @@ import {
   updateMyPersonMapping,
 } from "@/lib/user-person";
 import {
-  addMySavingsContribution,
+  addMySavingsContributionWithCashAction,
   createSavingsGoal,
   filterMyContributionsForGoal,
   getMySavingsContributions,
@@ -39,6 +39,20 @@ import {
   getSavingsGoals,
   sumMyContributionsForGoal,
 } from "@/lib/savings";
+import {
+  buildSavingsContributionGoalNameLookup,
+  buildContributionListCashDeductionLabel,
+  getSavingsContributionCashDeductionSourceIds,
+  SAVINGS_CONTRIBUTION_CASH_ACTION_LOG_AND_DEDUCT,
+  SAVINGS_CONTRIBUTION_CASH_ACTION_LOG_ONLY,
+  SAVINGS_CONTRIBUTION_DEDUCT_PRIVACY_COPY,
+  SAVINGS_CONTRIBUTION_LOG_AND_DEDUCT_LABEL,
+  SAVINGS_CONTRIBUTION_LOG_AND_DEDUCT_SUCCESS,
+  SAVINGS_CONTRIBUTION_LOG_ONLY_LABEL,
+  SAVINGS_CONTRIBUTION_LOG_ONLY_SUCCESS,
+  SAVINGS_CONTRIBUTION_OTHER_USER_PRIVACY_COPY,
+  type SavingsContributionCashAction,
+} from "@/lib/savings-cash-actions";
 import {
   buildPrivacySafeSharedGoalDisplay,
   canUserEditGoal,
@@ -85,6 +99,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Loader as Loader2, Settings } from "lucide-react";
 import { format, parseISO } from "date-fns";
 
@@ -110,20 +125,24 @@ interface SavingsGoalPanelProps {
   goal: SavingsGoal;
   participant: SavingsGoalParticipant | undefined;
   contributions: SavingsContribution[];
+  cashDeductionSourceIds: ReadonlySet<string>;
   personId: string | null;
   householdId: string;
   userId: string;
   onRefresh: () => Promise<void>;
+  onCashDataRefresh: () => Promise<void>;
 }
 
 function SavingsGoalPanel({
   goal,
   participant,
   contributions,
+  cashDeductionSourceIds,
   personId,
   householdId,
   userId,
   onRefresh,
+  onCashDataRefresh,
 }: SavingsGoalPanelProps) {
   const [detailOpen, setDetailOpen] = useState(false);
   const [goalEditOpen, setGoalEditOpen] = useState(false);
@@ -136,6 +155,8 @@ function SavingsGoalPanel({
   const [contributionAmountInput, setContributionAmountInput] = useState("");
   const [contributionDateInput, setContributionDateInput] = useState(todayIsoDate());
   const [contributionNotesInput, setContributionNotesInput] = useState("");
+  const [contributionCashAction, setContributionCashAction] =
+    useState<SavingsContributionCashAction>(SAVINGS_CONTRIBUTION_CASH_ACTION_LOG_ONLY);
   const [contributionSaving, setContributionSaving] = useState(false);
   const [contributionError, setContributionError] = useState<string | null>(null);
   const [contributionSuccess, setContributionSuccess] = useState<string | null>(
@@ -181,8 +202,9 @@ function SavingsGoalPanel({
         participant,
         contributions,
         userId,
+        cashDeductionSourceIds,
       }),
-    [goal, participant, contributions, userId]
+    [goal, participant, contributions, userId, cashDeductionSourceIds]
   );
   const rolloverDisplay = useMemo(
     () =>
@@ -217,26 +239,41 @@ function SavingsGoalPanel({
 
     setContributionSaving(true);
 
-    const { error } = await addMySavingsContribution(householdId, userId, {
-      savingsGoalId: goal.id,
-      amount,
-      contributionDate: contributionDateInput,
-      personId,
-      notes: contributionNotesInput.trim() || null,
-    });
+    const { cashDeducted, error } = await addMySavingsContributionWithCashAction(
+      householdId,
+      userId,
+      {
+        savingsGoalId: goal.id,
+        amount,
+        contributionDate: contributionDateInput,
+        personId,
+        notes: contributionNotesInput.trim() || null,
+        goalName: goal.name,
+        cashAction: contributionCashAction,
+      }
+    );
 
     setContributionSaving(false);
 
     if (error) {
       setContributionError(error);
+      await onRefresh();
       return;
     }
 
     await onRefresh();
+    if (cashDeducted) {
+      await onCashDataRefresh();
+    }
     setContributionAmountInput("");
     setContributionDateInput(todayIsoDate());
     setContributionNotesInput("");
-    setContributionSuccess("Contribution logged.");
+    setContributionCashAction(SAVINGS_CONTRIBUTION_CASH_ACTION_LOG_ONLY);
+    setContributionSuccess(
+      cashDeducted
+        ? SAVINGS_CONTRIBUTION_LOG_AND_DEDUCT_SUCCESS
+        : SAVINGS_CONTRIBUTION_LOG_ONLY_SUCCESS
+    );
   };
 
   return (
@@ -351,6 +388,55 @@ function SavingsGoalPanel({
           />
         </div>
 
+        <div className="space-y-3">
+          <Label>Cash action</Label>
+          <RadioGroup
+            value={contributionCashAction}
+            onValueChange={(value) =>
+              setContributionCashAction(value as SavingsContributionCashAction)
+            }
+            className="space-y-2"
+          >
+            <div className="flex items-start gap-2 rounded-md border px-3 py-2">
+              <RadioGroupItem
+                value={SAVINGS_CONTRIBUTION_CASH_ACTION_LOG_ONLY}
+                id={`contribution-cash-log-only-${goal.id}`}
+                className="mt-0.5"
+              />
+              <Label
+                htmlFor={`contribution-cash-log-only-${goal.id}`}
+                className="cursor-pointer space-y-1 font-normal"
+              >
+                <span className="block font-medium">
+                  {SAVINGS_CONTRIBUTION_LOG_ONLY_LABEL}
+                </span>
+                <span className="block text-xs text-muted-foreground">
+                  Records the contribution without changing your current cash.
+                </span>
+              </Label>
+            </div>
+            <div className="flex items-start gap-2 rounded-md border px-3 py-2">
+              <RadioGroupItem
+                value={SAVINGS_CONTRIBUTION_CASH_ACTION_LOG_AND_DEDUCT}
+                id={`contribution-cash-deduct-${goal.id}`}
+                className="mt-0.5"
+              />
+              <Label
+                htmlFor={`contribution-cash-deduct-${goal.id}`}
+                className="cursor-pointer space-y-1 font-normal"
+              >
+                <span className="block font-medium">
+                  {SAVINGS_CONTRIBUTION_LOG_AND_DEDUCT_LABEL}
+                </span>
+                <span className="block text-xs text-muted-foreground">
+                  {SAVINGS_CONTRIBUTION_DEDUCT_PRIVACY_COPY}{" "}
+                  {SAVINGS_CONTRIBUTION_OTHER_USER_PRIVACY_COPY}
+                </span>
+              </Label>
+            </div>
+          </RadioGroup>
+        </div>
+
         {contributionError && (
           <Alert variant="destructive">
             <AlertDescription>{contributionError}</AlertDescription>
@@ -364,7 +450,9 @@ function SavingsGoalPanel({
 
         <Button onClick={handleLogContribution} disabled={contributionSaving}>
           {contributionSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Log contribution
+          {contributionCashAction === SAVINGS_CONTRIBUTION_CASH_ACTION_LOG_AND_DEDUCT
+            ? SAVINGS_CONTRIBUTION_LOG_AND_DEDUCT_LABEL
+            : SAVINGS_CONTRIBUTION_LOG_ONLY_LABEL}
         </Button>
       </div>
 
@@ -459,7 +547,13 @@ function SavingsGoalPanel({
 
         {recentContributions.length > 0 && (
           <ul className="space-y-2 text-sm">
-            {recentContributions.map((contributionRow) => (
+            {recentContributions.map((contributionRow) => {
+              const cashDeductionLabel = buildContributionListCashDeductionLabel(
+                contributionRow.id,
+                cashDeductionSourceIds
+              );
+
+              return (
               <li
                 key={contributionRow.id}
                 className="flex flex-wrap items-baseline justify-between gap-2 rounded-md bg-muted/40 px-3 py-2"
@@ -475,6 +569,11 @@ function SavingsGoalPanel({
                     {contributionRow.notes}
                   </span>
                 )}
+                {cashDeductionLabel && (
+                  <span className="w-full text-xs text-muted-foreground">
+                    {cashDeductionLabel}
+                  </span>
+                )}
                 <Button
                   type="button"
                   variant="ghost"
@@ -488,7 +587,8 @@ function SavingsGoalPanel({
                   Edit contribution
                 </Button>
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
       </div>
@@ -529,6 +629,11 @@ function SavingsGoalPanel({
 
       <SavingsContributionEditDialog
         contribution={editingContribution}
+        hasCashDeduction={
+          editingContribution
+            ? cashDeductionSourceIds.has(editingContribution.id)
+            : false
+        }
         householdId={householdId}
         userId={userId}
         open={contributionEditOpen}
@@ -595,6 +700,9 @@ export function SettingsPage() {
   const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>([]);
   const [myParticipants, setMyParticipants] = useState<SavingsGoalParticipant[]>([]);
   const [myContributions, setMyContributions] = useState<SavingsContribution[]>([]);
+  const [savingsCashDeductionSourceIds, setSavingsCashDeductionSourceIds] = useState<
+    ReadonlySet<string>
+  >(() => new Set());
   const [savingsLoading, setSavingsLoading] = useState(true);
   const [savingsError, setSavingsError] = useState<string | null>(null);
   const [goalNameInput, setGoalNameInput] = useState("");
@@ -775,14 +883,21 @@ export function SettingsPage() {
             manualExpenseDescriptionById: buildManualExpenseDescriptionLookup(
               expensesResult.expenses
             ),
+            savingsContributionGoalNameById: buildSavingsContributionGoalNameLookup(
+              myContributions,
+              savingsGoals
+            ),
           },
           { limit: DEFAULT_CASH_PAYMENT_DEDUCTION_HISTORY_LIMIT }
         )
       );
+      setSavingsCashDeductionSourceIds(
+        getSavingsContributionCashDeductionSourceIds(transactionsResult.transactions)
+      );
     }
 
     setCashPaymentDeductionsLoading(false);
-  }, [household, user]);
+  }, [household, user, myContributions, savingsGoals]);
 
   const loadSavings = useCallback(async () => {
     if (!household || !user) return;
@@ -811,6 +926,10 @@ export function SettingsPage() {
     setMyContributions(contributionsResult.contributions);
     setSavingsLoading(false);
   }, [household, user]);
+
+  const refreshCashData = useCallback(async () => {
+    await Promise.all([loadLatestSnapshot(), loadCashPaymentDeductions()]);
+  }, [loadLatestSnapshot, loadCashPaymentDeductions]);
 
   useEffect(() => {
     loadSettings();
@@ -1469,10 +1588,12 @@ export function SettingsPage() {
                     goal={goal}
                     participant={participantsByGoalId.get(goal.id)}
                     contributions={myContributions}
+                    cashDeductionSourceIds={savingsCashDeductionSourceIds}
                     personId={membership?.person_id ?? null}
                     householdId={household.id}
                     userId={user.id}
                     onRefresh={loadSavings}
+                    onCashDataRefresh={refreshCashData}
                   />
                 ))}
               </div>

@@ -1,6 +1,9 @@
 import { formatCurrency } from "@/lib/format";
 import { canUserEditGoal } from "@/lib/savings-edit";
 import {
+  buildContributionCashDeductionDetailLabel,
+} from "@/lib/savings-cash-actions";
+import {
   filterMyContributionsForGoal,
   getMySavingsGoalTargetPeriodSummary,
   getParticipantSummaryMonthHint,
@@ -79,6 +82,7 @@ export interface SavingsContributionDetailRow {
   dateLabel: string;
   amountLabel: string;
   notes: string | null;
+  cashDeductionLabel: string | null;
 }
 
 export interface SavingsGoalDetailView {
@@ -119,11 +123,13 @@ export type BuildSavingsGoalDetailViewInput = {
   participant: SavingsGoalParticipant | undefined;
   contributions: SavingsContribution[];
   userId: string;
+  cashDeductionSourceIds?: ReadonlySet<string>;
   referenceDate?: Date;
 };
 
 function buildContributionRows(
-  goalContributions: SavingsContribution[]
+  goalContributions: SavingsContribution[],
+  cashDeductionSourceIds: ReadonlySet<string>
 ): SavingsContributionDetailRow[] {
   return [...goalContributions]
     .sort((left, right) => {
@@ -137,6 +143,10 @@ function buildContributionRows(
       dateLabel: formatDisplayDate(contribution.contribution_date),
       amountLabel: formatCurrency(Number(contribution.amount)),
       notes: contribution.notes?.trim() ? contribution.notes.trim() : null,
+      cashDeductionLabel: buildContributionCashDeductionDetailLabel(
+        contribution.id,
+        cashDeductionSourceIds
+      ),
     }));
 }
 
@@ -145,6 +155,7 @@ export function buildSavingsGoalDetailView(
 ): SavingsGoalDetailView {
   const { goal, participant, contributions, userId } = input;
   const referenceDate = input.referenceDate ?? new Date();
+  const cashDeductionSourceIds = input.cashDeductionSourceIds ?? new Set<string>();
   const goalContributions = filterMyContributionsForGoal(
     contributions,
     goal.id,
@@ -207,7 +218,7 @@ export function buildSavingsGoalDetailView(
     ownProgressPercentLabel:
       progressPercent === null ? null : `${progressPercent}%`,
     noOwnTargetFallback: participant ? null : SAVINGS_DETAIL_NO_OWN_TARGET_FALLBACK,
-    contributions: buildContributionRows(goalContributions),
+    contributions: buildContributionRows(goalContributions, cashDeductionSourceIds),
     periodContributionsTotalLabel: targetPeriodSummary
       ? formatCurrency(targetPeriodSummary.contributedAmount)
       : null,
@@ -249,6 +260,7 @@ export function collectSavingsDetailUserFacingStrings(
       row.dateLabel,
       row.amountLabel,
       ...(row.notes ? [row.notes] : []),
+      ...(row.cashDeductionLabel ? [row.cashDeductionLabel] : []),
     ]),
   ];
 
