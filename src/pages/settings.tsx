@@ -45,8 +45,10 @@ import {
   OTHER_USER_TARGET_PRIVACY_LABEL,
 } from "@/lib/savings-edit";
 import { SavingsContributionEditDialog } from "@/components/savings-contribution-edit-dialog";
+import { SavingsDetailPanel } from "@/components/savings-detail-panel";
 import { SavingsGoalEditDialog } from "@/components/savings-goal-edit-dialog";
 import { SavingsTargetEditDialog } from "@/components/savings-target-edit-dialog";
+import { buildSavingsGoalDetailView } from "@/lib/savings-detail";
 import type {
   CashSnapshot,
   HouseholdSettings,
@@ -117,6 +119,7 @@ function SavingsGoalPanel({
   userId,
   onRefresh,
 }: SavingsGoalPanelProps) {
+  const [detailOpen, setDetailOpen] = useState(false);
   const [goalEditOpen, setGoalEditOpen] = useState(false);
   const [targetEditOpen, setTargetEditOpen] = useState(false);
   const [contributionEditOpen, setContributionEditOpen] = useState(false);
@@ -163,6 +166,16 @@ function SavingsGoalPanel({
           })
         : null,
     [goal, participant, myTotalContributed]
+  );
+  const detailView = useMemo(
+    () =>
+      buildSavingsGoalDetailView({
+        goal,
+        participant,
+        contributions,
+        userId,
+      }),
+    [goal, participant, contributions, userId]
   );
 
   const handleLogContribution = async () => {
@@ -220,11 +233,26 @@ function SavingsGoalPanel({
             </p>
           </div>
         </div>
-        {isGoalCreator && (
-          <Button type="button" variant="outline" size="sm" onClick={() => setGoalEditOpen(true)}>
-            Edit goal
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => setDetailOpen(true)}
+          >
+            View details
           </Button>
-        )}
+          {isGoalCreator && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setGoalEditOpen(true)}
+            >
+              Edit goal
+            </Button>
+          )}
+        </div>
       </div>
 
       {sharedGoalDisplay && (
@@ -420,6 +448,20 @@ function SavingsGoalPanel({
           </ul>
         )}
       </div>
+
+      <SavingsDetailPanel
+        detail={detailView}
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+        onEditGoal={() => {
+          setDetailOpen(false);
+          setGoalEditOpen(true);
+        }}
+        onEditTarget={() => {
+          setDetailOpen(false);
+          setTargetEditOpen(true);
+        }}
+      />
 
       <SavingsGoalEditDialog
         goal={goal}
