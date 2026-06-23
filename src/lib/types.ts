@@ -703,6 +703,13 @@ export interface Database {
           source_file_name: string;
           source_file_kind: string;
           status: "applied" | "partial" | "failed";
+          strategy:
+            | "create_new_only"
+            | "update_matching"
+            | "replace_selected_month"
+            | null;
+          scope_year: number | null;
+          scope_month: number | null;
           created_at: string;
         };
         Insert: {
@@ -712,6 +719,13 @@ export interface Database {
           source_file_name: string;
           source_file_kind: string;
           status?: "applied" | "partial" | "failed";
+          strategy?:
+            | "create_new_only"
+            | "update_matching"
+            | "replace_selected_month"
+            | null;
+          scope_year?: number | null;
+          scope_month?: number | null;
           created_at?: string;
         };
         Update: {
@@ -721,6 +735,13 @@ export interface Database {
           source_file_name?: string;
           source_file_kind?: string;
           status?: "applied" | "partial" | "failed";
+          strategy?:
+            | "create_new_only"
+            | "update_matching"
+            | "replace_selected_month"
+            | null;
+          scope_year?: number | null;
+          scope_month?: number | null;
           created_at?: string;
         };
       };
@@ -734,6 +755,7 @@ export interface Database {
           row_type: string;
           target_table: string;
           target_id: string;
+          action: "created" | "updated" | "skipped" | "replaced" | "deleted";
           created_at: string;
         };
         Insert: {
@@ -745,6 +767,7 @@ export interface Database {
           row_type: string;
           target_table: string;
           target_id: string;
+          action?: "created" | "updated" | "skipped" | "replaced" | "deleted";
           created_at?: string;
         };
         Update: {
@@ -756,6 +779,7 @@ export interface Database {
           row_type?: string;
           target_table?: string;
           target_id?: string;
+          action?: "created" | "updated" | "skipped" | "replaced" | "deleted";
           created_at?: string;
         };
       };

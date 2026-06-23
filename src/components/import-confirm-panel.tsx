@@ -16,9 +16,16 @@ import {
 } from "@/lib/import-apply";
 import {
   applyImport,
-  fetchImportApplyContext,
+  fetchImportDuplicateContext,
 } from "@/lib/import-apply-service";
+import {
+  buildImportStrategyPlan,
+  strategyPlanHasWritableActions,
+  type ImportDuplicateStrategy,
+  type ImportStrategyPlan,
+} from "@/lib/import-duplicates";
 import { IMPORT_NO_RECORDS_CHANGED_COPY } from "@/lib/import-upload";
+import { ImportDuplicateStrategyPanel } from "@/components/import-duplicate-strategy-panel";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   AlertDialog,
@@ -69,6 +76,13 @@ function formatKindLabel(kind: string, count: number): string | null {
   }
 }
 
+function formatScopeLabel(year: number | null, month: number | null): string | null {
+  if (year === null || month === null) {
+    return null;
+  }
+  return `${month}/${year}`;
+}
+
 export function ImportConfirmPanel({
   validation,
   fileName,
@@ -86,12 +100,30 @@ export function ImportConfirmPanel({
   const [applyError, setApplyError] = useState<string | null>(null);
   const [applyResult, setApplyResult] = useState<ImportApplyResultSummary | null>(null);
   const [planContextReady, setPlanContextReady] = useState(false);
+  const [strategy, setStrategy] = useState<ImportDuplicateStrategy>("create_new_only");
   const [planBuild, setPlanBuild] = useState<ReturnType<typeof buildImportCreatePlans> | null>(
     null
   );
+  const [duplicateContext, setDuplicateContext] = useState<
+    Awaited<ReturnType<typeof fetchImportDuplicateContext>>["context"] | null
+  >(null);
 
   const isOwner = canUserApplyImport(membership);
   const canConfirm = validation.summary.canContinue && isOwner && applyPhase !== "applying";
+
+  const strategyPlan = useMemo<ImportStrategyPlan | null>(() => {
+    if (!planBuild || !duplicateContext) {
+      return null;
+    }
+    return buildImportStrategyPlan({
+      strategy,
+      createPlans: planBuild.plans,
+      skippedFromBuild: planBuild.skipped,
+      excludedFromBuild: planBuild.excluded,
+      context: duplicateContext,
+      userId,
+    });
+  }, [duplicateContext, planBuild, strategy, userId]);
 
   const confirmationSummary = useMemo(() => {
     if (!planBuild) {
@@ -109,7 +141,10 @@ export function ImportConfirmPanel({
   const preparePlans = async (): Promise<ReturnType<typeof buildImportCreatePlans> | null> => {
     setApplyError(null);
     setApplyPhase("loading-context");
-    const { context, error } = await fetchImportApplyContext(householdId, userId);
+    const { context, applyContext, error } = await fetchImportDuplicateContext(
+      householdId,
+      userId
+    );
     if (error) {
       setApplyError(error);
       setApplyPhase("idle");
@@ -122,8 +157,9 @@ export function ImportConfirmPanel({
       userId,
       personId,
       fileName,
-      context,
+      context: { ...applyContext, allowDuplicates: true },
     });
+    setDuplicateContext(context);
     setPlanBuild(built);
     setPlanContextReady(true);
     setApplyPhase("idle");
@@ -139,14 +175,16 @@ export function ImportConfirmPanel({
 
   const handleOpenConfirm = async () => {
     const built = planBuild ?? (await preparePlans());
-    if (built) {
+    if (built && strategyPlan && strategyPlanHasWritableActions(strategyPlan)) {
       setConfirmOpen(true);
+    } else if (built && strategyPlan) {
+      setApplyError("No records are eligible to apply with the selected duplicate strategy.");
     }
   };
 
   const handleApply = async () => {
     const currentBuild = planBuild ?? (await preparePlans());
-    if (!currentBuild) {
+    if (!currentBuild || !strategyPlan) {
       return;
     }
 
@@ -160,8 +198,7 @@ export function ImportConfirmPanel({
       membership,
       fileName,
       fileKind,
-      plans: currentBuild.plans,
-      skippedCount: currentBuild.skipped.length + currentBuild.excluded.length,
+      strategyPlan,
     });
 
     setApplyResult(result);
@@ -174,14 +211,18 @@ export function ImportConfirmPanel({
 
   const summary = confirmationSummary;
   const isBusy = applyPhase === "loading-context" || applyPhase === "applying";
+  const scopeLabel = formatScopeLabel(
+    strategyPlan?.scopeYear ?? null,
+    strategyPlan?.scopeMonth ?? null
+  );
 
   return (
     <div className="space-y-4 rounded-lg border bg-muted/10 p-4">
       <div className="space-y-1">
         <h4 className="text-sm font-medium">Confirm import</h4>
         <p className="text-sm text-muted-foreground">
-          Review what will be created, then apply only when you are ready. Nothing is
-          written until you confirm.
+          Choose how duplicates are handled, review the plan, then apply only when you are
+          ready. Nothing is written until you confirm.
         </p>
       </div>
 
@@ -189,6 +230,15 @@ export function ImportConfirmPanel({
         <Alert variant="destructive" role="alert">
           <AlertDescription>{IMPORT_OWNER_ONLY_COPY}</AlertDescription>
         </Alert>
+      )}
+
+      {isOwner && strategyPlan && (
+        <ImportDuplicateStrategyPanel
+          strategy={strategy}
+          onStrategyChange={setStrategy}
+          strategyPlan={strategyPlan}
+          scopeLabel={scopeLabel}
+        />
       )}
 
       {summary && (
@@ -202,11 +252,11 @@ export function ImportConfirmPanel({
             <dd className="font-medium">{summary.sheetSummary}</dd>
           </div>
           <div>
-            <dt className="text-muted-foreground">Rows to create</dt>
+            <dt className="text-muted-foreground">Candidate rows</dt>
             <dd className="font-medium">{summary.rowsToCreate}</dd>
           </div>
           <div>
-            <dt className="text-muted-foreground">Skipped rows</dt>
+            <dt className="text-muted-foreground">Validation skipped</dt>
             <dd className="font-medium">{summary.skippedRows}</dd>
           </div>
           <div>
@@ -217,6 +267,18 @@ export function ImportConfirmPanel({
             <dt className="text-muted-foreground">Error rows</dt>
             <dd className="font-medium">{summary.errorRows}</dd>
           </div>
+          {strategyPlan && (
+            <>
+              <div>
+                <dt className="text-muted-foreground">Planned creates</dt>
+                <dd className="font-medium">{strategyPlan.summary.toCreate}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Planned updates</dt>
+                <dd className="font-medium">{strategyPlan.summary.toUpdate}</dd>
+              </div>
+            </>
+          )}
         </dl>
       )}
 
@@ -241,10 +303,16 @@ export function ImportConfirmPanel({
             <p>{IMPORT_ROLLBACK_LATER_COPY}</p>
             <ul className="list-disc space-y-0.5 pl-4 text-sm">
               {applyResult.counts.billTemplates > 0 && (
-                <li>Bill templates: {applyResult.counts.billTemplates}</li>
+                <li>Bill templates created: {applyResult.counts.billTemplates}</li>
               )}
               {applyResult.counts.billInstances > 0 && (
-                <li>Bill instances: {applyResult.counts.billInstances}</li>
+                <li>Bill instances created: {applyResult.counts.billInstances}</li>
+              )}
+              {applyResult.counts.updated > 0 && (
+                <li>Records updated: {applyResult.counts.updated}</li>
+              )}
+              {applyResult.counts.replacedDeleted > 0 && (
+                <li>Records replaced/deleted: {applyResult.counts.replacedDeleted}</li>
               )}
               {applyResult.counts.debtPayments > 0 && (
                 <li>Debt payments: {applyResult.counts.debtPayments}</li>
@@ -258,8 +326,17 @@ export function ImportConfirmPanel({
               {applyResult.counts.savingsContributions > 0 && (
                 <li>Savings contributions: {applyResult.counts.savingsContributions}</li>
               )}
+              {applyResult.counts.skippedDuplicate > 0 && (
+                <li>Duplicates skipped: {applyResult.counts.skippedDuplicate}</li>
+              )}
+              {applyResult.counts.skippedProtected > 0 && (
+                <li>Protected skipped: {applyResult.counts.skippedProtected}</li>
+              )}
+              {applyResult.counts.skippedAmbiguous > 0 && (
+                <li>Ambiguous skipped: {applyResult.counts.skippedAmbiguous}</li>
+              )}
               {applyResult.counts.skipped > 0 && (
-                <li>Skipped: {applyResult.counts.skipped}</li>
+                <li>Total skipped: {applyResult.counts.skipped}</li>
               )}
               {applyResult.counts.failed > 0 && <li>Failed: {applyResult.counts.failed}</li>}
             </ul>
@@ -293,10 +370,12 @@ export function ImportConfirmPanel({
                 <p>{IMPORT_CONFIRM_INTRO_COPY}</p>
                 <p>{IMPORT_CONFIRM_NO_CASH_COPY}</p>
                 <p>{IMPORT_CONFIRM_REVIEW_COPY}</p>
-                {summary && (
+                {strategyPlan && (
                   <p>
-                    This import will create {summary.rowsToCreate} record
-                    {summary.rowsToCreate === 1 ? "" : "s"} from {summary.fileName}.
+                    Strategy: {strategy.replaceAll("_", " ")}. This import will create{" "}
+                    {strategyPlan.summary.toCreate}, update {strategyPlan.summary.toUpdate},
+                    and replace/delete {strategyPlan.summary.toReplaceDelete} record
+                    {strategyPlan.summary.toReplaceDelete === 1 ? "" : "s"} from {summary?.fileName}.
                   </p>
                 )}
               </div>

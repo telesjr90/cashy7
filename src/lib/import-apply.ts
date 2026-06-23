@@ -94,6 +94,7 @@ export type ImportRowExcluded = {
 };
 
 export type ImportApplyContext = {
+  allowDuplicates?: boolean;
   existingBillTemplates: { id: string; name: string }[];
   existingBillInstances: {
     name: string;
@@ -147,6 +148,11 @@ export type ImportApplyResultCounts = {
   savingsContributions: number;
   skipped: number;
   failed: number;
+  updated: number;
+  skippedDuplicate: number;
+  skippedProtected: number;
+  skippedAmbiguous: number;
+  replacedDeleted: number;
 };
 
 export type ImportApplyResultSummary = {
@@ -392,7 +398,7 @@ function buildBillTemplatePlan(
     };
   }
 
-  if (isDuplicateBillTemplate(name, context)) {
+  if (!context.allowDuplicates && isDuplicateBillTemplate(name, context)) {
     return {
       rowId: row.rowId,
       sheetName: row.sheetName,
@@ -489,6 +495,7 @@ function buildBillInstancePlan(
   }
 
   if (
+    !context.allowDuplicates &&
     isDuplicateBillInstance(
       { name, year: timing.year, month: timing.month, period: timing.period },
       context
@@ -576,6 +583,7 @@ function buildDebtPlan(
 
   const existingAccountId = findDebtAccountId(debtAccountName, context.existingDebtAccounts);
   if (
+    !context.allowDuplicates &&
     existingAccountId &&
     isDuplicateDebtPayment(
       {
@@ -696,6 +704,7 @@ function buildExpensePlan(
   }
 
   if (
+    !context.allowDuplicates &&
     isDuplicateManualExpense(
       { description, expenseDate: timing.dueDate, amount: amounts.amount },
       context
@@ -785,6 +794,7 @@ function buildSavingsPlan(
   }
 
   if (
+    !context.allowDuplicates &&
     isDuplicateSavingsContribution(
       {
         savingsGoalId: goalMatch.goalId,
@@ -971,6 +981,11 @@ export function emptyImportApplyResultCounts(): ImportApplyResultCounts {
     savingsContributions: 0,
     skipped: 0,
     failed: 0,
+    updated: 0,
+    skippedDuplicate: 0,
+    skippedProtected: 0,
+    skippedAmbiguous: 0,
+    replacedDeleted: 0,
   };
 }
 
@@ -985,17 +1000,19 @@ export function buildImportApplyResultSummary(input: {
     input.counts.debtPayments +
     input.counts.manualExpenses +
     input.counts.savingsContributions;
-  const partial = input.counts.failed > 0 && createdTotal > 0;
-  const success = input.counts.failed === 0 && createdTotal > 0;
-  const allFailed = input.counts.failed > 0 && createdTotal === 0;
+  const changedTotal =
+    createdTotal + input.counts.updated + input.counts.replacedDeleted;
+  const partial = input.counts.failed > 0 && changedTotal > 0;
+  const success = input.counts.failed === 0 && changedTotal > 0;
+  const allFailed = input.counts.failed > 0 && changedTotal === 0;
 
   let userMessage = IMPORT_APPLIED_COPY;
   if (allFailed) {
     userMessage = "Import could not be completed.";
   } else if (partial) {
-    userMessage = "Import partially applied. Some rows could not be created.";
-  } else if (createdTotal === 0 && input.counts.skipped > 0) {
-    userMessage = "No new records were created. Rows were skipped.";
+    userMessage = "Import partially applied. Some rows could not be completed.";
+  } else if (changedTotal === 0 && input.counts.skipped > 0) {
+    userMessage = "No records were changed. Rows were skipped.";
   }
 
   return {
