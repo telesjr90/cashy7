@@ -44,6 +44,11 @@ export function DebtPaymentDetailPanel({
             <SheetHeader>
               <SheetTitle>{detail.title}</SheetTitle>
               <SheetDescription>{detail.subtitle}</SheetDescription>
+              {detail.beforeCashflowStartLabel && (
+                <Badge variant="outline" className="w-fit">
+                  {detail.beforeCashflowStartLabel}
+                </Badge>
+              )}
             </SheetHeader>
 
             <div className="space-y-6 px-4 pb-6">
@@ -61,6 +66,13 @@ export function DebtPaymentDetailPanel({
                   <DetailRow label="Month" value={detail.monthYearLabel} />
                   <DetailRow label="Period bucket" value={detail.periodBucketLabel} />
                   <DetailRow label="Source" value={detail.sourceLabel} />
+                  {detail.beforeCashflowStartLabel && (
+                    <DetailRow
+                      label="Cashflow start"
+                      value={detail.beforeCashflowStartLabel}
+                      align="left"
+                    />
+                  )}
                 </dl>
               </section>
 

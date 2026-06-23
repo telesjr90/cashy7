@@ -8,6 +8,7 @@ import {
   DEBT_PAYMENT_DETAIL_NO_CASH_RECORD_VISIBLE,
   resolveDebtPaymentSourceLabel,
 } from "@/lib/debt-payment-detail";
+import { DEBT_PRE_START_LABEL } from "@/lib/debt-cashflow-start";
 import type {
   BillInstance,
   CashPaymentTransaction,
@@ -274,5 +275,50 @@ describe("buildDebtPaymentDetailView", () => {
     expect(collectDebtPaymentDetailUserFacingStrings(detail).join(" ")).not.toMatch(
       /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i
     );
+  });
+});
+
+describe("buildDebtPaymentDetailView cashflow start label", () => {
+  it("includes a pre-start label when payment_date is before cashflow start", () => {
+    const detail = buildDebtPaymentDetailView({
+      payment: makePayment({ payment_date: "2026-01-01" }),
+      account: makeAccount(),
+      linkedBill: null,
+      paymentTransaction: null,
+      accountPayments: [],
+      cashDeductedPaymentIds: new Set(),
+      cashflowStartDate: "2026-06-15",
+    });
+
+    expect(detail.beforeCashflowStartLabel).toBe(DEBT_PRE_START_LABEL);
+    expect(debtPaymentDetailViewContainsRawUuid(detail)).toBe(false);
+  });
+
+  it("omits the pre-start label for payments on or after cashflow start", () => {
+    const detail = buildDebtPaymentDetailView({
+      payment: makePayment({ payment_date: "2026-06-15" }),
+      account: makeAccount(),
+      linkedBill: null,
+      paymentTransaction: null,
+      accountPayments: [],
+      cashDeductedPaymentIds: new Set(),
+      cashflowStartDate: "2026-06-15",
+    });
+
+    expect(detail.beforeCashflowStartLabel).toBeNull();
+  });
+
+  it("omits the pre-start label when no cashflow start date is configured", () => {
+    const detail = buildDebtPaymentDetailView({
+      payment: makePayment({ payment_date: "2026-01-01" }),
+      account: makeAccount(),
+      linkedBill: null,
+      paymentTransaction: null,
+      accountPayments: [],
+      cashDeductedPaymentIds: new Set(),
+      cashflowStartDate: null,
+    });
+
+    expect(detail.beforeCashflowStartLabel).toBeNull();
   });
 });

@@ -111,6 +111,17 @@ import {
   buildActiveDebtProgressTotals,
   buildDebtAccountProgressList,
 } from "@/lib/debt-progress";
+import { getHouseholdSettings } from "@/lib/cashflow-settings";
+import {
+  DEBT_PAYMENTS_PRE_START_HIDDEN_NOTICE,
+  DEBT_PROGRESS_EXCLUDES_PRE_START_NOTICE,
+  filterDebtPaymentsByCashflowStart,
+  getDebtPageVisiblePayments,
+  getDebtPaymentPreStartLabel,
+  isDebtPaymentPreStart,
+  SHOW_PRE_START_DEBT_PAYMENTS_LABEL,
+  splitDebtPaymentsByCashflowStart,
+} from "@/lib/debt-cashflow-start";
 
 const MONTHS = [
   { value: "1", label: "January" },
@@ -220,6 +231,9 @@ export function DebtPage() {
     []
   );
   const [detailPaymentId, setDetailPaymentId] = useState<string | null>(null);
+  const [cashflowStartDate, setCashflowStartDate] = useState<string | null>(null);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [showPreStartDebtPayments, setShowPreStartDebtPayments] = useState(false);
 
   const now = new Date();
   const currentMonth = now.getMonth() + 1;
@@ -362,9 +376,11 @@ export function DebtPage() {
       paymentTransaction: paymentByDebtPaymentId.get(detailPayment.id) ?? null,
       accountPayments: debtPayments,
       cashDeductedPaymentIds,
+      cashflowStartDate,
     });
   }, [
     cashDeductedPaymentIds,
+    cashflowStartDate,
     debtAccounts,
     debtPayments,
     detailPayment,
@@ -382,16 +398,36 @@ export function DebtPage() {
     [debtAccounts]
   );
 
+  const { preStartPayments } = useMemo(
+    () => splitDebtPaymentsByCashflowStart(debtPayments, cashflowStartDate),
+    [debtPayments, cashflowStartDate]
+  );
+
+  const hasPreStartDebtPayments = preStartPayments.length > 0;
+
+  const visibleDebtPayments = useMemo(
+    () =>
+      getDebtPageVisiblePayments(
+        debtPayments,
+        cashflowStartDate,
+        showPreStartDebtPayments
+      ),
+    [debtPayments, cashflowStartDate, showPreStartDebtPayments]
+  );
+
   const debtProgressPayments = useMemo(
     () =>
-      debtPayments.map((payment) => ({
-        id: payment.id,
-        debt_account_id: payment.debt_account_id,
-        payment_date: payment.payment_date,
-        total_payment: payment.total_payment,
-        paid_status: payment.paid_status,
-      })),
-    [debtPayments]
+      filterDebtPaymentsByCashflowStart(
+        debtPayments.map((payment) => ({
+          id: payment.id,
+          debt_account_id: payment.debt_account_id,
+          payment_date: payment.payment_date,
+          total_payment: payment.total_payment,
+          paid_status: payment.paid_status,
+        })),
+        cashflowStartDate
+      ),
+    [debtPayments, cashflowStartDate]
   );
 
   const activeDebtProgressTotals = useMemo(
@@ -425,6 +461,27 @@ export function DebtPage() {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  useEffect(() => {
+    if (!household) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void getHouseholdSettings(household.id).then(({ settings }) => {
+      if (cancelled) {
+        return;
+      }
+
+      setCashflowStartDate(settings?.cashflow_start_date ?? null);
+      setSettingsLoaded(true);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [household]);
 
   const handlePaymentAmountChange = (value: string) => {
     const amount = parseFloat(value) || 0;
@@ -1539,6 +1596,12 @@ export function DebtPage() {
           </Alert>
         )}
 
+        {settingsLoaded && cashflowStartDate && hasPreStartDebtPayments && (
+          <Alert>
+            <AlertDescription>{DEBT_PROGRESS_EXCLUDES_PRE_START_NOTICE}</AlertDescription>
+          </Alert>
+        )}
+
         <DebtProgressDashboard
           activeTotals={activeDebtProgressTotals}
           activeAccountProgress={activeAccountProgress}
@@ -1878,7 +1941,17 @@ export function DebtPage() {
             <div>
               <CardTitle>Debt Payments</CardTitle>
               <CardDescription>
-                {debtPayments.length} payment{debtPayments.length !== 1 ? "s" : ""}.{" "}
+                {debtPayments.length} payment{debtPayments.length !== 1 ? "s" : ""} total.
+                {settingsLoaded &&
+                  cashflowStartDate &&
+                  hasPreStartDebtPayments &&
+                  !showPreStartDebtPayments && (
+                    <>
+                      {" "}
+                      {visibleDebtPayments.length} in active list (
+                      {preStartPayments.length} before cashflow start).
+                    </>
+                  )}{" "}
                 {PAYMENT_UX_EXPLANATION}
               </CardDescription>
             </div>
@@ -1891,6 +1964,31 @@ export function DebtPage() {
             </Button>
           </CardHeader>
           <CardContent>
+            {settingsLoaded &&
+              cashflowStartDate &&
+              hasPreStartDebtPayments && (
+                <Alert className="mb-4">
+                  <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <span>{DEBT_PAYMENTS_PRE_START_HIDDEN_NOTICE}</span>
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id="show-pre-start-debt-payments"
+                        checked={showPreStartDebtPayments}
+                        onCheckedChange={(checked) =>
+                          setShowPreStartDebtPayments(checked === true)
+                        }
+                      />
+                      <Label
+                        htmlFor="show-pre-start-debt-payments"
+                        className="text-sm font-normal"
+                      >
+                        {SHOW_PRE_START_DEBT_PAYMENTS_LABEL}
+                      </Label>
+                    </div>
+                  </AlertDescription>
+                </Alert>
+              )}
+
             {activeDebtAccounts.length === 0 && (
               <div className="text-center py-4 text-muted-foreground mb-4">
                 Create an active debt account first before adding payments.
@@ -2065,6 +2163,23 @@ export function DebtPage() {
               <div className="text-center py-8 text-muted-foreground">
                 No debt payments yet.
               </div>
+            ) : visibleDebtPayments.length === 0 ? (
+              <div className="space-y-3 py-8 text-center">
+                <p className="text-sm text-muted-foreground">
+                  {hasPreStartDebtPayments && !showPreStartDebtPayments
+                    ? "All recorded debt payments are before the cashflow start date."
+                    : "No debt payments match the current view."}
+                </p>
+                {hasPreStartDebtPayments && !showPreStartDebtPayments ? (
+                  <Button
+                    type="button"
+                    variant="link"
+                    onClick={() => setShowPreStartDebtPayments(true)}
+                  >
+                    {SHOW_PRE_START_DEBT_PAYMENTS_LABEL}
+                  </Button>
+                ) : null}
+              </div>
             ) : (
               <Table>
                 <TableHeader>
@@ -2089,14 +2204,29 @@ export function DebtPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {debtPayments.map((payment) => {
+                  {visibleDebtPayments.map((payment) => {
                     const cashStatus = getCashDeductionStatus({
                       isMarkedPaid: payment.paid_status,
                       hasPaymentTransaction: paymentByDebtPaymentId.has(payment.id),
                     });
+                    const preStartLabel = getDebtPaymentPreStartLabel(
+                      payment,
+                      cashflowStartDate
+                    );
+                    const isPreStartPayment = isDebtPaymentPreStart(
+                      payment,
+                      cashflowStartDate
+                    );
 
                     return (
-                    <TableRow key={payment.id}>
+                    <TableRow
+                      key={payment.id}
+                      className={
+                        isPreStartPayment && showPreStartDebtPayments
+                          ? "text-muted-foreground"
+                          : undefined
+                      }
+                    >
                       <TableCell>
                         <Checkbox
                           checked={payment.paid_status}
@@ -2118,6 +2248,9 @@ export function DebtPage() {
                             );
                             return account ? renderAccountArchiveBadge(account) : null;
                           })()}
+                          {preStartLabel && showPreStartDebtPayments && (
+                            <Badge variant="secondary">{preStartLabel}</Badge>
+                          )}
                         </div>
                       </TableCell>
                       <TableCell>

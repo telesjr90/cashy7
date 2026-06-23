@@ -1,0 +1,28 @@
+{
+  "taskId": "CASHFLOW-CURSOR-091",
+  "result": "PASS",
+  "filesChanged": [
+    "src/lib/debt-cashflow-start.ts",
+    "src/lib/debt-cashflow-start.test.ts",
+    "src/lib/debt-payment-detail.ts",
+    "src/lib/debt-payment-detail.test.ts",
+    "src/components/debt-payment-detail-panel.tsx",
+    "src/pages/debt.tsx",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-091.md",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-091.result.json"
+  ],
+  "migrationsCreated": [],
+  "validation": {
+    "typecheck": "PASS",
+    "build": "PASS",
+    "testRun": "PASS"
+  },
+  "browserSmoke": {
+    "required": true,
+    "result": "PASS"
+  },
+  "privacy": "PASS",
+  "productRules": "PASS",
+  "readyToCommit": true,
+  "nextTaskId": "CASHFLOW-CURSOR-092"
+}

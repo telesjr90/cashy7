@@ -3,6 +3,7 @@ import {
   BILL_DETAIL_PAY_AND_DEDUCT_LABEL,
   formatBillPeriodBucketLabel,
 } from "@/lib/bill-detail";
+import { getDebtPaymentPreStartLabel } from "@/lib/debt-cashflow-start";
 import {
   BILL_DETAIL_DEBT_ACCOUNT_ARCHIVED_MESSAGE,
   getDebtAccountArchivedBadgeLabel,
@@ -124,6 +125,7 @@ export interface DebtPaymentDetailView {
   balanceImpact: DebtPaymentBalanceImpact;
   actionGuards: DebtPaymentDetailActionGuard[];
   informationalGuards: string[];
+  beforeCashflowStartLabel: string | null;
 }
 
 export type BuildDebtPaymentDetailViewInput = {
@@ -134,6 +136,7 @@ export type BuildDebtPaymentDetailViewInput = {
   accountPayments: readonly DebtPayment[];
   cashDeductedPaymentIds: ReadonlySet<string>;
   replacementStartDate?: string;
+  cashflowStartDate?: string | null;
 };
 
 function formatDisplayDate(isoDate: string): string {
@@ -475,6 +478,10 @@ export function buildDebtPaymentDetailView(
       paymentTransaction != null &&
       paymentTransaction.source_type === "bill_instance" &&
       paymentTransaction.source_id === linkedBill.id);
+  const beforeCashflowStartLabel = getDebtPaymentPreStartLabel(
+    payment,
+    input.cashflowStartDate
+  );
 
   return {
     title: account.name,
@@ -518,6 +525,7 @@ export function buildDebtPaymentDetailView(
       payment,
       cashDeductedPaymentIds: input.cashDeductedPaymentIds,
     }),
+    beforeCashflowStartLabel,
   };
 }
 
@@ -548,6 +556,7 @@ export function collectDebtPaymentDetailUserFacingStrings(
 
   for (const value of [
     detail.archivedAccountLabel,
+    detail.beforeCashflowStartLabel,
     detail.linkedBill.billNameLabel,
     detail.linkedBill.dueDateLabel,
     detail.linkedBill.paidStatusLabel,
