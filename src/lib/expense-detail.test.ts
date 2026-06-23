@@ -9,6 +9,7 @@ import {
   ORIGINAL_EXPENSE_UNAVAILABLE_LABEL,
   PAID_THROUGH_APP_EDIT_MESSAGE,
 } from "@/lib/expense-detail";
+import { EXPENSE_PRE_START_LABEL } from "@/lib/expense-cashflow-start";
 import type {
   CashAdjustmentTransaction,
   CashPaymentTransaction,
@@ -56,6 +57,7 @@ function buildDetail(
     creditedAdjustmentIds?: Set<string>;
     userId?: string;
     shareKey?: "teles_amount" | "nicole_amount" | null;
+    cashflowStartDate?: string | null;
   }
 ) {
   return buildManualExpenseDetailView({
@@ -67,6 +69,7 @@ function buildDetail(
     paymentTransaction: options?.paymentTransaction,
     creditTransaction: options?.creditTransaction,
     creditedAdjustmentIds: options?.creditedAdjustmentIds ?? new Set(),
+    cashflowStartDate: options?.cashflowStartDate,
   });
 }
 
@@ -330,5 +333,49 @@ describe("buildManualExpenseDetailView", () => {
 
     expect(editAction?.available).toBe(false);
     expect(editAction?.explanation).toBe(EXPENSE_DETAIL_NOT_CREATOR_MESSAGE);
+  });
+});
+
+describe("buildManualExpenseDetailView cashflow start", () => {
+  it("includes a pre-start label when the expense date is before cashflow start", () => {
+    const expense = makeExpense({
+      id: "pre-start",
+      description: "Legacy expense",
+      expense_date: "2026-01-01",
+    });
+
+    const detail = buildDetail(expense, [expense], {
+      cashflowStartDate: "2026-06-15",
+    });
+
+    expect(detail?.beforeCashflowStartLabel).toBe(EXPENSE_PRE_START_LABEL);
+  });
+
+  it("omits the pre-start label for expenses on or after cashflow start", () => {
+    const expense = makeExpense({
+      id: "active",
+      description: "Current expense",
+      expense_date: "2026-06-15",
+    });
+
+    const detail = buildDetail(expense, [expense], {
+      cashflowStartDate: "2026-06-15",
+    });
+
+    expect(detail?.beforeCashflowStartLabel).toBeNull();
+  });
+
+  it("omits the pre-start label when no cashflow start date is configured", () => {
+    const expense = makeExpense({
+      id: "legacy",
+      description: "Legacy expense",
+      expense_date: "2026-01-01",
+    });
+
+    const detail = buildDetail(expense, [expense], {
+      cashflowStartDate: null,
+    });
+
+    expect(detail?.beforeCashflowStartLabel).toBeNull();
   });
 });

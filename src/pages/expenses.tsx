@@ -7,6 +7,14 @@ import {
   PAID_THROUGH_APP_EDIT_MESSAGE,
 } from "@/lib/expense-detail";
 import {
+  EXPENSE_PRE_START_LABEL,
+  EXPENSES_PRE_START_HIDDEN_NOTICE,
+  getExpensesPageVisibleInstances,
+  isManualExpensePreStart,
+  SHOW_PRE_START_EXPENSES_LABEL,
+  splitManualExpensesByCashflowStart,
+} from "@/lib/expense-cashflow-start";
+import {
   addPersistedExpenseCategory,
   extractDistinctCategoriesFromExpenses,
   loadPersistedExpenseCategories,
@@ -44,6 +52,7 @@ import {
   resolveBillShareKeyForPerson,
 } from "@/lib/bill-share";
 import { getHouseholdPeople } from "@/lib/user-person";
+import { getHouseholdSettings } from "@/lib/cashflow-settings";
 import {
   getMyCashPaymentTransactions,
   getPaidManualExpenseSourceIds,
@@ -211,6 +220,9 @@ export function ExpensesPage() {
   const [categoryMgmtError, setCategoryMgmtError] = useState<string | null>(
     null
   );
+  const [cashflowStartDate, setCashflowStartDate] = useState<string | null>(null);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [showPreStartExpenses, setShowPreStartExpenses] = useState(false);
 
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("");
@@ -294,17 +306,34 @@ export function ExpensesPage() {
     [filters]
   );
 
+  const { preStartExpenses } = useMemo(
+    () => splitManualExpensesByCashflowStart(expenses, cashflowStartDate),
+    [expenses, cashflowStartDate]
+  );
+
+  const hasPreStartExpenses = preStartExpenses.length > 0;
+
+  const expensesForFiltering = useMemo(
+    () =>
+      getExpensesPageVisibleInstances(
+        expenses,
+        cashflowStartDate,
+        showPreStartExpenses
+      ),
+    [expenses, cashflowStartDate, showPreStartExpenses]
+  );
+
   const filteredExpenses = useMemo(
     () =>
-      filterManualExpenses(expenses, filters, {
+      filterManualExpenses(expensesForFiltering, filters, {
         paidManualExpenseIds,
       }),
-    [expenses, filters, paidManualExpenseIds]
+    [expensesForFiltering, filters, paidManualExpenseIds]
   );
 
   const derivedCategories = useMemo(
-    () => extractDistinctCategoriesFromExpenses(expenses),
-    [expenses]
+    () => extractDistinctCategoriesFromExpenses(expensesForFiltering),
+    [expensesForFiltering]
   );
 
   const knownCategories = useMemo(
@@ -350,7 +379,7 @@ export function ExpensesPage() {
 
     return buildManualExpenseDetailView({
       expense: detailExpense,
-      visibleExpenses: expenses,
+      visibleExpenses: expensesForFiltering,
       userId: user.id,
       shareKey,
       paidManualExpenseIds: paidManualExpenseIds,
@@ -358,12 +387,14 @@ export function ExpensesPage() {
       creditTransaction:
         creditTransactionByAdjustmentId.get(detailExpense.id) ?? null,
       creditedAdjustmentIds,
+      cashflowStartDate,
     });
   }, [
+    cashflowStartDate,
     creditTransactionByAdjustmentId,
     creditedAdjustmentIds,
     detailExpense,
-    expenses,
+    expensesForFiltering,
     paidManualExpenseIds,
     paymentByExpenseId,
     shareKey,
@@ -507,6 +538,29 @@ export function ExpensesPage() {
   useEffect(() => {
     void fetchData();
   }, [fetchData]);
+
+  useEffect(() => {
+    if (!household) {
+      setCashflowStartDate(null);
+      setSettingsLoaded(false);
+      return;
+    }
+
+    let cancelled = false;
+
+    void getHouseholdSettings(household.id).then(({ settings }) => {
+      if (cancelled) {
+        return;
+      }
+
+      setCashflowStartDate(settings?.cashflow_start_date ?? null);
+      setSettingsLoaded(true);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [household]);
 
   useEffect(() => {
     if (!household) {
@@ -1233,16 +1287,53 @@ export function ExpensesPage() {
             <CardTitle>Recorded expenses</CardTitle>
             <CardDescription>
               Showing expenses visible to you under household privacy rules.{" "}
+              {expenses.length} expense{expenses.length !== 1 ? "s" : ""} total.
+              {settingsLoaded &&
+                cashflowStartDate &&
+                hasPreStartExpenses &&
+                !showPreStartExpenses && (
+                  <>
+                    {" "}
+                    {expensesForFiltering.length} in active list (
+                    {preStartExpenses.length} before cashflow start).
+                  </>
+                )}{" "}
               {PAYMENT_UX_EXPLANATION}
-              {filtersActive && expenses.length > 0 && (
+              {filtersActive && expensesForFiltering.length > 0 && (
                 <>
                   {" "}
-                  Showing {filteredExpenses.length} of {expenses.length} expenses.
+                  Showing {filteredExpenses.length} of {expensesForFiltering.length}{" "}
+                  expenses.
                 </>
               )}
             </CardDescription>
           </CardHeader>
           <CardContent>
+            {settingsLoaded &&
+              cashflowStartDate &&
+              hasPreStartExpenses && (
+                <Alert className="mb-4">
+                  <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <span>{EXPENSES_PRE_START_HIDDEN_NOTICE}</span>
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id="show-pre-start-expenses"
+                        checked={showPreStartExpenses}
+                        onCheckedChange={(checked) =>
+                          setShowPreStartExpenses(checked === true)
+                        }
+                      />
+                      <Label
+                        htmlFor="show-pre-start-expenses"
+                        className="text-sm font-normal"
+                      >
+                        {SHOW_PRE_START_EXPENSES_LABEL}
+                      </Label>
+                    </div>
+                  </AlertDescription>
+                </Alert>
+              )}
+
             {!loading && expenses.length > 0 && (
               <div className="mb-4 space-y-3">
                 <div className="flex flex-wrap items-end gap-2">
@@ -1450,11 +1541,29 @@ export function ExpensesPage() {
             ) : filteredExpenses.length === 0 ? (
               <div className="space-y-3 py-8 text-center">
                 <p className="text-sm text-muted-foreground">
-                  No expenses match your filters.
+                  {filtersActive
+                    ? "No expenses match your filters."
+                    : hasPreStartExpenses && !showPreStartExpenses
+                      ? "All recorded expenses are before the cashflow start date."
+                      : "No expenses match your filters."}
                 </p>
-                <Button type="button" variant="outline" onClick={resetFilters}>
-                  Clear filters
-                </Button>
+                {filtersActive ? (
+                  <Button type="button" variant="outline" onClick={resetFilters}>
+                    Clear filters
+                  </Button>
+                ) : hasPreStartExpenses && !showPreStartExpenses ? (
+                  <Button
+                    type="button"
+                    variant="link"
+                    onClick={() => setShowPreStartExpenses(true)}
+                  >
+                    {SHOW_PRE_START_EXPENSES_LABEL}
+                  </Button>
+                ) : (
+                  <Button type="button" variant="outline" onClick={resetFilters}>
+                    Clear filters
+                  </Button>
+                )}
               </div>
             ) : (
               <Table>
@@ -1474,6 +1583,10 @@ export function ExpensesPage() {
                 <TableBody>
                   {filteredExpenses.map((expense) => {
                     const isAdjustment = isManualExpenseAdjustment(expense);
+                    const isPreStartExpense = isManualExpensePreStart(
+                      expense,
+                      cashflowStartDate
+                    );
                     const hasPaymentTransaction = paymentByExpenseId.has(expense.id);
                     const cashStatus = getCashDeductionStatus({
                       isMarkedPaid: expense.is_paid,
@@ -1494,7 +1607,10 @@ export function ExpensesPage() {
                         : null;
 
                     return (
-                    <TableRow key={expense.id}>
+                    <TableRow
+                      key={expense.id}
+                      className={isPreStartExpense ? "bg-muted/30" : undefined}
+                    >
                       <TableCell>
                         {!isAdjustment ? (
                           <Checkbox
@@ -1512,6 +1628,11 @@ export function ExpensesPage() {
                               Adjustment ·{" "}
                               {adjustmentDirectionLabel(expense.adjustment_direction)}
                             </p>
+                          )}
+                          {isPreStartExpense && (
+                            <Badge variant="secondary" className="mb-1">
+                              {EXPENSE_PRE_START_LABEL}
+                            </Badge>
                           )}
                           <button
                             type="button"
@@ -2242,6 +2363,11 @@ export function ExpensesPage() {
                     ? `Adjustment · ${detailView.adjustmentDirectionLabel ?? "Adjustment"}`
                     : "Manual expense details"}
                 </SheetDescription>
+                {detailView.beforeCashflowStartLabel && (
+                  <Badge variant="secondary" className="w-fit">
+                    {detailView.beforeCashflowStartLabel}
+                  </Badge>
+                )}
               </SheetHeader>
 
               <div className="space-y-6 px-4 pb-6">

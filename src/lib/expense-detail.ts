@@ -1,4 +1,5 @@
 import type { BillShareKey } from "@/lib/bill-share";
+import { getManualExpensePreStartLabel } from "@/lib/expense-cashflow-start";
 import {
   canShowCashCreditActionForAdjustment,
   isAdjustmentAlreadyCredited,
@@ -102,6 +103,7 @@ export interface ManualExpenseDetailPaymentAudit {
 
 export interface ManualExpenseDetailView {
   description: string;
+  beforeCashflowStartLabel: string | null;
   scopeLabel: string;
   amountLabel: string;
   dateLabel: string;
@@ -456,6 +458,7 @@ export function buildManualExpenseDetailView({
   paymentTransaction,
   creditTransaction,
   creditedAdjustmentIds,
+  cashflowStartDate,
 }: {
   expense: ManualExpense;
   visibleExpenses: ReadonlyArray<ManualExpense>;
@@ -465,6 +468,7 @@ export function buildManualExpenseDetailView({
   paymentTransaction?: CashPaymentTransaction | null;
   creditTransaction?: CashAdjustmentTransaction | null;
   creditedAdjustmentIds: ReadonlySet<string>;
+  cashflowStartDate?: string | null;
 }): ManualExpenseDetailView | null {
   const isVisible = visibleExpenses.some((row) => row.id === expense.id);
   if (!isVisible) {
@@ -481,6 +485,10 @@ export function buildManualExpenseDetailView({
 
   return {
     description: expense.description,
+    beforeCashflowStartLabel: getManualExpensePreStartLabel(
+      expense,
+      cashflowStartDate
+    ),
     scopeLabel: expenseScopeLabel(expense.expense_scope),
     amountLabel: formatCurrency(Number(expense.amount)),
     dateLabel: formatDisplayDate(expense.expense_date),
