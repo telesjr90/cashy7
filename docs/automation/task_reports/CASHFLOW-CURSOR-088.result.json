@@ -1,0 +1,26 @@
+{
+  "taskId": "CASHFLOW-CURSOR-088",
+  "result": "PASS",
+  "filesChanged": [
+    "src/lib/dashboard-warnings.ts",
+    "src/lib/dashboard-warnings.test.ts",
+    "src/components/dashboard-warnings.tsx",
+    "src/pages/dashboard.tsx",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-088.md",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-088.result.json"
+  ],
+  "migrationsCreated": [],
+  "validation": {
+    "typecheck": "PASS",
+    "build": "PASS",
+    "testRun": "PASS"
+  },
+  "browserSmoke": {
+    "required": true,
+    "result": "PASS"
+  },
+  "privacy": "PASS",
+  "productRules": "PASS",
+  "readyToCommit": true,
+  "nextTaskId": "CASHFLOW-CURSOR-089"
+}

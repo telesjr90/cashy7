@@ -61,7 +61,6 @@ import {
   DollarSign,
   User,
   Calendar,
-  AlertTriangle,
 } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { formatCurrency, formatDeductionAmount } from "@/lib/format";
@@ -109,8 +108,9 @@ import { isEligibleBillTemplate } from "@/lib/bill-templates";
 import {
   buildBillTemplateLookup,
   countVariableBillsNeedingConfirmationForDashboardView,
-  VARIABLE_AMOUNT_DASHBOARD_WARNING,
 } from "@/lib/variable-bills";
+import { buildDashboardWarnings } from "@/lib/dashboard-warnings";
+import { DashboardWarnings } from "@/components/dashboard-warnings";
 import {
   activePeriodView,
   defaultPeriodViewForMonth,
@@ -122,6 +122,7 @@ import {
 import {
   buildDaysDateRange,
   buildNextMonthDateRange,
+  buildSafeToSpendForecast,
   getYearMonthKeysInDateRange,
   type BuildSafeToSpendForecastInput,
 } from "@/lib/safe-to-spend-forecast";
@@ -1014,7 +1015,6 @@ export function DashboardPage() {
       ? people.find((person) => person.id === membership.person_id) ?? null
       : null;
   const shareKey = resolveBillShareKeyForPerson(mappedPerson);
-  const showBudgetProfileNote = peopleLoaded && shareKey === null;
   const myBillTotal = sumMyBillShareTotal(bills, shareKey, periodView);
   const myBillTotalViewLabel =
     periodView === "full" ? "Full Month" : PERIOD_LABELS[periodView];
@@ -1267,6 +1267,67 @@ export function DashboardPage() {
     savingsContributionsLoading ||
     debtSummaryLoading;
 
+  const forecastSummaryForWarnings = useMemo(() => {
+    if (!safeToSpendForecastInput || safeToSpendForecastLoading) {
+      return null;
+    }
+
+    return buildSafeToSpendForecast({
+      ...safeToSpendForecastInput,
+      windowKind: "rest_of_month",
+    }).summary;
+  }, [safeToSpendForecastInput, safeToSpendForecastLoading]);
+
+  const dashboardWarnings = useMemo(() => {
+    if (!user) {
+      return [];
+    }
+
+    return buildDashboardWarnings({
+      signedInUserId: user.id,
+      shareKey,
+      peopleLoaded,
+      cashSnapshot,
+      cashflowStartDate,
+      settingsLoaded,
+      periodView,
+      selectedYear: year,
+      selectedMonth: month,
+      safeToSpendBeforeSavings,
+      safeToSpendAfterSavings,
+      variableBillCountForView: variableConfirmationCountForView,
+      forecastVariableBillCount:
+        forecastSummaryForWarnings?.incompleteVariableBillCount ?? 0,
+      remainingSavingsObligation: remainingSavingsObligationForView,
+      bills,
+      debtPayments,
+      debtLinkedBillIds,
+      forecastSummary: forecastSummaryForWarnings,
+      cashSnapshotReady: !cashSnapshotLoading,
+      forecastReady: !safeToSpendForecastLoading,
+    });
+  }, [
+    user,
+    shareKey,
+    peopleLoaded,
+    cashSnapshot,
+    cashflowStartDate,
+    settingsLoaded,
+    periodView,
+    year,
+    month,
+    safeToSpendBeforeSavings,
+    safeToSpendAfterSavings,
+    variableConfirmationCountForView,
+    forecastSummaryForWarnings,
+    remainingSavingsObligationForView,
+    bills,
+    debtPayments,
+    debtLinkedBillIds,
+    cashSnapshotLoading,
+    safeToSpendForecastLoading,
+  ]);
+
   const safeToSpendBreakdown: SafeToSpendBreakdown | null =
     cashSnapshot && safeToSpendBeforeSavings !== null && safeToSpendAfterSavings !== null
       ? {
@@ -1356,35 +1417,6 @@ export function DashboardPage() {
           <p className="mb-4 text-xs text-muted-foreground">
             Ignoring bills before {format(parseISO(cashflowStartDate), "MMM d, yyyy")}
           </p>
-        )}
-
-        {showBudgetProfileNote && (
-          <Alert className="mb-4">
-            <AlertDescription>
-              Choose your budget profile in{" "}
-              <Link to="/settings" className="font-medium underline underline-offset-4">
-                Settings
-              </Link>{" "}
-              to enable private calculations.
-            </AlertDescription>
-          </Alert>
-        )}
-
-        {variableConfirmationCountForView > 0 && (
-          <Alert className="mb-4 border-amber-500/50 bg-amber-50 text-amber-950 dark:bg-amber-950/20 dark:text-amber-100">
-            <AlertTriangle className="h-4 w-4" />
-            <AlertDescription>
-              {variableConfirmationCountForView} variable bill
-              {variableConfirmationCountForView === 1 ? "" : "s"} in this view still
-              need a confirmed amount. {VARIABLE_AMOUNT_DASHBOARD_WARNING}{" "}
-              <Link
-                to="/bills"
-                className="font-medium underline underline-offset-4 text-amber-950 dark:text-amber-100"
-              >
-                Confirm on Bills
-              </Link>
-            </AlertDescription>
-          </Alert>
         )}
 
         <Card className="mb-6">
@@ -1682,6 +1714,11 @@ export function DashboardPage() {
             )}
           </CardContent>
         </Card>
+
+        <DashboardWarnings
+          warnings={dashboardWarnings}
+          onOpenDrilldown={openDrilldown}
+        />
 
         <Card className="mb-6">
           <CardHeader className="pb-2">
