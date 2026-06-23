@@ -97,8 +97,12 @@ import type { SavingsContribution, SavingsGoalParticipant } from "@/lib/types";
 import { filterBillInstancesByCashflowStart } from "@/lib/cashflow-filter";
 import { getHouseholdSettings, getMyLatestCashSnapshot } from "@/lib/cashflow-settings";
 import {
+  buildDashboardPaycheckIncomeByPerson,
+  dashboardPaycheckLeftover,
+  formatDashboardPaycheckIncomeAmount,
   getMyPaycheckSchedule,
   mapPaycheckScheduleRow,
+  type DashboardPaycheckIncomeByPerson,
   type PaycheckScheduleSettings,
 } from "@/lib/paycheck-schedule";
 import type { CashSnapshot } from "@/lib/types";
@@ -115,7 +119,6 @@ import {
   activePeriodView,
   defaultPeriodViewForMonth,
   FUNDING_LABELS,
-  paycheckIncome,
   PERIOD_LABELS,
   type PeriodView,
 } from "@/lib/periods";
@@ -999,7 +1002,27 @@ export function DashboardPage() {
       : periodView === "1_14"
         ? period1.householdTotal
         : period2.householdTotal;
-  const summaryIncome = paycheckIncome(periodView === "full" ? "full" : periodView);
+
+  const mappedPerson =
+    usablePersonId != null
+      ? people.find((person) => person.id === usablePersonId) ?? null
+      : null;
+  const shareKey = resolveBillShareKeyForPerson(mappedPerson);
+  const period1PaycheckIncome = buildDashboardPaycheckIncomeByPerson({
+    settings: paycheckScheduleSettings,
+    periodView: "1_14",
+    shareKey,
+  });
+  const period2PaycheckIncome = buildDashboardPaycheckIncomeByPerson({
+    settings: paycheckScheduleSettings,
+    periodView: "15_eom",
+    shareKey,
+  });
+  const summaryPaycheckIncome = buildDashboardPaycheckIncomeByPerson({
+    settings: paycheckScheduleSettings,
+    periodView: periodView === "full" ? "full" : periodView,
+    shareKey,
+  });
 
   const summaryTitle =
     periodView === "full" ? "Monthly Summary" : `${PERIOD_LABELS[periodView]} Summary`;
@@ -1010,11 +1033,6 @@ export function DashboardPage() {
 
   const periodCardCount = periodView === "full" ? 2 : 1;
 
-  const mappedPerson =
-    usablePersonId != null
-      ? people.find((person) => person.id === usablePersonId) ?? null
-      : null;
-  const shareKey = resolveBillShareKeyForPerson(mappedPerson);
   const myBillTotal = sumMyBillShareTotal(bills, shareKey, periodView);
   const myBillTotalViewLabel =
     periodView === "full" ? "Full Month" : PERIOD_LABELS[periodView];
@@ -2118,7 +2136,7 @@ export function DashboardPage() {
                 formatCurrency={formatCurrency}
                 togglePaid={togglePaid}
                 isCurrentPeriod={year === new Date().getFullYear() && month === new Date().getMonth() + 1 && isFirstPeriod()}
-                paycheck={paycheckIncome("1_14")}
+                paycheck={period1PaycheckIncome}
                 fundingLabel={FUNDING_LABELS["1_14"]}
               />
             )}
@@ -2130,7 +2148,7 @@ export function DashboardPage() {
                 formatCurrency={formatCurrency}
                 togglePaid={togglePaid}
                 isCurrentPeriod={year === new Date().getFullYear() && month === new Date().getMonth() + 1 && !isFirstPeriod()}
-                paycheck={paycheckIncome("15_eom")}
+                paycheck={period2PaycheckIncome}
                 fundingLabel={FUNDING_LABELS["15_eom"]}
               />
             )}
@@ -2166,11 +2184,19 @@ export function DashboardPage() {
                       {formatCurrency(summaryTelesTotal)}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      Income {formatCurrency(summaryIncome.teles)}
+                      Income {formatDashboardPaycheckIncomeAmount(summaryPaycheckIncome.teles, formatCurrency)}
                     </p>
-                    <p className="text-xs font-medium text-blue-600 dark:text-blue-400">
-                      Leftover {formatCurrency(summaryIncome.teles - summaryTelesTotal)}
-                    </p>
+                    {dashboardPaycheckLeftover(summaryPaycheckIncome.teles, summaryTelesTotal) !== null ? (
+                      <p className="text-xs font-medium text-blue-600 dark:text-blue-400">
+                        Leftover{" "}
+                        {formatCurrency(
+                          dashboardPaycheckLeftover(
+                            summaryPaycheckIncome.teles,
+                            summaryTelesTotal
+                          ) ?? 0
+                        )}
+                      </p>
+                    ) : null}
                   </div>
                 </div>
                 <div className="flex items-center gap-3 rounded-lg border p-4">
@@ -2183,11 +2209,19 @@ export function DashboardPage() {
                       {formatCurrency(summaryNicoleTotal)}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      Income {formatCurrency(summaryIncome.nicole)}
+                      Income {formatDashboardPaycheckIncomeAmount(summaryPaycheckIncome.nicole, formatCurrency)}
                     </p>
-                    <p className="text-xs font-medium text-green-600 dark:text-green-400">
-                      Leftover {formatCurrency(summaryIncome.nicole - summaryNicoleTotal)}
-                    </p>
+                    {dashboardPaycheckLeftover(summaryPaycheckIncome.nicole, summaryNicoleTotal) !== null ? (
+                      <p className="text-xs font-medium text-green-600 dark:text-green-400">
+                        Leftover{" "}
+                        {formatCurrency(
+                          dashboardPaycheckLeftover(
+                            summaryPaycheckIncome.nicole,
+                            summaryNicoleTotal
+                          ) ?? 0
+                        )}
+                      </p>
+                    ) : null}
                   </div>
                 </div>
                 <div className="flex items-center gap-3 rounded-lg border p-4">
@@ -2200,10 +2234,13 @@ export function DashboardPage() {
                       {formatCurrency(summaryHouseholdTotal)}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      Income {formatCurrency(summaryIncome.teles + summaryIncome.nicole)}
+                      Income {formatCurrency(summaryPaycheckIncome.householdTotal)}
                     </p>
                     <p className="text-xs font-medium">
-                      Leftover {formatCurrency(summaryIncome.teles + summaryIncome.nicole - summaryHouseholdTotal)}
+                      Leftover{" "}
+                      {formatCurrency(
+                        summaryPaycheckIncome.householdTotal - summaryHouseholdTotal
+                      )}
                     </p>
                   </div>
                 </div>
@@ -2247,7 +2284,7 @@ interface PeriodCardProps {
   formatCurrency: (amount: number) => string;
   togglePaid: (bill: BillInstance) => void;
   isCurrentPeriod: boolean;
-  paycheck: { teles: number; nicole: number };
+  paycheck: DashboardPaycheckIncomeByPerson;
   fundingLabel: string;
 }
 
@@ -2282,30 +2319,41 @@ function PeriodCard({
             <p className="text-xs font-medium text-blue-600 dark:text-blue-400">Teles</p>
             <p className="text-sm font-semibold">{formatCurrency(summary.telesTotal)}</p>
             <p className="text-[10px] text-muted-foreground">
-              Income {formatCurrency(paycheck.teles)}
+              Income {formatDashboardPaycheckIncomeAmount(paycheck.teles, formatCurrency)}
             </p>
-            <p className="text-[10px] font-medium text-blue-600 dark:text-blue-400">
-              Leftover {formatCurrency(paycheck.teles - summary.telesTotal)}
-            </p>
+            {dashboardPaycheckLeftover(paycheck.teles, summary.telesTotal) !== null ? (
+              <p className="text-[10px] font-medium text-blue-600 dark:text-blue-400">
+                Leftover{" "}
+                {formatCurrency(
+                  dashboardPaycheckLeftover(paycheck.teles, summary.telesTotal) ?? 0
+                )}
+              </p>
+            ) : null}
           </div>
           <div className="text-center">
             <p className="text-xs font-medium text-green-600 dark:text-green-400">Nicole</p>
             <p className="text-sm font-semibold">{formatCurrency(summary.nicoleTotal)}</p>
             <p className="text-[10px] text-muted-foreground">
-              Income {formatCurrency(paycheck.nicole)}
+              Income {formatDashboardPaycheckIncomeAmount(paycheck.nicole, formatCurrency)}
             </p>
-            <p className="text-[10px] font-medium text-green-600 dark:text-green-400">
-              Leftover {formatCurrency(paycheck.nicole - summary.nicoleTotal)}
-            </p>
+            {dashboardPaycheckLeftover(paycheck.nicole, summary.nicoleTotal) !== null ? (
+              <p className="text-[10px] font-medium text-green-600 dark:text-green-400">
+                Leftover{" "}
+                {formatCurrency(
+                  dashboardPaycheckLeftover(paycheck.nicole, summary.nicoleTotal) ?? 0
+                )}
+              </p>
+            ) : null}
           </div>
           <div className="text-center">
             <p className="text-xs font-medium text-muted-foreground">Total</p>
             <p className="text-sm font-semibold">{formatCurrency(summary.householdTotal)}</p>
             <p className="text-[10px] text-muted-foreground">
-              Income {formatCurrency(paycheck.teles + paycheck.nicole)}
+              Income {formatCurrency(paycheck.householdTotal)}
             </p>
             <p className="text-[10px] font-medium">
-              Leftover {formatCurrency(paycheck.teles + paycheck.nicole - summary.householdTotal)}
+              Leftover{" "}
+              {formatCurrency(paycheck.householdTotal - summary.householdTotal)}
             </p>
           </div>
         </div>

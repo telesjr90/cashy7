@@ -12,9 +12,6 @@ export const FUNDING_LABELS: Record<PeriodView, string> = {
   full: "Includes both paycheck periods",
 };
 
-export const TELES_PAYCHECK = 2127.08;
-export const NICOLE_PAYCHECK = 1990.11;
-
 export function activePeriodBucket(date = new Date()): PeriodBucket {
   return date.getDate() <= 14 ? "1_14" : "15_eom";
 }
@@ -40,11 +37,4 @@ export function defaultPeriodViewForMonth(
   return isCurrentCalendarMonth(viewedDate, today)
     ? activePeriodView(today)
     : "full";
-}
-
-export function paycheckIncome(view: PeriodView): { teles: number; nicole: number } {
-  if (view === "full") {
-    return { teles: TELES_PAYCHECK * 2, nicole: NICOLE_PAYCHECK * 2 };
-  }
-  return { teles: TELES_PAYCHECK, nicole: NICOLE_PAYCHECK };
 }

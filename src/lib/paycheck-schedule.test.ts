@@ -1,18 +1,29 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildDashboardPaycheckIncomeByPerson,
   buildFixedPayDate,
   buildPaycheckForecastIncomeEvents,
+  buildPaycheckScheduleUpsertPayload,
   clampFixedPayDay,
+  computeMyPaycheckIncomeForPeriodView,
   computePayDatesForMonth,
   computePayDatesInRange,
   filterOwnPaycheckIncomeEvents,
+  formatDashboardPaycheckIncomeAmount,
   getWeekendAwareLastBusinessDay,
+  isKnownPaycheckScheduleType,
   isPaycheckScheduleConfigured,
   normalizePaycheckScheduleSettings,
   paycheckScheduleDisplayLabelsArePrivacySafe,
+  PAYCHECK_DASHBOARD_INCOME_NOT_CONFIGURED_LABEL,
+  PAYCHECK_OTHER_USER_INCOME_LABEL,
   PAYCHECK_SCHEDULE_TYPE_LABELS,
+  PAYCHECK_SETTINGS_AMOUNT_PRIVACY_COPY,
+  PAYCHECK_SETTINGS_FORECAST_ONLY_COPY,
+  PAYCHECK_SETTINGS_HOUSEHOLD_PRIVACY_COPY,
   validatePaycheckScheduleSettings,
 } from "@/lib/paycheck-schedule";
+import * as periodsModule from "@/lib/periods";
 
 const USER_ID = "user-teles";
 const OTHER_USER_ID = "user-nicole";
@@ -56,6 +67,30 @@ describe("paycheck schedule validation", () => {
         effectiveFrom: null,
       })
     ).toBeNull();
+  });
+
+  it("rejects unknown schedule type", () => {
+    expect(
+      validatePaycheckScheduleSettings({
+        amount: 100,
+        scheduleType: "weekly_friday" as never,
+        firstPayDay: null,
+        secondPayDay: null,
+        useLastBusinessDay: false,
+        isActive: true,
+        effectiveFrom: null,
+      })
+    ).toBe("Choose a valid paycheck schedule type.");
+    expect(isKnownPaycheckScheduleType("semi_monthly_15_30")).toBe(true);
+    expect(isKnownPaycheckScheduleType("unknown")).toBe(false);
+  });
+
+  it("includes required privacy copy", () => {
+    expect(PAYCHECK_SETTINGS_AMOUNT_PRIVACY_COPY).toMatch(/Only you can see your paycheck amount/i);
+    expect(PAYCHECK_SETTINGS_FORECAST_ONLY_COPY).toMatch(/forecast only/i);
+    expect(PAYCHECK_SETTINGS_HOUSEHOLD_PRIVACY_COPY).toMatch(
+      /Other household members cannot see your paycheck settings/i
+    );
   });
 });
 
@@ -208,5 +243,108 @@ describe("paycheck forecast income events", () => {
         amount: 0,
       })
     ).toBe(false);
+    expect(isPaycheckScheduleConfigured(null)).toBe(false);
+  });
+});
+
+describe("dashboard paycheck income display", () => {
+  const configuredSettings = normalizePaycheckScheduleSettings({
+    amount: 2500,
+    scheduleType: "semi_monthly_15_30",
+    firstPayDay: 15,
+    secondPayDay: 30,
+    useLastBusinessDay: false,
+    isActive: true,
+    effectiveFrom: null,
+  });
+
+  it("shows only the signed-in user's income in their column", () => {
+    const telesView = buildDashboardPaycheckIncomeByPerson({
+      settings: configuredSettings,
+      periodView: "1_14",
+      shareKey: "teles_amount",
+    });
+
+    expect(telesView.teles).toBe(2500);
+    expect(telesView.nicole).toBe("private");
+    expect(telesView.householdTotal).toBe(2500);
+  });
+
+  it("hides other-user income even when settings are passed in", () => {
+    const nicoleView = buildDashboardPaycheckIncomeByPerson({
+      settings: configuredSettings,
+      periodView: "15_eom",
+      shareKey: "nicole_amount",
+    });
+
+    expect(nicoleView.nicole).toBe(2500);
+    expect(nicoleView.teles).toBe("private");
+  });
+
+  it("uses not configured when schedule is missing or disabled", () => {
+    const missing = buildDashboardPaycheckIncomeByPerson({
+      settings: null,
+      periodView: "full",
+      shareKey: "teles_amount",
+    });
+
+    expect(missing.teles).toBe("not_configured");
+    expect(missing.householdTotal).toBe(0);
+    expect(computeMyPaycheckIncomeForPeriodView(null, "full")).toBe(0);
+  });
+
+  it("doubles income for full-month view", () => {
+    expect(computeMyPaycheckIncomeForPeriodView(configuredSettings, "full")).toBe(5000);
+    expect(computeMyPaycheckIncomeForPeriodView(configuredSettings, "1_14")).toBe(2500);
+  });
+
+  it("formats privacy-safe income labels without raw UUIDs", () => {
+    expect(
+      formatDashboardPaycheckIncomeAmount("private", (value) => `$${value}`)
+    ).toBe(PAYCHECK_OTHER_USER_INCOME_LABEL);
+    expect(
+      formatDashboardPaycheckIncomeAmount("not_configured", (value) => `$${value}`)
+    ).toBe(PAYCHECK_DASHBOARD_INCOME_NOT_CONFIGURED_LABEL);
+    expect(formatDashboardPaycheckIncomeAmount(100, (value) => `$${value}`)).toBe("$100");
+  });
+
+  it("builds upsert payload for enabled and disabled schedules", () => {
+    expect(
+      buildPaycheckScheduleUpsertPayload({
+        householdId: "household-id",
+        userId: "user-id",
+        settings: configuredSettings,
+      })
+    ).toMatchObject({
+      household_id: "household-id",
+      user_id: "user-id",
+      amount: 2500,
+      schedule_type: "semi_monthly_15_30",
+      is_active: true,
+    });
+
+    expect(
+      buildPaycheckScheduleUpsertPayload({
+        householdId: "household-id",
+        userId: "user-id",
+        settings: normalizePaycheckScheduleSettings({
+          amount: 0,
+          scheduleType: "disabled",
+          firstPayDay: null,
+          secondPayDay: null,
+          useLastBusinessDay: false,
+          isActive: false,
+          effectiveFrom: null,
+        }),
+      }).is_active
+    ).toBe(false);
+  });
+});
+
+describe("no hardcoded paycheck runtime constants", () => {
+  it("does not export Teles/Nicole paycheck fallbacks from periods module", () => {
+    expect("TELES_PAYCHECK" in periodsModule).toBe(false);
+    expect("NICOLE_PAYCHECK" in periodsModule).toBe(false);
+    expect("paycheckIncome" in periodsModule).toBe(false);
   });
 });

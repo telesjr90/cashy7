@@ -1,4 +1,6 @@
+import type { BillShareKey } from "@/lib/bill-share";
 import { supabase } from "@/lib/supabase";
+import type { PeriodView } from "@/lib/periods";
 import type { ForecastDateRange } from "@/lib/safe-to-spend-forecast";
 import type { PaycheckSchedule } from "@/lib/types";
 
@@ -26,8 +28,33 @@ export interface PaycheckForecastIncomeEvent {
   sourceLabel: string;
 }
 
+export const PAYCHECK_SETTINGS_AMOUNT_PRIVACY_COPY =
+  "Only you can see your paycheck amount.";
+
+export const PAYCHECK_SETTINGS_FORECAST_ONLY_COPY =
+  "This is used for your forecast only.";
+
+export const PAYCHECK_SETTINGS_HOUSEHOLD_PRIVACY_COPY =
+  "Other household members cannot see your paycheck settings.";
+
 export const PAYCHECK_SCHEDULE_PRIVACY_COPY =
-  "This paycheck schedule is private to you. Only your forecast includes this income. Other household members cannot see your paycheck amount.";
+  `${PAYCHECK_SETTINGS_AMOUNT_PRIVACY_COPY} ${PAYCHECK_SETTINGS_FORECAST_ONLY_COPY} ${PAYCHECK_SETTINGS_HOUSEHOLD_PRIVACY_COPY}`;
+
+export const PAYCHECK_OTHER_USER_INCOME_LABEL = "Private";
+
+export const PAYCHECK_DASHBOARD_INCOME_NOT_CONFIGURED_LABEL = "Not configured";
+
+export const PAYCHECK_SETTINGS_NO_SCHEDULE_LABEL =
+  "No paycheck schedule saved yet. Choose a schedule and amount to include expected income in your forecast.";
+
+export const PAYCHECK_SETTINGS_DISABLED_LABEL =
+  "Paycheck income is disabled. Your forecast will not include expected paychecks until you enable a schedule.";
+
+const PAYCHECK_SCHEDULE_TYPES: PaycheckScheduleType[] = [
+  "disabled",
+  "semi_monthly_15_30",
+  "semi_monthly_15_last_business_day",
+];
 
 export const PAYCHECK_LAST_BUSINESS_DAY_LIMITATION_LABEL =
   "Last business day uses weekend-aware logic only (not holiday-aware).";
@@ -183,9 +210,19 @@ export function normalizePaycheckScheduleSettings(
   };
 }
 
+export function isKnownPaycheckScheduleType(
+  value: string
+): value is PaycheckScheduleType {
+  return PAYCHECK_SCHEDULE_TYPES.includes(value as PaycheckScheduleType);
+}
+
 export function validatePaycheckScheduleSettings(
   settings: PaycheckScheduleSettings
 ): string | null {
+  if (!isKnownPaycheckScheduleType(settings.scheduleType)) {
+    return "Choose a valid paycheck schedule type.";
+  }
+
   if (settings.scheduleType === "disabled") {
     return null;
   }
@@ -199,6 +236,117 @@ export function validatePaycheckScheduleSettings(
   }
 
   return null;
+}
+
+export function buildPaycheckScheduleUpsertPayload(input: {
+  householdId: string;
+  userId: string;
+  settings: PaycheckScheduleSettings;
+}): {
+  household_id: string;
+  user_id: string;
+  amount: number;
+  schedule_type: PaycheckScheduleType;
+  first_pay_day: number | null;
+  second_pay_day: number | null;
+  use_last_business_day: boolean;
+  is_active: boolean;
+  effective_from: string | null;
+  updated_at: string;
+} {
+  const normalized = normalizePaycheckScheduleSettings(input.settings);
+  return {
+    household_id: input.householdId,
+    user_id: input.userId,
+    amount: normalized.amount,
+    schedule_type: normalized.scheduleType,
+    first_pay_day: normalized.firstPayDay,
+    second_pay_day: normalized.secondPayDay,
+    use_last_business_day: normalized.useLastBusinessDay,
+    is_active: normalized.isActive,
+    effective_from: normalized.effectiveFrom,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+export type DashboardPaycheckIncomeCell = number | "private" | "not_configured";
+
+export interface DashboardPaycheckIncomeByPerson {
+  teles: DashboardPaycheckIncomeCell;
+  nicole: DashboardPaycheckIncomeCell;
+  householdTotal: number;
+}
+
+export function computeMyPaycheckIncomeForPeriodView(
+  settings: PaycheckScheduleSettings | null | undefined,
+  periodView: PeriodView
+): number {
+  if (!isPaycheckScheduleConfigured(settings)) {
+    return 0;
+  }
+
+  const normalized = normalizePaycheckScheduleSettings(settings!);
+  if (periodView === "full") {
+    return normalized.amount * 2;
+  }
+
+  return normalized.amount;
+}
+
+export function buildDashboardPaycheckIncomeByPerson(input: {
+  settings: PaycheckScheduleSettings | null | undefined;
+  periodView: PeriodView;
+  shareKey: BillShareKey | null;
+}): DashboardPaycheckIncomeByPerson {
+  const configured = isPaycheckScheduleConfigured(input.settings);
+  const myIncome = computeMyPaycheckIncomeForPeriodView(
+    input.settings,
+    input.periodView
+  );
+  const myCell: DashboardPaycheckIncomeCell = configured
+    ? myIncome
+    : "not_configured";
+
+  let teles: DashboardPaycheckIncomeCell = "private";
+  let nicole: DashboardPaycheckIncomeCell = "private";
+
+  if (input.shareKey === "teles_amount") {
+    teles = myCell;
+  } else if (input.shareKey === "nicole_amount") {
+    nicole = myCell;
+  }
+
+  return {
+    teles,
+    nicole,
+    householdTotal: configured ? myIncome : 0,
+  };
+}
+
+export function formatDashboardPaycheckIncomeAmount(
+  cell: DashboardPaycheckIncomeCell,
+  formatCurrency: (amount: number) => string
+): string {
+  if (cell === "private") {
+    return PAYCHECK_OTHER_USER_INCOME_LABEL;
+  }
+
+  if (cell === "not_configured") {
+    return PAYCHECK_DASHBOARD_INCOME_NOT_CONFIGURED_LABEL;
+  }
+
+  return formatCurrency(cell);
+}
+
+export function dashboardPaycheckLeftover(
+  incomeCell: DashboardPaycheckIncomeCell,
+  billsTotal: number
+): number | null {
+  if (typeof incomeCell !== "number") {
+    return null;
+  }
+
+  return incomeCell - billsTotal;
 }
 
 export function isPaycheckScheduleConfigured(
@@ -336,24 +484,9 @@ export async function upsertMyPaycheckSchedule(input: {
     return { schedule: null, error: validationError };
   }
 
-  const normalized = normalizePaycheckScheduleSettings(input.settings);
   const { data, error } = await supabase
     .from("paycheck_schedules")
-    .upsert(
-      {
-        household_id: input.householdId,
-        user_id: input.userId,
-        amount: normalized.amount,
-        schedule_type: normalized.scheduleType,
-        first_pay_day: normalized.firstPayDay,
-        second_pay_day: normalized.secondPayDay,
-        use_last_business_day: normalized.useLastBusinessDay,
-        is_active: normalized.isActive,
-        effective_from: normalized.effectiveFrom,
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: "user_id" }
-    )
+    .upsert(buildPaycheckScheduleUpsertPayload(input), { onConflict: "user_id" })
     .select()
     .single();
 

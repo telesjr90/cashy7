@@ -7,6 +7,11 @@ import {
   PAYCHECK_LAST_BUSINESS_DAY_LIMITATION_LABEL,
   PAYCHECK_SCHEDULE_PRIVACY_COPY,
   PAYCHECK_SCHEDULE_TYPE_LABELS,
+  PAYCHECK_SETTINGS_AMOUNT_PRIVACY_COPY,
+  PAYCHECK_SETTINGS_DISABLED_LABEL,
+  PAYCHECK_SETTINGS_FORECAST_ONLY_COPY,
+  PAYCHECK_SETTINGS_HOUSEHOLD_PRIVACY_COPY,
+  PAYCHECK_SETTINGS_NO_SCHEDULE_LABEL,
   type PaycheckScheduleSettings,
   type PaycheckScheduleType,
   upsertMyPaycheckSchedule,
@@ -82,6 +87,15 @@ export function PaycheckScheduleSettingsPanel({
     setSaveSuccess(null);
 
     const parsedAmount = amountInput.trim() === "" ? 0 : Number(amountInput);
+    if (
+      settings.scheduleType !== "disabled" &&
+      amountInput.trim() !== "" &&
+      !Number.isFinite(parsedAmount)
+    ) {
+      setSaveError("Paycheck amount must be zero or greater.");
+      return;
+    }
+
     const nextSettings: PaycheckScheduleSettings = {
       ...settings,
       amount: parsedAmount,
@@ -114,6 +128,10 @@ export function PaycheckScheduleSettingsPanel({
     onSaved?.(schedule);
   };
 
+  const showNoScheduleState = !loading && !initialSchedule;
+  const showDisabledState =
+    !loading && settings.scheduleType === "disabled" && Boolean(initialSchedule);
+
   return (
     <Card>
       <CardHeader>
@@ -131,11 +149,24 @@ export function PaycheckScheduleSettingsPanel({
         ) : (
           <>
             <Alert>
-              <AlertDescription>
-                This paycheck schedule is private to you. Only your forecast includes this income.
-                Other household members cannot see your paycheck amount.
+              <AlertDescription className="space-y-1">
+                <p>{PAYCHECK_SETTINGS_AMOUNT_PRIVACY_COPY}</p>
+                <p>{PAYCHECK_SETTINGS_FORECAST_ONLY_COPY}</p>
+                <p>{PAYCHECK_SETTINGS_HOUSEHOLD_PRIVACY_COPY}</p>
               </AlertDescription>
             </Alert>
+
+            {showNoScheduleState ? (
+              <p className="text-sm text-muted-foreground">
+                {PAYCHECK_SETTINGS_NO_SCHEDULE_LABEL}
+              </p>
+            ) : null}
+
+            {showDisabledState ? (
+              <Alert>
+                <AlertDescription>{PAYCHECK_SETTINGS_DISABLED_LABEL}</AlertDescription>
+              </Alert>
+            ) : null}
 
             <div className="space-y-2">
               <Label htmlFor="paycheck-schedule-type">Schedule</Label>
