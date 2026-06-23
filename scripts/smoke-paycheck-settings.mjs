@@ -1,5 +1,7 @@
 /**
- * CASHFLOW-CURSOR-113 — Paycheck settings UI browser smoke.
+ * CASHFLOW-CURSOR-113/114 — Paycheck settings browser smoke.
+ *
+ * C114: selects and saves the 15th/30th schedule; verifies forecast privacy copy.
  *
  * Env: TEST_EMAIL, TEST_PASSWORD (or CASHFLOW_OWNER_* from C112 seed)
  * Optional: CASHFLOW_E2E_BASE_URL (default http://127.0.0.1:5212)
@@ -145,14 +147,14 @@ async function main() {
       `Browser console errors: ${consoleErrors.join(" | ")}`
     );
 
-    console.log("CASHFLOW-CURSOR-113 browser smoke: PASS");
+    console.log("CASHFLOW-CURSOR-114 browser smoke: PASS");
   } finally {
     await browser.close();
   }
 }
 
 main().catch((error) => {
-  console.error("CASHFLOW-CURSOR-113 browser smoke: FAIL");
+  console.error("CASHFLOW-CURSOR-114 browser smoke: FAIL");
   console.error(error.message);
   process.exit(1);
 });

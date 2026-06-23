@@ -115,6 +115,16 @@ export function buildFixedPayDate(year: number, month: number, day: number): str
   return `${year}-${monthStr}-${dayStr}`;
 }
 
+/** Calendar 15th and 30th pay dates; day 30 clamps to the month's last calendar day. */
+export function getFixedFifteenthAndThirtiethPayDates(
+  year: number,
+  month: number
+): string[] {
+  const first = buildFixedPayDate(year, month, 15);
+  const second = buildFixedPayDate(year, month, 30);
+  return first === second ? [first] : [first, second];
+}
+
 export function getWeekendAwareLastBusinessDay(year: number, month: number): string {
   const lastDay = lastDayOfMonth(year, month);
   const date = new Date(year, month - 1, lastDay);
@@ -375,9 +385,7 @@ export function computePayDatesForMonth(
   }
 
   if (normalized.scheduleType === "semi_monthly_15_30") {
-    const first = buildFixedPayDate(year, month, normalized.firstPayDay ?? 15);
-    const second = buildFixedPayDate(year, month, normalized.secondPayDay ?? 30);
-    return first === second ? [first] : [first, second];
+    return getFixedFifteenthAndThirtiethPayDates(year, month);
   }
 
   if (normalized.scheduleType === "semi_monthly_15_last_business_day") {
@@ -408,6 +416,17 @@ export function computePayDatesInRange(
   }
 
   return [...dates].sort(compareDates);
+}
+
+export function getPaycheckDatesForSchedule(
+  settings: PaycheckScheduleSettings | null | undefined,
+  range: ForecastDateRange
+): string[] {
+  if (!settings) {
+    return [];
+  }
+
+  return computePayDatesInRange(settings, range);
 }
 
 export function filterOwnPaycheckIncomeEvents<

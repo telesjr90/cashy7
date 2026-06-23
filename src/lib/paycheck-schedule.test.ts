@@ -10,6 +10,8 @@ import {
   computePayDatesInRange,
   filterOwnPaycheckIncomeEvents,
   formatDashboardPaycheckIncomeAmount,
+  getFixedFifteenthAndThirtiethPayDates,
+  getPaycheckDatesForSchedule,
   getWeekendAwareLastBusinessDay,
   isKnownPaycheckScheduleType,
   isPaycheckScheduleConfigured,
@@ -95,26 +97,115 @@ describe("paycheck schedule validation", () => {
 });
 
 describe("fixed pay day schedules", () => {
-  it("produces 15th and 30th pay dates", () => {
-    const settings = normalizePaycheckScheduleSettings({
-      amount: 2000,
-      scheduleType: "semi_monthly_15_30",
-      firstPayDay: 15,
-      secondPayDay: 30,
-      useLastBusinessDay: false,
-      isActive: true,
-      effectiveFrom: null,
-    });
+  const settings = normalizePaycheckScheduleSettings({
+    amount: 2000,
+    scheduleType: "semi_monthly_15_30",
+    firstPayDay: 15,
+    secondPayDay: 30,
+    useLastBusinessDay: false,
+    isActive: true,
+    effectiveFrom: null,
+  });
 
+  it("produces 15th and 30th pay dates", () => {
     expect(computePayDatesForMonth(settings, 2026, 6)).toEqual([
       "2026-06-15",
       "2026-06-30",
     ]);
   });
 
-  it("clamps day 30 to February month end", () => {
+  it("includes January 15 and January 30", () => {
+    expect(getFixedFifteenthAndThirtiethPayDates(2026, 1)).toEqual([
+      "2026-01-15",
+      "2026-01-30",
+    ]);
+    expect(computePayDatesForMonth(settings, 2026, 1)).toEqual([
+      "2026-01-15",
+      "2026-01-30",
+    ]);
+  });
+
+  it("includes April 15 and April 30", () => {
+    expect(getFixedFifteenthAndThirtiethPayDates(2026, 4)).toEqual([
+      "2026-04-15",
+      "2026-04-30",
+    ]);
+    expect(computePayDatesForMonth(settings, 2026, 4)).toEqual([
+      "2026-04-15",
+      "2026-04-30",
+    ]);
+  });
+
+  it("clamps day 30 to February month end in non-leap years", () => {
     expect(clampFixedPayDay(2026, 2, 30)).toBe(28);
     expect(buildFixedPayDate(2026, 2, 30)).toBe("2026-02-28");
+    expect(getFixedFifteenthAndThirtiethPayDates(2026, 2)).toEqual([
+      "2026-02-15",
+      "2026-02-28",
+    ]);
+    expect(computePayDatesForMonth(settings, 2026, 2)).toEqual([
+      "2026-02-15",
+      "2026-02-28",
+    ]);
+  });
+
+  it("clamps day 30 to February 29 in leap years", () => {
+    expect(clampFixedPayDay(2028, 2, 30)).toBe(29);
+    expect(buildFixedPayDate(2028, 2, 30)).toBe("2028-02-29");
+    expect(getFixedFifteenthAndThirtiethPayDates(2028, 2)).toEqual([
+      "2028-02-15",
+      "2028-02-29",
+    ]);
+    expect(computePayDatesForMonth(settings, 2028, 2)).toEqual([
+      "2028-02-15",
+      "2028-02-29",
+    ]);
+  });
+
+  it("includes only the 30th/last-day date when the window starts after the 15th", () => {
+    expect(
+      getPaycheckDatesForSchedule(settings, { start: "2026-06-16", end: "2026-06-30" })
+    ).toEqual(["2026-06-30"]);
+    expect(
+      getPaycheckDatesForSchedule(settings, { start: "2026-02-16", end: "2026-02-28" })
+    ).toEqual(["2026-02-28"]);
+  });
+
+  it("includes only the 15th when the window ends before the 30th", () => {
+    expect(
+      getPaycheckDatesForSchedule(settings, { start: "2026-01-01", end: "2026-01-20" })
+    ).toEqual(["2026-01-15"]);
+    expect(
+      getPaycheckDatesForSchedule(settings, { start: "2026-04-10", end: "2026-04-29" })
+    ).toEqual(["2026-04-15"]);
+  });
+
+  it("returns no dates for disabled schedule", () => {
+    const disabled = normalizePaycheckScheduleSettings({
+      amount: 0,
+      scheduleType: "disabled",
+      firstPayDay: null,
+      secondPayDay: null,
+      useLastBusinessDay: false,
+      isActive: false,
+      effectiveFrom: null,
+    });
+
+    expect(
+      getPaycheckDatesForSchedule(disabled, { start: "2026-01-01", end: "2026-01-31" })
+    ).toEqual([]);
+    expect(computePayDatesInRange(disabled, { start: "2026-01-01", end: "2026-01-31" })).toEqual(
+      []
+    );
+  });
+
+  it("returns no dates for missing schedule", () => {
+    expect(
+      getPaycheckDatesForSchedule(null, { start: "2026-01-01", end: "2026-01-31" })
+    ).toEqual([]);
+    expect(
+      getPaycheckDatesForSchedule(undefined, { start: "2026-01-01", end: "2026-01-31" })
+    ).toEqual([]);
   });
 });
 
@@ -192,6 +283,36 @@ describe("paycheck forecast income events", () => {
     });
 
     expect(dates).toEqual(["2026-06-30", "2026-07-15"]);
+  });
+
+  it("uses signed-in user amount only and ignores other-user events when filtered", () => {
+    const events = buildPaycheckForecastIncomeEvents({
+      settings: activeSettings,
+      range: { start: "2026-06-01", end: "2026-06-30" },
+      signedInUserId: USER_ID,
+      snapshotDate: "2026-05-31",
+    });
+
+    expect(events).toHaveLength(2);
+    expect(events.every((event) => event.amount === 2127.08)).toBe(true);
+    expect(events.every((event) => event.userId === USER_ID)).toBe(true);
+
+    const mixedEvents = [
+      ...events,
+      {
+        id: "other",
+        userId: OTHER_USER_ID,
+        date: "2026-06-15",
+        amount: 9999,
+        label: "Expected paycheck",
+        sourceLabel: PAYCHECK_SCHEDULE_TYPE_LABELS.semi_monthly_15_30,
+      },
+    ];
+
+    const ownOnly = filterOwnPaycheckIncomeEvents(mixedEvents, USER_ID);
+    expect(ownOnly).toHaveLength(2);
+    expect(ownOnly.every((event) => event.userId === USER_ID)).toBe(true);
+    expect(ownOnly.some((event) => event.amount === 9999)).toBe(false);
   });
 
   it("excludes other-user events when filtered", () => {
