@@ -19,14 +19,24 @@ import {
 } from "./household-invitations";
 import type { HouseholdInvitation, HouseholdMember } from "./types";
 
-const OWNER_MEMBERSHIP: Pick<HouseholdMember, "role" | "is_owner"> = {
+const OWNER_MEMBERSHIP: Pick<
+  HouseholdMember,
+  "role" | "is_owner" | "status" | "is_active"
+> = {
   role: "owner",
   is_owner: true,
+  status: "active",
+  is_active: true,
 };
 
-const MEMBER_MEMBERSHIP: Pick<HouseholdMember, "role" | "is_owner"> = {
+const MEMBER_MEMBERSHIP: Pick<
+  HouseholdMember,
+  "role" | "is_owner" | "status" | "is_active"
+> = {
   role: "member",
   is_owner: false,
+  status: "active",
+  is_active: true,
 };
 
 const INVITATION_ID = "11111111-1111-4111-8111-111111111111";
@@ -161,6 +171,23 @@ describe("household invitations helpers", () => {
   it("defaults missing membership to no invite permission", () => {
     expect(canOwnerInviteMembers(null)).toBe(false);
     expect(canOwnerInviteMembers(undefined)).toBe(false);
+  });
+
+  it("blocks removed or invited owner rows from inviting", () => {
+    expect(
+      canOwnerInviteMembers({
+        ...OWNER_MEMBERSHIP,
+        status: "removed",
+        is_active: false,
+      })
+    ).toBe(false);
+    expect(
+      canOwnerInviteMembers({
+        ...OWNER_MEMBERSHIP,
+        status: "invited",
+        is_active: true,
+      })
+    ).toBe(false);
   });
 
   it("display model hides raw UUIDs", () => {

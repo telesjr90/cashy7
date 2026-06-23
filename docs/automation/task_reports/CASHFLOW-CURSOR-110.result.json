@@ -1,0 +1,35 @@
+{
+  "taskId": "CASHFLOW-CURSOR-110",
+  "result": "PASS",
+  "filesChanged": [
+    "src/lib/permissions-audit.ts",
+    "src/lib/permissions-audit.test.ts",
+    "src/lib/auth-context.tsx",
+    "src/lib/cashflow-start-admin.ts",
+    "src/lib/household-invitations.ts",
+    "src/lib/cashflow-start-admin.test.ts",
+    "src/lib/household-invitations.test.ts",
+    "src/lib/import-apply.test.ts",
+    "src/lib/import-apply-service.test.ts",
+    "src/lib/import-rollback-service.test.ts",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-110.md",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-110.result.json",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-110-permissions-matrix.md"
+  ],
+  "migrationsCreated": [],
+  "functionsCreated": [],
+  "dependenciesAdded": [],
+  "validation": {
+    "typecheck": "PASS",
+    "build": "PASS",
+    "testRun": "PASS"
+  },
+  "browserSmoke": {
+    "required": true,
+    "result": "PASS"
+  },
+  "privacy": "PASS",
+  "productRules": "PASS",
+  "readyToCommit": true,
+  "nextTaskId": "CASHFLOW-CURSOR-111"
+}

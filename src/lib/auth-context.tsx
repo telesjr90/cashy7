@@ -30,6 +30,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .select("*")
       .eq("user_id", userId)
       .eq("is_active", true)
+      .eq("status", "active")
       .maybeSingle();
 
     if (memberError || !memberData) {

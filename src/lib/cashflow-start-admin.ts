@@ -2,6 +2,7 @@ import { isBillInstancePreStart } from "@/lib/bill-cashflow-start";
 import { isDebtPaymentPreStart } from "@/lib/debt-cashflow-start";
 import { isManualExpensePreStart } from "@/lib/expense-cashflow-start";
 import { isSavingsContributionPreStart } from "@/lib/savings-cashflow-start";
+import { isActiveHouseholdOwner } from "@/lib/permissions-audit";
 import type {
   BillInstance,
   DebtPayment,
@@ -73,13 +74,13 @@ export interface CashflowStartDateValidationResult {
 }
 
 export function canUserEditCashflowStartDate(
-  membership: Pick<HouseholdMember, "role" | "is_owner"> | null | undefined
+  membership:
+    | Pick<HouseholdMember, "role" | "is_owner">
+    | Pick<HouseholdMember, "role" | "is_owner" | "status" | "is_active">
+    | null
+    | undefined
 ): boolean {
-  if (!membership) {
-    return false;
-  }
-
-  return membership.role === "owner" || membership.is_owner === true;
+  return isActiveHouseholdOwner(membership);
 }
 
 export function validateCashflowStartDateInput(

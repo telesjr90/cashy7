@@ -23,12 +23,18 @@ import {
   validateCashflowStartDateInput,
 } from "./cashflow-start-admin";
 
-function ownerMembership(): Pick<HouseholdMember, "role" | "is_owner"> {
-  return { role: "owner", is_owner: true };
+function ownerMembership(): Pick<
+  HouseholdMember,
+  "role" | "is_owner" | "status" | "is_active"
+> {
+  return { role: "owner", is_owner: true, status: "active", is_active: true };
 }
 
-function memberMembership(): Pick<HouseholdMember, "role" | "is_owner"> {
-  return { role: "member", is_owner: false };
+function memberMembership(): Pick<
+  HouseholdMember,
+  "role" | "is_owner" | "status" | "is_active"
+> {
+  return { role: "member", is_owner: false, status: "active", is_active: true };
 }
 
 function makeBill(
@@ -129,6 +135,23 @@ describe("canUserEditCashflowStartDate", () => {
   it("defaults to read-only when membership context is missing", () => {
     expect(canUserEditCashflowStartDate(null)).toBe(false);
     expect(canUserEditCashflowStartDate(undefined)).toBe(false);
+  });
+
+  it("blocks removed or invited owner membership from editing", () => {
+    expect(
+      canUserEditCashflowStartDate({
+        ...ownerMembership(),
+        status: "removed",
+        is_active: false,
+      })
+    ).toBe(false);
+    expect(
+      canUserEditCashflowStartDate({
+        ...ownerMembership(),
+        status: "invited",
+        is_active: true,
+      })
+    ).toBe(false);
   });
 });
 

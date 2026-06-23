@@ -1,3 +1,4 @@
+import { isActiveHouseholdOwner } from "@/lib/permissions-audit";
 import type { HouseholdInvitation, HouseholdMember } from "@/lib/types";
 import { format, parseISO } from "date-fns";
 
@@ -61,12 +62,13 @@ export function validateInviteEmail(value: string): {
 }
 
 export function canOwnerInviteMembers(
-  membership: Pick<HouseholdMember, "role" | "is_owner"> | null | undefined
+  membership:
+    | Pick<HouseholdMember, "role" | "is_owner">
+    | Pick<HouseholdMember, "role" | "is_owner" | "status" | "is_active">
+    | null
+    | undefined
 ): boolean {
-  if (!membership) {
-    return false;
-  }
-  return membership.role === "owner" || membership.is_owner === true;
+  return isActiveHouseholdOwner(membership);
 }
 
 export function isSelfInvite(
@@ -119,7 +121,11 @@ export function isEmailActiveHouseholdMember(
 }
 
 export function canSendHouseholdInvite(input: {
-  membership: Pick<HouseholdMember, "role" | "is_owner"> | null | undefined;
+  membership:
+    | Pick<HouseholdMember, "role" | "is_owner">
+    | Pick<HouseholdMember, "role" | "is_owner" | "status" | "is_active">
+    | null
+    | undefined;
   ownerEmail: string | null | undefined;
   inviteEmail: string;
   activeMembers: ReadonlyArray<Pick<HouseholdMember, "email" | "status" | "is_active">>;
