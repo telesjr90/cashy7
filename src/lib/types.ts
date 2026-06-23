@@ -702,7 +702,13 @@ export interface Database {
           created_by: string;
           source_file_name: string;
           source_file_kind: string;
-          status: "applied" | "partial" | "failed";
+          status:
+            | "applied"
+            | "partial"
+            | "failed"
+            | "rolled_back"
+            | "rollback_partial"
+            | "rollback_failed";
           strategy:
             | "create_new_only"
             | "update_matching"
@@ -718,7 +724,13 @@ export interface Database {
           created_by: string;
           source_file_name: string;
           source_file_kind: string;
-          status?: "applied" | "partial" | "failed";
+          status?:
+            | "applied"
+            | "partial"
+            | "failed"
+            | "rolled_back"
+            | "rollback_partial"
+            | "rollback_failed";
           strategy?:
             | "create_new_only"
             | "update_matching"
@@ -734,7 +746,13 @@ export interface Database {
           created_by?: string;
           source_file_name?: string;
           source_file_kind?: string;
-          status?: "applied" | "partial" | "failed";
+          status?:
+            | "applied"
+            | "partial"
+            | "failed"
+            | "rolled_back"
+            | "rollback_partial"
+            | "rollback_failed";
           strategy?:
             | "create_new_only"
             | "update_matching"

@@ -32,7 +32,7 @@ export const IMPORT_APPLIED_COPY = "Import applied.";
 export const IMPORT_NO_CASH_DEDUCTED_COPY = "No cash was deducted.";
 
 export const IMPORT_ROLLBACK_LATER_COPY =
-  "Rollback/delete imported batch will be available in a later task.";
+  "Use Import history below to review or roll back a completed import batch.";
 
 export const IMPORT_NOTE_PREFIX = "[Imported from spreadsheet";
 
