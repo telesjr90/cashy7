@@ -69,9 +69,9 @@ import {
 } from "@/lib/savings";
 import {
   buildBillDrilldownRows,
-  buildMySavingsDrilldownRows,
   filterBillsForDashboardView,
 } from "@/lib/dashboard-drilldowns";
+import { buildMySavingsDrilldown } from "@/lib/dashboard-savings-drilldown";
 import {
   buildDashboardBillViewLabel,
   buildUnpaidBillDrilldown,
@@ -948,14 +948,35 @@ export function DashboardPage() {
     shareKey,
     debtLinkedBillIds
   );
-  const drilldownSavingsRows = buildMySavingsDrilldownRows(
+  const savingsDrilldown = useMemo(() => {
+    if (!user) {
+      return null;
+    }
+
+    return buildMySavingsDrilldown({
+      participants: savingsParticipants,
+      contributions: savingsContributions,
+      visibleGoals: savingsGoalsForDrilldown,
+      periodView,
+      selectedYear: year,
+      selectedMonth: month,
+      signedInUserId: user.id,
+      cardRemainingObligationTotal: remainingSavingsObligationForView,
+      paymentTransactions,
+      cashDeductionContextAvailable: !paymentTransactionsLoading,
+    });
+  }, [
+    user,
     savingsParticipants,
     savingsContributions,
     savingsGoalsForDrilldown,
     periodView,
     year,
-    month
-  );
+    month,
+    remainingSavingsObligationForView,
+    paymentTransactions,
+    paymentTransactionsLoading,
+  ]);
   const safeToSpendBreakdown: SafeToSpendBreakdown | null =
     cashSnapshot && safeToSpendBeforeSavings !== null && safeToSpendAfterSavings !== null
       ? {
@@ -1473,14 +1494,84 @@ export function DashboardPage() {
           </CardContent>
         </Card>
 
-        <Card className="mb-6">
+        <Card
+          className={`mb-6 ${
+            cashSnapshot &&
+            shareKey !== null &&
+            !cashSnapshotLoading &&
+            !loading &&
+            !savingsParticipantsLoading &&
+            !savingsContributionsLoading &&
+            !manualExpensesLoading &&
+            !paymentTransactionsLoading
+              ? "cursor-pointer transition-colors hover:bg-muted/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              : ""
+          }`}
+          role={
+            cashSnapshot &&
+            shareKey !== null &&
+            !cashSnapshotLoading &&
+            !loading &&
+            !savingsParticipantsLoading &&
+            !savingsContributionsLoading &&
+            !manualExpensesLoading &&
+            !paymentTransactionsLoading
+              ? "button"
+              : undefined
+          }
+          tabIndex={
+            cashSnapshot &&
+            shareKey !== null &&
+            !cashSnapshotLoading &&
+            !loading &&
+            !savingsParticipantsLoading &&
+            !savingsContributionsLoading &&
+            !manualExpensesLoading &&
+            !paymentTransactionsLoading
+              ? 0
+              : undefined
+          }
+          onClick={() => {
+            if (
+              cashSnapshot &&
+              shareKey !== null &&
+              !cashSnapshotLoading &&
+              !loading &&
+              !savingsParticipantsLoading &&
+              !savingsContributionsLoading &&
+              !manualExpensesLoading &&
+              !paymentTransactionsLoading
+            ) {
+              openDrilldown("savings");
+            }
+          }}
+          onKeyDown={(event) => {
+            if (
+              cashSnapshot &&
+              shareKey !== null &&
+              !cashSnapshotLoading &&
+              !loading &&
+              !savingsParticipantsLoading &&
+              !savingsContributionsLoading &&
+              !manualExpensesLoading &&
+              !paymentTransactionsLoading &&
+              (event.key === "Enter" || event.key === " ")
+            ) {
+              event.preventDefault();
+              openDrilldown("savings");
+            }
+          }}
+        >
           <CardHeader className="pb-2">
             <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
               <CardTitle className="mr-auto text-base">Safe to spend after savings</CardTitle>
               <Button
                 variant="link"
                 className="h-auto p-0 text-sm"
-                onClick={() => openDrilldown("savings")}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  openDrilldown("savings");
+                }}
               >
                 View savings
               </Button>
@@ -1798,7 +1889,10 @@ export function DashboardPage() {
         unpaidBillReconciliation={unpaidBillDrilldown?.reconciliation ?? null}
         expenseRows={manualExpenseDrilldown?.rows ?? []}
         expenseReconciliation={manualExpenseDrilldown?.reconciliation ?? null}
-        savingsRows={drilldownSavingsRows}
+        savingsTargetRows={savingsDrilldown?.targetRows ?? []}
+        savingsSummary={savingsDrilldown?.summary ?? null}
+        savingsReconciliation={savingsDrilldown?.reconciliation ?? null}
+        savingsHasSharedGoals={savingsDrilldown?.hasSharedGoals ?? false}
         safeToSpendBreakdown={safeToSpendBreakdown}
         loading={drilldownLoading}
         emptyMessage={drilldownEmptyMessage}

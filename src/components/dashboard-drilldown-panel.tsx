@@ -19,10 +19,20 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { formatCurrency, formatDeductionAmount } from "@/lib/format";
+import type { DashboardBillDrilldownRow } from "@/lib/dashboard-drilldowns";
 import type {
-  DashboardBillDrilldownRow,
-  DashboardSavingsDrilldownRow,
-} from "@/lib/dashboard-drilldowns";
+  DashboardSavingsDrilldownReconciliation,
+  DashboardSavingsTargetDrilldownRow,
+} from "@/lib/dashboard-savings-drilldown";
+import {
+  DEFAULT_DASHBOARD_SAVINGS_DRILLDOWN_FILTERS,
+  filterSavingsTargetRowsLocally,
+  hasActiveSavingsDrilldownFilters,
+  SAVINGS_DRILLDOWN_CASH_CONTEXT_UNAVAILABLE_MESSAGE,
+  SAVINGS_DRILLDOWN_EMPTY_MESSAGE,
+  SAVINGS_DRILLDOWN_SHARED_PRIVACY_HEADING,
+  type DashboardSavingsDrilldownSummary,
+} from "@/lib/dashboard-savings-drilldown";
 import type {
   DashboardUnpaidBillDrilldownReconciliation,
   DashboardUnpaidBillDrilldownRow,
@@ -73,7 +83,10 @@ interface DashboardDrilldownPanelProps {
   unpaidBillReconciliation?: DashboardUnpaidBillDrilldownReconciliation | null;
   expenseRows?: DashboardExpenseDrilldownRow[];
   expenseReconciliation?: DashboardExpenseDrilldownReconciliation | null;
-  savingsRows?: DashboardSavingsDrilldownRow[];
+  savingsTargetRows?: DashboardSavingsTargetDrilldownRow[];
+  savingsSummary?: DashboardSavingsDrilldownSummary | null;
+  savingsReconciliation?: DashboardSavingsDrilldownReconciliation | null;
+  savingsHasSharedGoals?: boolean;
   safeToSpendBreakdown?: SafeToSpendBreakdown | null;
   loading?: boolean;
   emptyMessage?: string;
@@ -228,7 +241,8 @@ function DrilldownReconciliation({
 }: {
   reconciliation:
     | DashboardUnpaidBillDrilldownReconciliation
-    | DashboardExpenseDrilldownReconciliation;
+    | DashboardExpenseDrilldownReconciliation
+    | DashboardSavingsDrilldownReconciliation;
 }) {
   return (
     <div className="rounded-lg border bg-muted/30 p-3 text-sm">
@@ -457,62 +471,268 @@ function ExpenseDrilldownSection({
   );
 }
 
-function SavingsRowsList({ rows }: { rows: DashboardSavingsDrilldownRow[] }) {
+function SavingsDrilldownSection({
+  rows,
+  summary,
+  reconciliation,
+  viewLabel,
+  hasSharedGoals,
+  cashDeductionContextAvailable,
+}: {
+  rows: DashboardSavingsTargetDrilldownRow[];
+  summary: DashboardSavingsDrilldownSummary | null;
+  reconciliation: DashboardSavingsDrilldownReconciliation | null;
+  viewLabel: string;
+  hasSharedGoals: boolean;
+  cashDeductionContextAvailable: boolean;
+}) {
+  const [filters, setFilters] = useState(DEFAULT_DASHBOARD_SAVINGS_DRILLDOWN_FILTERS);
+  const filteredRows = useMemo(
+    () => filterSavingsTargetRowsLocally(rows, filters),
+    [rows, filters]
+  );
+  const filtersActive = hasActiveSavingsDrilldownFilters(filters);
+
+  useEffect(() => {
+    setFilters(DEFAULT_DASHBOARD_SAVINGS_DRILLDOWN_FILTERS);
+  }, [rows]);
+
   if (rows.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground">
-        No savings targets apply to this view.
-      </p>
+      <p className="text-sm text-muted-foreground">{SAVINGS_DRILLDOWN_EMPTY_MESSAGE}</p>
     );
   }
 
   return (
-    <ul className="space-y-4">
-      {rows.map((row) => (
-        <li key={row.savingsGoalId} className="rounded-lg border p-3 text-sm">
-          <div className="flex flex-wrap items-start justify-between gap-2">
-            <div>
-              <p className="font-medium">{row.goalLabel}</p>
-              <p className="text-muted-foreground">
-                {row.contributionPeriodLabel}
-                {row.isSharedGoal ? " · Shared goal" : " · Private goal"}
-              </p>
+    <div className="space-y-4">
+      <p className="rounded-md bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+        Viewing {viewLabel}. This drilldown is read-only — add targets or log
+        contributions in{" "}
+        <Link to="/settings" className="font-medium underline underline-offset-4">
+          Settings → Savings
+        </Link>
+        .
+      </p>
+
+      {summary && (
+        <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+          <p className="mb-2 font-medium">Summary for this view</p>
+          <dl className="space-y-1.5">
+            <div className="flex items-baseline justify-between gap-4">
+              <dt className="text-muted-foreground">Your savings target total</dt>
+              <dd className="font-medium tabular-nums">
+                {formatCurrency(summary.savingsTargetTotal)}
+              </dd>
             </div>
-            <div className="text-right text-xs text-muted-foreground">
-              <p>Target {formatCurrency(row.targetAmount)}</p>
-              <p>Contributed {formatCurrency(row.contributedAmount)}</p>
-              <p>Remaining {formatDeductionAmount(row.remainingObligation)}</p>
+            <div className="flex items-baseline justify-between gap-4">
+              <dt className="text-muted-foreground">
+                Your contributions counted in this view
+              </dt>
+              <dd className="font-medium tabular-nums">
+                {formatCurrency(summary.contributionsTotal)}
+              </dd>
             </div>
+            <div className="flex items-baseline justify-between gap-4 border-t pt-1.5">
+              <dt className="font-medium">Remaining savings obligation</dt>
+              <dd className="font-semibold tabular-nums">
+                {formatDeductionAmount(summary.remainingObligationTotal)}
+              </dd>
+            </div>
+          </dl>
+        </div>
+      )}
+
+      {hasSharedGoals && (
+        <div className="rounded-lg border border-dashed p-3 text-xs text-muted-foreground">
+          <p className="font-medium text-foreground">
+            {SAVINGS_DRILLDOWN_SHARED_PRIVACY_HEADING}
+          </p>
+          <ul className="mt-2 list-disc space-y-1 pl-4">
+            <li>Only your target and contribution details are shown.</li>
+            <li>The other user&apos;s target and saved amount remain private.</li>
+            <li>Shared goal metadata only.</li>
+          </ul>
+        </div>
+      )}
+
+      {rows.length > 1 && (
+        <div className="space-y-3 rounded-lg border p-3">
+          <p className="text-sm font-medium">Filter listed rows</p>
+          <Input
+            value={filters.searchText}
+            onChange={(event) =>
+              setFilters((current) => ({
+                ...current,
+                searchText: event.target.value,
+              }))
+            }
+            placeholder="Search goal name, scope, source…"
+            aria-label="Search savings drilldown rows"
+          />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Select
+              value={filters.scope}
+              onValueChange={(value) =>
+                setFilters((current) => ({
+                  ...current,
+                  scope:
+                    value === "private" || value === "shared" || value === "all"
+                      ? value
+                      : "all",
+                }))
+              }
+            >
+              <SelectTrigger aria-label="Filter by private or shared">
+                <SelectValue placeholder="All goals" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All goals</SelectItem>
+                <SelectItem value="private">Private goals</SelectItem>
+                <SelectItem value="shared">Shared goals</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select
+              value={filters.rowKind}
+              onValueChange={(value) =>
+                setFilters((current) => ({
+                  ...current,
+                  rowKind:
+                    value === "all" ||
+                    value === "target" ||
+                    value === "contribution" ||
+                    value === "cash-deducted"
+                      ? value
+                      : "all",
+                }))
+              }
+            >
+              <SelectTrigger aria-label="Filter by row type">
+                <SelectValue placeholder="All row types" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All row types</SelectItem>
+                <SelectItem value="target">Period targets</SelectItem>
+                <SelectItem value="contribution">Contributions</SelectItem>
+                <SelectItem value="cash-deducted">Cash-deducted contributions</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
-          {row.contributions.length > 0 ? (
-            <ul className="mt-3 space-y-2 border-t pt-3">
-              {row.contributions.map((contribution) => (
-                <li
-                  key={contribution.id}
-                  className="flex flex-wrap items-baseline justify-between gap-2"
-                >
-                  <span className="text-muted-foreground">
-                    {formatExpenseDate(contribution.date)}
-                  </span>
-                  <span className="font-medium tabular-nums">
-                    {formatCurrency(contribution.amount)}
-                  </span>
-                  {contribution.notes && (
-                    <span className="w-full text-xs text-muted-foreground">
-                      {contribution.notes}
-                    </span>
-                  )}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="mt-3 border-t pt-3 text-xs text-muted-foreground">
-              No contributions recorded in this view yet.
-            </p>
+          {filtersActive && (
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+              <span>
+                Showing {filteredRows.length} of {rows.length} included goals
+              </span>
+              <Button
+                type="button"
+                variant="link"
+                className="h-auto p-0 text-xs"
+                onClick={() =>
+                  setFilters(DEFAULT_DASHBOARD_SAVINGS_DRILLDOWN_FILTERS)
+                }
+              >
+                Clear filters
+              </Button>
+            </div>
           )}
-        </li>
-      ))}
-    </ul>
+        </div>
+      )}
+
+      {filteredRows.length === 0 ? (
+        <p className="text-sm text-muted-foreground">
+          No rows match the current filters.
+        </p>
+      ) : (
+        <ul className="space-y-4">
+          {filteredRows.map((row) => (
+            <li key={row.id} className="rounded-lg border p-3 text-sm">
+              {(filters.rowKind === "all" || filters.rowKind === "target") && (
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium">{row.goalLabel}</p>
+                    <p className="text-muted-foreground">
+                      {row.contributionPeriodLabel} · {row.scopeLabel} goal
+                    </p>
+                    {(row.periodStartLabel || row.periodEndLabel) && (
+                      <p className="text-xs text-muted-foreground">
+                        Period{" "}
+                        {row.periodStartLabel && row.periodEndLabel
+                          ? `${row.periodStartLabel} – ${row.periodEndLabel}`
+                          : row.periodStartLabel ?? row.periodEndLabel}
+                      </p>
+                    )}
+                  </div>
+                  <div className="text-right text-xs text-muted-foreground">
+                    <p>Target {formatCurrency(row.targetAmount)}</p>
+                    <p>Contributed {formatCurrency(row.contributedAmount)}</p>
+                    <p>Remaining {formatDeductionAmount(row.remainingObligation)}</p>
+                  </div>
+                </div>
+              )}
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                {(filters.rowKind === "all" || filters.rowKind === "target") && (
+                  <Badge variant="outline">{row.sourceLabel}</Badge>
+                )}
+                <Badge variant="outline">{row.scopeLabel}</Badge>
+              </div>
+              {row.isSharedGoal && row.sharedPrivacyCopy && (
+                <p className="mt-2 text-xs text-muted-foreground">
+                  {row.sharedPrivacyCopy}
+                </p>
+              )}
+              {row.contributions.length > 0 ? (
+                <ul className="mt-3 space-y-2 border-t pt-3">
+                  {row.contributions.map((contribution) => (
+                    <li
+                      key={contribution.id}
+                      className="rounded-md bg-muted/30 px-2 py-2"
+                    >
+                      <div className="flex flex-wrap items-baseline justify-between gap-2">
+                        <span className="text-muted-foreground">
+                          {formatExpenseDate(contribution.date)}
+                        </span>
+                        <span className="font-medium tabular-nums">
+                          {formatCurrency(contribution.amount)}
+                        </span>
+                      </div>
+                      <div className="mt-1 flex flex-wrap items-center gap-2">
+                        <Badge variant="outline">{contribution.sourceLabel}</Badge>
+                        {contribution.cashDeductionLabel && (
+                          <Badge variant="outline">
+                            {contribution.cashDeductionLabel}
+                          </Badge>
+                        )}
+                      </div>
+                      {contribution.notes && (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {contribution.notes}
+                        </p>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              ) : filters.rowKind === "all" || filters.rowKind === "target" ? (
+                <p className="mt-3 border-t pt-3 text-xs text-muted-foreground">
+                  No contributions recorded in this view yet.
+                </p>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {reconciliation && <DrilldownReconciliation reconciliation={reconciliation} />}
+      {filtersActive && reconciliation && (
+        <p className="text-xs text-muted-foreground">
+          Reconciliation totals include all rows in this view, not just filtered
+          rows.
+        </p>
+      )}
+      {!cashDeductionContextAvailable && (
+        <p className="text-xs text-muted-foreground">
+          {SAVINGS_DRILLDOWN_CASH_CONTEXT_UNAVAILABLE_MESSAGE}
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -606,7 +826,10 @@ export function DashboardDrilldownPanel({
   unpaidBillReconciliation = null,
   expenseRows = [],
   expenseReconciliation = null,
-  savingsRows = [],
+  savingsTargetRows = [],
+  savingsSummary = null,
+  savingsReconciliation = null,
+  savingsHasSharedGoals = false,
   safeToSpendBreakdown = null,
   loading = false,
   emptyMessage,
@@ -656,7 +879,14 @@ export function DashboardDrilldownPanel({
               viewLabel={viewLabel}
             />
           ) : kind === "savings" ? (
-            <SavingsRowsList rows={savingsRows} />
+            <SavingsDrilldownSection
+              rows={savingsTargetRows}
+              summary={savingsSummary}
+              reconciliation={savingsReconciliation}
+              viewLabel={viewLabel}
+              hasSharedGoals={savingsHasSharedGoals}
+              cashDeductionContextAvailable={cashDeductionContextAvailable}
+            />
           ) : kind === "safe-to-spend-before" && safeToSpendBreakdown ? (
             <>
               <SafeToSpendBeforeBreakdown breakdown={safeToSpendBreakdown} />
