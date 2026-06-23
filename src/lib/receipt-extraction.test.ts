@@ -118,7 +118,7 @@ describe("receipt extraction helpers", () => {
     expect(result.warnings).toEqual([
       "Merchant was not detected.",
       "Purchase date was not detected.",
-      "Total amount was not detected.",
+      "Total amount was not found.",
     ]);
   });
 

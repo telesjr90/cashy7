@@ -1,7 +1,10 @@
 import {
+  extractionUserMessage,
+  sanitizeReceiptExtractionError,
+} from "@/lib/receipt-errors";
+import {
   buildExtractionInvokePayload,
   normalizeReceiptExtractionResult,
-  sanitizeExtractionErrorMessage,
   type ReceiptExtractionResult,
 } from "@/lib/receipt-extraction";
 import { supabase } from "@/lib/supabase";
@@ -44,7 +47,7 @@ export async function extractReceipt(
   if (error) {
     return {
       ok: false,
-      error: sanitizeExtractionErrorMessage(error.message),
+      error: sanitizeReceiptExtractionError(error.message),
     };
   }
 
@@ -56,30 +59,12 @@ export async function extractReceipt(
     result.status === "unreadable" ||
     result.status === "provider_error"
   ) {
-    const message =
-      result.warnings[0] ??
-      sanitizeExtractionErrorMessage(extractionFailureMessage(result.status));
+    const message = extractionUserMessage({
+      status: result.status,
+      warnings: result.warnings,
+    });
     return { ok: false, error: message, result };
   }
 
   return { ok: true, result };
-}
-
-function extractionFailureMessage(
-  status: ReceiptExtractionResult["status"]
-): string {
-  switch (status) {
-    case "unauthorized":
-      return "You can only extract your own receipts.";
-    case "not_found":
-      return "Receipt upload was not found.";
-    case "unsupported":
-      return "This receipt file type cannot be extracted.";
-    case "unreadable":
-      return "The receipt could not be read.";
-    case "provider_error":
-      return "Receipt extraction failed. Please try again.";
-    default:
-      return "Receipt extraction failed.";
-  }
 }

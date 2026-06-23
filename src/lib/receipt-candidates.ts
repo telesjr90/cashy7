@@ -1,3 +1,7 @@
+import {
+  buildMissingTotalWarnings,
+  extractionFailurePreventsCandidate,
+} from "@/lib/receipt-errors";
 import type { ReceiptExtractionResult, ReceiptLineItem } from "@/lib/receipt-extraction";
 import type { InsertReceiptCandidate, ReceiptCandidate, ReceiptCandidateStatus } from "@/lib/types";
 
@@ -71,7 +75,9 @@ export function assessCandidateSavability(
   if (result.status !== "success") {
     return {
       savable: false,
-      reason: "Save a candidate only after a successful extraction with useful fields.",
+      reason: extractionFailurePreventsCandidate(result.status)
+        ? "Save a candidate only after a successful extraction with useful fields."
+        : "Save a candidate only after a successful extraction with useful fields.",
     };
   }
   if (!extractionHasUsefulFields(result)) {
@@ -256,6 +262,30 @@ export function duplicateCandidateMessage(receiptFileName?: string | null): stri
     return `${RECEIPT_CANDIDATE_EXISTS_COPY} (${receiptFileName})`;
   }
   return RECEIPT_CANDIDATE_EXISTS_COPY;
+}
+
+export function candidateHasMissingTotal(
+  candidate: Pick<ReceiptCandidate, "total_amount">
+): boolean {
+  const total =
+    typeof candidate.total_amount === "number"
+      ? candidate.total_amount
+      : candidate.total_amount === null
+        ? null
+        : Number(candidate.total_amount);
+  return total === null || !Number.isFinite(total) || total <= 0;
+}
+
+export function buildCandidateMissingTotalWarnings(
+  candidate: Pick<ReceiptCandidate, "total_amount">
+): string[] {
+  const total =
+    typeof candidate.total_amount === "number"
+      ? candidate.total_amount
+      : candidate.total_amount === null
+        ? null
+        : Number(candidate.total_amount);
+  return buildMissingTotalWarnings(total);
 }
 
 export function candidatePrivacyCopyStates(): string[] {

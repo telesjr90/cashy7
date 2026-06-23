@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import {
+  assessCandidateApprovalReadiness,
   buildApprovedExpenseSummaryLabel,
   RECEIPT_APPROVAL_ACTION,
   RECEIPT_APPROVAL_ALREADY_APPROVED_COPY,
@@ -11,6 +12,7 @@ import {
 } from "@/lib/receipt-approval";
 import { approveReceiptCandidate } from "@/lib/receipt-approval-service";
 import {
+  buildCandidateReviewWarnings,
   candidateReviewFormFromCandidate,
   formatReviewLineItemLabel,
   RECEIPT_CANDIDATE_SAVE_DRAFT_ACTION,
@@ -20,6 +22,7 @@ import {
 } from "@/lib/receipt-candidate-review";
 import { updateReceiptCandidateDraft } from "@/lib/receipt-candidate-service";
 import {
+  buildCandidateMissingTotalWarnings,
   RECEIPT_CANDIDATE_DRAFT_COPY,
   RECEIPT_CANDIDATE_NO_EXPENSE_COPY,
   RECEIPT_CANDIDATE_PRIVATE_COPY,
@@ -58,6 +61,9 @@ type ReceiptCandidateReviewDialogProps = {
   householdId: string;
   userId: string;
   personId?: string | null;
+  allCandidates?: ReceiptCandidate[];
+  receiptFileNames?: Record<string, string>;
+  receiptUploadedAtById?: Record<string, string>;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSaved: () => Promise<void>;
@@ -79,6 +85,9 @@ export function ReceiptCandidateReviewDialog({
   receiptUpload,
   receiptFileName = null,
   receiptUploadedAt = null,
+  allCandidates = [],
+  receiptFileNames = {},
+  receiptUploadedAtById = {},
   householdId,
   userId,
   personId = null,
@@ -100,6 +109,7 @@ export function ReceiptCandidateReviewDialog({
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [validationWarnings, setValidationWarnings] = useState<string[]>([]);
+  const [duplicateWarnings, setDuplicateWarnings] = useState<string[]>([]);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [approvalSuccessLines, setApprovalSuccessLines] = useState<string[]>([]);
   const [approvedExpenseSummary, setApprovedExpenseSummary] = useState<string | null>(null);
@@ -107,6 +117,23 @@ export function ReceiptCandidateReviewDialog({
 
   const isApproved = candidate?.status === "approved" || locallyApproved;
   const isReadOnly = isApproved;
+  const missingTotalWarnings = candidate
+    ? buildCandidateMissingTotalWarnings(candidate)
+    : [];
+  const reviewWarnings = candidate ? buildCandidateReviewWarnings(candidate, form) : [];
+
+  useEffect(() => {
+    if (!candidate || !open) {
+      return;
+    }
+    const readiness = assessCandidateApprovalReadiness(candidate, form, {
+      currentUserId: userId,
+      duplicateCandidates: allCandidates,
+      receiptFileNames,
+      receiptUploadedAtById,
+    });
+    setDuplicateWarnings(readiness.duplicateWarnings);
+  }, [allCandidates, candidate, form, open, receiptFileNames, receiptUploadedAtById, userId]);
 
   useEffect(() => {
     if (candidate && open) {
@@ -192,8 +219,15 @@ export function ReceiptCandidateReviewDialog({
 
     const validated = validateCandidateApprovalForm(form);
     setValidationWarnings(validated.warnings);
-    if (validated.error || !validated.values) {
-      setError(validated.error);
+    const readiness = assessCandidateApprovalReadiness(candidate, form, {
+      currentUserId: userId,
+      duplicateCandidates: allCandidates,
+      receiptFileNames,
+      receiptUploadedAtById,
+    });
+    setDuplicateWarnings(readiness.duplicateWarnings);
+    if (!readiness.ready) {
+      setError(readiness.error);
       return;
     }
 
@@ -207,8 +241,14 @@ export function ReceiptCandidateReviewDialog({
     }
 
     const validated = validateCandidateApprovalForm(form);
-    if (validated.error || !validated.values) {
-      setError(validated.error);
+    const readiness = assessCandidateApprovalReadiness(candidate, form, {
+      currentUserId: userId,
+      duplicateCandidates: allCandidates,
+      receiptFileNames,
+      receiptUploadedAtById,
+    });
+    if (!readiness.ready || !validated.values) {
+      setError(!readiness.ready ? readiness.error : "Review the receipt fields before approving.");
       setConfirmOpen(false);
       return;
     }
@@ -226,6 +266,9 @@ export function ReceiptCandidateReviewDialog({
       receiptUpload,
       draft: validated.values,
       receiptFileName,
+      duplicateCandidates: allCandidates,
+      receiptFileNames,
+      receiptUploadedAtById,
     });
 
     setApproving(false);
@@ -396,6 +439,20 @@ export function ReceiptCandidateReviewDialog({
                     disabled={isReadOnly}
                     onChange={(event) => updateField("totalAmount", event.target.value)}
                   />
+                  {missingTotalWarnings.length > 0 || reviewWarnings.some((warning) =>
+                    warning.includes("Total amount")
+                  ) ? (
+                    <Alert>
+                      <AlertDescription className="space-y-1">
+                        {(missingTotalWarnings.length > 0
+                          ? missingTotalWarnings
+                          : reviewWarnings.filter((warning) => warning.includes("Total amount"))
+                        ).map((warning) => (
+                          <p key={warning}>{warning}</p>
+                        ))}
+                      </AlertDescription>
+                    </Alert>
+                  ) : null}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="candidate-tax">Tax amount</Label>
@@ -418,6 +475,16 @@ export function ReceiptCandidateReviewDialog({
                 />
               </div>
             </div>
+
+            {duplicateWarnings.length > 0 ? (
+              <Alert>
+                <AlertDescription className="space-y-1">
+                  {duplicateWarnings.map((warning) => (
+                    <p key={warning}>{warning}</p>
+                  ))}
+                </AlertDescription>
+              </Alert>
+            ) : null}
 
             {validationWarnings.length > 0 ? (
               <Alert>
@@ -502,6 +569,9 @@ export function ReceiptCandidateReviewDialog({
               {form.merchant.trim() ? (
                 <p className="font-medium">{form.merchant.trim()}</p>
               ) : null}
+              {duplicateWarnings.map((warning) => (
+                <p key={`confirm-${warning}`}>{warning}</p>
+              ))}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

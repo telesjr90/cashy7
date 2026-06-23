@@ -815,6 +815,11 @@ export interface Database {
           approved_for_shared_expense: boolean;
           approved_at: string | null;
           approved_by: string | null;
+          file_sha256: string | null;
+          duplicate_of_receipt_upload_id: string | null;
+          last_extraction_status: string | null;
+          last_extraction_error: string | null;
+          last_extraction_at: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -831,6 +836,11 @@ export interface Database {
           approved_for_shared_expense?: boolean;
           approved_at?: string | null;
           approved_by?: string | null;
+          file_sha256?: string | null;
+          duplicate_of_receipt_upload_id?: string | null;
+          last_extraction_status?: string | null;
+          last_extraction_error?: string | null;
+          last_extraction_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -847,6 +857,11 @@ export interface Database {
           approved_for_shared_expense?: boolean;
           approved_at?: string | null;
           approved_by?: string | null;
+          file_sha256?: string | null;
+          duplicate_of_receipt_upload_id?: string | null;
+          last_extraction_status?: string | null;
+          last_extraction_error?: string | null;
+          last_extraction_at?: string | null;
           created_at?: string;
           updated_at?: string;
         };

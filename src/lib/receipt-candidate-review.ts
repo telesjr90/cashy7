@@ -1,4 +1,8 @@
 import {
+  buildMissingTotalWarnings,
+  missingTotalBlocksApproval,
+} from "@/lib/receipt-errors";
+import {
   confidencePercentLabel,
   fieldConfidenceLabel,
   formatCandidateMoney,
@@ -262,6 +266,17 @@ export function sanitizeReviewErrorMessage(message: string): string {
     return "Could not update the receipt candidate. Please try again.";
   }
   return message;
+}
+
+export function buildCandidateReviewWarnings(
+  candidate: ReceiptCandidate,
+  form: CandidateReviewFormValues
+): string[] {
+  const warnings = [...candidate.warnings];
+  if (missingTotalBlocksApproval(form.totalAmount)) {
+    warnings.push(...buildMissingTotalWarnings(null));
+  }
+  return warnings;
 }
 
 export function formatReviewLineItemLabel(item: ReceiptLineItem): string {

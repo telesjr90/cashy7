@@ -16,6 +16,11 @@ import {
   validateReceiptFile,
 } from "@/lib/receipt-upload";
 import {
+  buildDuplicateWarningLabels,
+  findCandidateDataDuplicateMatches,
+} from "@/lib/receipt-duplicates";
+import { canRetryExtraction } from "@/lib/receipt-errors";
+import {
   isCandidateSavable,
   RECEIPT_CANDIDATE_EXISTS_COPY,
   RECEIPT_CANDIDATE_NO_EXPENSE_COPY,
@@ -43,7 +48,9 @@ import {
 import { extractReceipt } from "@/lib/receipt-extraction-service";
 import {
   deleteReceiptUpload,
+  detectSelectedFileDuplicates,
   listMyReceiptUploads,
+  updateReceiptExtractionStatus,
   uploadReceipt,
 } from "@/lib/receipt-upload-service";
 import type { ReceiptCandidate, ReceiptUpload } from "@/lib/types";
@@ -98,6 +105,7 @@ function ReceiptExtractionPreview({
   savePhase,
   saveError,
   saveSuccess,
+  duplicateWarnings,
   onSave,
 }: {
   result: ReceiptExtractionResult;
@@ -106,6 +114,7 @@ function ReceiptExtractionPreview({
   savePhase: "idle" | "saving" | "success" | "error";
   saveError: string | null;
   saveSuccess: string | null;
+  duplicateWarnings: string[];
   onSave: () => void;
 }) {
   return (
@@ -172,6 +181,16 @@ function ReceiptExtractionPreview({
         </ul>
       ) : null}
 
+      {duplicateWarnings.length > 0 ? (
+        <Alert>
+          <AlertDescription className="space-y-1">
+            {duplicateWarnings.map((warning) => (
+              <p key={warning}>{warning}</p>
+            ))}
+          </AlertDescription>
+        </Alert>
+      ) : null}
+
       <div className="space-y-1 text-muted-foreground">
         <p>{RECEIPT_EXTRACTION_DRAFT_COPY}</p>
         <p>{RECEIPT_NO_EXPENSE_CREATED_COPY}</p>
@@ -224,6 +243,8 @@ export function ReceiptUploadCard() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [metadata, setMetadata] = useState<ReceiptFileMetadata | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [selectedDuplicateWarnings, setSelectedDuplicateWarnings] = useState<string[]>([]);
+  const [uploadDuplicateWarnings, setUploadDuplicateWarnings] = useState<string[]>([]);
   const [uploadPhase, setUploadPhase] = useState<UploadPhase>("idle");
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -294,32 +315,43 @@ export function ReceiptUploadCard() {
     void loadCandidates();
   }, [loadReceipts, loadCandidates]);
 
-  const processFile = useCallback((file: File | null | undefined) => {
-    if (!file) {
-      return;
-    }
+  const processFile = useCallback(
+    async (file: File | null | undefined) => {
+      if (!file) {
+        return;
+      }
 
-    const validation = validateReceiptFile(file);
-    if (!validation.ok) {
-      setSelectedFile(null);
-      setMetadata(null);
-      setValidationError(validation.error);
+      const validation = validateReceiptFile(file);
+      if (!validation.ok) {
+        setSelectedFile(null);
+        setMetadata(null);
+        setValidationError(validation.error);
+        setSelectedDuplicateWarnings([]);
+        setUploadPhase("idle");
+        setUploadError(null);
+        setSuccessMessage(null);
+        return;
+      }
+
+      setValidationError(null);
+      setSelectedFile(file);
+      setMetadata(buildReceiptFileMetadata(file));
       setUploadPhase("idle");
       setUploadError(null);
       setSuccessMessage(null);
-      return;
-    }
 
-    setValidationError(null);
-    setSelectedFile(file);
-    setMetadata(buildReceiptFileMetadata(file));
-    setUploadPhase("idle");
-    setUploadError(null);
-    setSuccessMessage(null);
-  }, []);
+      if (user) {
+        const { matches } = await detectSelectedFileDuplicates(file, receipts, user.id);
+        setSelectedDuplicateWarnings(buildDuplicateWarningLabels(matches));
+      } else {
+        setSelectedDuplicateWarnings([]);
+      }
+    },
+    [receipts, user]
+  );
 
   const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    processFile(event.target.files?.[0]);
+    void processFile(event.target.files?.[0]);
     event.target.value = "";
   };
 
@@ -327,6 +359,7 @@ export function ReceiptUploadCard() {
     setSelectedFile(null);
     setMetadata(null);
     setValidationError(null);
+    setSelectedDuplicateWarnings([]);
     setUploadPhase("idle");
     setUploadError(null);
     if (fileInputRef.current) {
@@ -342,11 +375,13 @@ export function ReceiptUploadCard() {
     setUploadPhase("uploading");
     setUploadError(null);
     setSuccessMessage(null);
+    setUploadDuplicateWarnings([]);
 
     const result = await uploadReceipt({
       file: selectedFile,
       householdId: household.id,
       userId: user.id,
+      existingUploads: receipts,
     });
 
     if (!result.ok) {
@@ -357,11 +392,16 @@ export function ReceiptUploadCard() {
 
     setUploadPhase("success");
     setSuccessMessage(RECEIPT_UPLOAD_SUCCESS_COPY);
+    setUploadDuplicateWarnings(result.duplicateWarnings);
     handleRemoveSelection();
     await loadReceipts();
   };
 
   const handleExtractReceipt = async (receipt: ReceiptUpload) => {
+    if (!user) {
+      return;
+    }
+
     setExtractingReceiptId(receipt.id);
     setExtractionErrors((current) => {
       const next = { ...current };
@@ -376,12 +416,33 @@ export function ReceiptUploadCard() {
         ...current,
         [receipt.id]: outcome.result,
       }));
+      await updateReceiptExtractionStatus({
+        receiptId: receipt.id,
+        userId: user.id,
+        status: outcome.result.status,
+      });
     } else {
       if (outcome.result) {
         setExtractionResults((current) => ({
           ...current,
           [receipt.id]: outcome.result!,
         }));
+        await updateReceiptExtractionStatus({
+          receiptId: receipt.id,
+          userId: user.id,
+          status: outcome.result.status,
+          errorMessage: outcome.error,
+          mimeType: receipt.mime_type,
+          warnings: outcome.result.warnings,
+        });
+      } else {
+        await updateReceiptExtractionStatus({
+          receiptId: receipt.id,
+          userId: user.id,
+          status: "provider_error",
+          errorMessage: outcome.error,
+          mimeType: receipt.mime_type,
+        });
       }
       setExtractionErrors((current) => ({
         ...current,
@@ -390,6 +451,7 @@ export function ReceiptUploadCard() {
     }
 
     setExtractingReceiptId(null);
+    await loadReceipts();
   };
 
   const handleSaveCandidate = async (
@@ -579,6 +641,15 @@ export function ReceiptUploadCard() {
                   </div>
                 </dl>
               </div>
+              {selectedDuplicateWarnings.length > 0 ? (
+                <Alert className="mt-3">
+                  <AlertDescription className="space-y-1">
+                    {selectedDuplicateWarnings.map((warning) => (
+                      <p key={warning}>{warning}</p>
+                    ))}
+                  </AlertDescription>
+                </Alert>
+              ) : null}
             </div>
           ) : null}
 
@@ -608,6 +679,9 @@ export function ReceiptUploadCard() {
                 <p>{successMessage}</p>
                 <p>{RECEIPT_NO_EXPENSE_CREATED_COPY}</p>
                 <p>{RECEIPT_EXTRACTION_APPROVAL_LATER_COPY}</p>
+                {uploadDuplicateWarnings.map((warning) => (
+                  <p key={warning}>{warning}</p>
+                ))}
               </AlertDescription>
             </Alert>
           ) : null}
@@ -644,6 +718,27 @@ export function ReceiptUploadCard() {
                 <TableBody>
                   {displayRows.map((row) => {
                     const source = receipts.find((receipt) => receipt.id === row.id);
+                    const extraction = extractionResults[row.id];
+                    const extractionDuplicateWarnings =
+                      extraction && user
+                        ? buildDuplicateWarningLabels(
+                            findCandidateDataDuplicateMatches(
+                              {
+                                merchant: extraction.merchant,
+                                transactionDate: extraction.date,
+                                totalAmount: extraction.total,
+                              },
+                              candidates,
+                              user.id,
+                              { excludeReceiptUploadId: row.id }
+                            )
+                          )
+                        : [];
+                    const persistedError =
+                      extractionErrors[row.id] ?? row.extractionErrorLabel;
+                    const showRetryExtract =
+                      persistedError !== null &&
+                      canRetryExtraction(source?.last_extraction_status);
                     return (
                       <TableRow key={row.id}>
                         <TableCell className="font-medium">{row.fileName}</TableCell>
@@ -659,6 +754,7 @@ export function ReceiptUploadCard() {
                           {extractionResults[row.id] ? (
                             <ReceiptExtractionPreview
                               result={extractionResults[row.id]!}
+                              duplicateWarnings={extractionDuplicateWarnings}
                               canSave={
                                 isCandidateSavable(extractionResults[row.id]!) &&
                                 savingReceiptId !== row.id
@@ -701,10 +797,10 @@ export function ReceiptUploadCard() {
                               {RECEIPT_CANDIDATE_EXISTS_COPY}
                             </p>
                           ) : null}
-                          {extractionErrors[row.id] ? (
+                          {extractionErrors[row.id] || row.extractionErrorLabel ? (
                             <div className="mt-2 space-y-2">
                               <Alert variant="destructive">
-                                <AlertDescription>{extractionErrors[row.id]}</AlertDescription>
+                                <AlertDescription>{persistedError}</AlertDescription>
                               </Alert>
                               <div className="space-y-1 text-sm text-muted-foreground">
                                 <p>{RECEIPT_EXTRACTION_DRAFT_COPY}</p>
@@ -732,7 +828,7 @@ export function ReceiptUploadCard() {
                                 ) : (
                                   <>
                                     <ScanLine className="mr-1 h-4 w-4" />
-                                    {RECEIPT_EXTRACT_ACTION_LABEL}
+                                    {showRetryExtract ? "Retry extraction" : RECEIPT_EXTRACT_ACTION_LABEL}
                                   </>
                                 )}
                               </Button>
@@ -768,6 +864,7 @@ export function ReceiptUploadCard() {
           <ReceiptCandidatePanel
             candidates={candidates}
             receiptFileNames={receiptFileNames}
+            receiptUploadedAtById={receiptUploadedAtById}
             listPhase={candidateListPhase}
             listError={candidateListError}
             expandedCandidateId={expandedCandidateId}
@@ -805,6 +902,9 @@ export function ReceiptUploadCard() {
           receiptUploadedAt={
             reviewTarget ? (receiptUploadedAtById[reviewTarget.receipt_upload_id] ?? null) : null
           }
+          allCandidates={candidates}
+          receiptFileNames={receiptFileNames}
+          receiptUploadedAtById={receiptUploadedAtById}
           householdId={household.id}
           userId={user.id}
           personId={membership?.person_id ?? null}

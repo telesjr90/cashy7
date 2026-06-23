@@ -78,6 +78,9 @@ export type ApproveReceiptCandidateParams = {
   receiptUpload: Pick<ReceiptUpload, "id" | "uploaded_by">;
   draft: CandidateDraftUpdateValues;
   receiptFileName?: string | null;
+  duplicateCandidates?: import("@/lib/receipt-duplicates").ReceiptCandidateDuplicateInput[];
+  receiptFileNames?: Record<string, string>;
+  receiptUploadedAtById?: Record<string, string>;
 };
 
 export type ApproveReceiptCandidateResult =
@@ -116,6 +119,11 @@ export async function approveReceiptCandidate(
       params.draft.total_amount === null ? "" : String(params.draft.total_amount),
     taxAmount: params.draft.tax_amount === null ? "" : String(params.draft.tax_amount),
     category: params.draft.category ?? "",
+  }, {
+    currentUserId: params.userId,
+    duplicateCandidates: params.duplicateCandidates,
+    receiptFileNames: params.receiptFileNames,
+    receiptUploadedAtById: params.receiptUploadedAtById,
   });
 
   if (!readiness.ready) {

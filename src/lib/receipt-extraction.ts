@@ -198,7 +198,7 @@ export function appendMissingFieldWarnings(
     warnings.push("Purchase date was not detected.");
   }
   if (result.total === null) {
-    warnings.push("Total amount was not detected.");
+    warnings.push("Total amount was not found.");
   }
 
   return { ...result, warnings };

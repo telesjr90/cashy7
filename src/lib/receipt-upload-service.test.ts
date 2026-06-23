@@ -29,6 +29,11 @@ function makeReceipt(overrides: Partial<ReceiptUpload> = {}): ReceiptUpload {
     approved_for_shared_expense: false,
     approved_at: null,
     approved_by: null,
+    file_sha256: null,
+    duplicate_of_receipt_upload_id: null,
+    last_extraction_status: null,
+    last_extraction_error: null,
+    last_extraction_at: null,
     created_at: "2026-06-23T12:00:00.000Z",
     updated_at: "2026-06-23T12:00:00.000Z",
     ...overrides,
@@ -45,6 +50,7 @@ function createMockClient(handlers: {
   insert?: () => Promise<{ data: ReceiptUpload | null; error: { message: string } | null }>;
   select?: () => Promise<{ data: ReceiptUpload[] | null; error: { message: string } | null }>;
   delete?: () => Promise<{ error: { message: string } | null }>;
+  update?: () => Promise<{ data: ReceiptUpload | null; error: { message: string } | null }>;
 }): ReceiptUploadClient {
   return {
     storage: {
@@ -72,6 +78,15 @@ function createMockClient(handlers: {
         }),
         delete: () => ({
           eq: handlers.delete ?? (async () => ({ error: null })),
+        }),
+        update: () => ({
+          eq: () => ({
+            select: () => ({
+              single:
+                handlers.update ??
+                (async () => ({ data: makeReceipt(), error: null })),
+            }),
+          }),
         }),
       };
     },

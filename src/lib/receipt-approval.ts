@@ -1,4 +1,15 @@
 import {
+  assessApprovalDuplicateGuard,
+  findApprovalDuplicateMatches,
+  type ReceiptCandidateDuplicateInput,
+} from "@/lib/receipt-duplicates";
+import {
+  buildMissingTotalWarnings,
+  missingTotalBlocksApproval,
+  RECEIPT_MISSING_TOTAL_DETAIL,
+  RECEIPT_MISSING_TOTAL_TITLE,
+} from "@/lib/receipt-errors";
+import {
   buildCandidateDraftUpdatePayload,
   validateCandidateReviewForm,
   type CandidateDraftUpdateValues,
@@ -44,8 +55,20 @@ const UUID_PATTERN =
   /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
 
 export type CandidateApprovalReadiness =
-  | { ready: true; values: CandidateDraftUpdateValues; warnings: string[] }
-  | { ready: false; error: string; warnings: string[] };
+  | {
+      ready: true;
+      values: CandidateDraftUpdateValues;
+      warnings: string[];
+      duplicateWarnings: string[];
+      requireDuplicateConfirmation: boolean;
+    }
+  | {
+      ready: false;
+      error: string;
+      warnings: string[];
+      duplicateWarnings: string[];
+      requireDuplicateConfirmation: boolean;
+    };
 
 export function validateCandidateApprovalForm(
   form: CandidateReviewFormValues
@@ -82,12 +105,24 @@ export function approvalBlockedReason(
 }
 
 export function assessCandidateApprovalReadiness(
-  candidate: Pick<ReceiptCandidate, "status" | "linked_manual_expense_id">,
-  form: CandidateReviewFormValues
+  candidate: Pick<ReceiptCandidate, "status" | "linked_manual_expense_id" | "id">,
+  form: CandidateReviewFormValues,
+  options?: {
+    currentUserId: string;
+    duplicateCandidates?: ReceiptCandidateDuplicateInput[];
+    receiptFileNames?: Record<string, string>;
+    receiptUploadedAtById?: Record<string, string>;
+  }
 ): CandidateApprovalReadiness {
   const blocked = approvalBlockedReason(candidate);
   if (blocked) {
-    return { ready: false, error: blocked, warnings: [] };
+    return {
+      ready: false,
+      error: blocked,
+      warnings: [],
+      duplicateWarnings: [],
+      requireDuplicateConfirmation: false,
+    };
   }
 
   const validated = validateCandidateApprovalForm(form);
@@ -96,14 +131,46 @@ export function assessCandidateApprovalReadiness(
       ready: false,
       error: validated.error ?? "Review the receipt fields before approving.",
       warnings: validated.warnings,
+      duplicateWarnings: [],
+      requireDuplicateConfirmation: false,
     };
   }
 
-  if (validated.values.total_amount === null || validated.values.total_amount <= 0) {
+  if (missingTotalBlocksApproval(form.totalAmount)) {
     return {
       ready: false,
-      error: "Total amount must be greater than zero before approval.",
+      error: `${RECEIPT_MISSING_TOTAL_TITLE} ${RECEIPT_MISSING_TOTAL_DETAIL}`,
+      warnings: buildMissingTotalWarnings(null),
+      duplicateWarnings: [],
+      requireDuplicateConfirmation: false,
+    };
+  }
+
+  const duplicateMatches = options?.duplicateCandidates
+    ? findApprovalDuplicateMatches(
+        {
+          merchant: validated.values.merchant,
+          transactionDate: validated.values.transaction_date,
+          totalAmount: validated.values.total_amount,
+        },
+        options.duplicateCandidates,
+        options.currentUserId,
+        candidate.id,
+        {
+          receiptFileNames: options.receiptFileNames,
+          receiptUploadedAtById: options.receiptUploadedAtById,
+        }
+      )
+    : [];
+
+  const duplicateGuard = assessApprovalDuplicateGuard(duplicateMatches);
+  if (duplicateGuard.blockApproval) {
+    return {
+      ready: false,
+      error: duplicateGuard.warnings[duplicateGuard.warnings.length - 1] ?? "Duplicate receipt blocked approval.",
       warnings: validated.warnings,
+      duplicateWarnings: duplicateGuard.warnings,
+      requireDuplicateConfirmation: duplicateGuard.requireConfirmation,
     };
   }
 
@@ -111,6 +178,8 @@ export function assessCandidateApprovalReadiness(
     ready: true,
     values: validated.values,
     warnings: validated.warnings,
+    duplicateWarnings: duplicateGuard.warnings,
+    requireDuplicateConfirmation: duplicateGuard.requireConfirmation,
   };
 }
 

@@ -5,6 +5,19 @@ import {
   validateReceiptFile,
   type AllowedReceiptMimeType,
 } from "@/lib/receipt-upload";
+import {
+  buildDuplicateWarningLabels,
+  computeFileSha256FromBlob,
+  findExactFileDuplicateUploadId,
+  findFileDuplicateMatches,
+  type FileSelectionDuplicateInput,
+  type ReceiptUploadDuplicateInput,
+} from "@/lib/receipt-duplicates";
+import {
+  extractionUserMessage,
+  sanitizeReceiptExtractionError,
+} from "@/lib/receipt-errors";
+import type { ReceiptExtractionStatus } from "@/lib/receipt-extraction";
 import { supabase } from "@/lib/supabase";
 import type { ReceiptUpload } from "@/lib/types";
 
@@ -65,6 +78,19 @@ export type ReceiptUploadClient = {
         };
       };
     };
+    update: (row: Record<string, unknown>) => {
+      eq: (
+        column: string,
+        value: string
+      ) => {
+        select: (columns: string) => {
+          single: () => Promise<{
+            data: ReceiptUpload | null;
+            error: { message: string } | null;
+          }>;
+        };
+      };
+    };
     delete: () => {
       eq: (
         column: string,
@@ -81,10 +107,11 @@ export type UploadReceiptParams = {
   householdId: string;
   userId: string;
   receiptId?: string;
+  existingUploads?: ReceiptUploadDuplicateInput[];
 };
 
 export type UploadReceiptResult =
-  | { ok: true; receipt: ReceiptUpload; successCopy: string }
+  | { ok: true; receipt: ReceiptUpload; successCopy: string; duplicateWarnings: string[] }
   | { ok: false; error: string };
 
 export async function uploadReceipt(
@@ -96,6 +123,25 @@ export async function uploadReceipt(
     return { ok: false, error: validation.error };
   }
 
+  const fileSha256 = await computeFileSha256FromBlob(params.file);
+  const fileSelection: FileSelectionDuplicateInput = {
+    fileName: params.file.name,
+    mimeType: validation.mimeType,
+    sizeBytes: params.file.size,
+    fileSha256,
+  };
+  const existingUploads = params.existingUploads ?? [];
+  const duplicateMatches = findFileDuplicateMatches(
+    fileSelection,
+    existingUploads,
+    params.userId
+  );
+  const duplicateOfReceiptUploadId = findExactFileDuplicateUploadId(
+    fileSelection,
+    existingUploads,
+    params.userId
+  );
+
   const receiptId = params.receiptId ?? crypto.randomUUID();
   const insertRow = buildReceiptUploadInsert({
     receiptId,
@@ -104,6 +150,8 @@ export async function uploadReceipt(
     fileName: params.file.name,
     mimeType: validation.mimeType,
     sizeBytes: params.file.size,
+    fileSha256,
+    duplicateOfReceiptUploadId,
   });
 
   const { error: storageError } = await client.storage
@@ -138,12 +186,18 @@ export async function uploadReceipt(
     };
   }
 
+  const duplicateWarnings = duplicateMatches.length
+    ? buildDuplicateWarningLabels(duplicateMatches)
+    : [];
+
   return {
     ok: true,
     receipt: data,
     successCopy: `${RECEIPT_NO_EXPENSE_CREATED_COPY}`,
+    duplicateWarnings,
   };
 }
+
 
 export async function listMyReceiptUploads(
   userId: string,
@@ -164,6 +218,56 @@ export async function listMyReceiptUploads(
   }
 
   return { receipts: data ?? [], error: null };
+}
+
+export type UpdateReceiptExtractionStatusParams = {
+  receiptId: string;
+  userId: string;
+  status: ReceiptExtractionStatus;
+  errorMessage?: string | null;
+  mimeType?: string | null;
+  warnings?: string[];
+};
+
+export async function updateReceiptExtractionStatus(
+  params: UpdateReceiptExtractionStatusParams,
+  client: ReceiptUploadClient = supabase as unknown as ReceiptUploadClient
+): Promise<{ ok: true; receipt: ReceiptUpload } | { ok: false; error: string }> {
+  const sanitizedError =
+    params.status === "success"
+      ? null
+      : sanitizeReceiptExtractionError(
+          params.errorMessage ??
+            extractionUserMessage({
+              status: params.status,
+              mimeType: params.mimeType,
+              warnings: params.warnings,
+            })
+        );
+
+  const { data, error } = await client
+    .from("receipt_uploads")
+    .update({
+      last_extraction_status: params.status,
+      last_extraction_error: sanitizedError,
+      last_extraction_at: new Date().toISOString(),
+    })
+    .eq("id", params.receiptId)
+    .select("*")
+    .single();
+
+  if (error || !data) {
+    return {
+      ok: false,
+      error: sanitizeReceiptErrorMessage(error?.message ?? "Could not update receipt status."),
+    };
+  }
+
+  if (data.uploaded_by !== params.userId) {
+    return { ok: false, error: "You can only update your own receipt uploads." };
+  }
+
+  return { ok: true, receipt: data };
 }
 
 export type DeleteReceiptUploadParams = {
@@ -233,4 +337,32 @@ export function receiptUploadMimeType(
 ): AllowedReceiptMimeType | null {
   const validation = validateReceiptFile(file);
   return validation.ok ? validation.mimeType : null;
+}
+
+export async function detectSelectedFileDuplicates(
+  file: File,
+  existingUploads: ReceiptUploadDuplicateInput[],
+  userId: string
+): Promise<{
+  fileSha256: string;
+  matches: ReturnType<typeof findFileDuplicateMatches>;
+}> {
+  const validation = validateReceiptFile(file);
+  if (!validation.ok) {
+    return { fileSha256: "", matches: [] };
+  }
+
+  const fileSha256 = await computeFileSha256FromBlob(file);
+  const matches = findFileDuplicateMatches(
+    {
+      fileName: file.name,
+      mimeType: validation.mimeType,
+      sizeBytes: file.size,
+      fileSha256,
+    },
+    existingUploads,
+    userId
+  );
+
+  return { fileSha256, matches };
 }

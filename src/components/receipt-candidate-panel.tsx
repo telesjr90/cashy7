@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { buildApprovedExpenseSummaryLabel } from "@/lib/receipt-approval";
 import {
   buildCandidateDisplayRow,
+  buildCandidateMissingTotalWarnings,
   candidateStatusLabel,
   fieldConfidenceLabel,
   formatCandidateMoney,
@@ -20,6 +21,10 @@ import {
   type ReceiptCandidateDisplayRow,
 } from "@/lib/receipt-candidates";
 import { RECEIPT_CANDIDATE_REVIEW_ACTION } from "@/lib/receipt-candidate-review";
+import {
+  buildDuplicateWarningLabels,
+  findCandidateDataDuplicateMatches,
+} from "@/lib/receipt-duplicates";
 import type { ReceiptCandidate } from "@/lib/types";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -39,6 +44,7 @@ import { Loader2, Trash2 } from "lucide-react";
 type ReceiptCandidatePanelProps = {
   candidates: ReceiptCandidate[];
   receiptFileNames: Record<string, string>;
+  receiptUploadedAtById?: Record<string, string>;
   listPhase: "idle" | "loading" | "ready" | "error";
   listError: string | null;
   expandedCandidateId: string | null;
@@ -173,6 +179,8 @@ function ReceiptCandidateListRow({
   row,
   candidate,
   expanded,
+  duplicateWarnings,
+  missingTotalWarnings,
   onToggleExpanded,
   onRequestDismiss,
   onRequestReview,
@@ -180,6 +188,8 @@ function ReceiptCandidateListRow({
   row: ReceiptCandidateDisplayRow;
   candidate: ReceiptCandidate;
   expanded: boolean;
+  duplicateWarnings: string[];
+  missingTotalWarnings: string[];
   onToggleExpanded: () => void;
   onRequestDismiss: () => void;
   onRequestReview: () => void;
@@ -202,6 +212,24 @@ function ReceiptCandidateListRow({
           ) : null}
           {row.confidenceLabel ? (
             <p className="text-muted-foreground">{row.confidenceLabel}</p>
+          ) : null}
+          {missingTotalWarnings.length > 0 ? (
+            <Alert className="mt-2">
+              <AlertDescription className="space-y-1">
+                {missingTotalWarnings.map((warning) => (
+                  <p key={warning}>{warning}</p>
+                ))}
+              </AlertDescription>
+            </Alert>
+          ) : null}
+          {duplicateWarnings.length > 0 ? (
+            <Alert className="mt-2">
+              <AlertDescription className="space-y-1">
+                {duplicateWarnings.map((warning) => (
+                  <p key={warning}>{warning}</p>
+                ))}
+              </AlertDescription>
+            </Alert>
           ) : null}
           {candidate.status === "pending" ? (
             <>
@@ -240,6 +268,7 @@ function ReceiptCandidateListRow({
 export function ReceiptCandidatePanel({
   candidates,
   receiptFileNames,
+  receiptUploadedAtById = {},
   listPhase,
   listError,
   expandedCandidateId,
@@ -292,6 +321,28 @@ export function ReceiptCandidatePanel({
                   row={row}
                   candidate={candidate}
                   expanded={expandedCandidateId === row.id}
+                  missingTotalWarnings={buildCandidateMissingTotalWarnings(candidate)}
+                  duplicateWarnings={buildDuplicateWarningLabels(
+                    findCandidateDataDuplicateMatches(
+                      {
+                        merchant: candidate.merchant,
+                        transactionDate: candidate.transaction_date,
+                        totalAmount:
+                          typeof candidate.total_amount === "number"
+                            ? candidate.total_amount
+                            : candidate.total_amount === null
+                              ? null
+                              : Number(candidate.total_amount),
+                      },
+                      candidates,
+                      candidate.created_by,
+                      {
+                        excludeCandidateId: candidate.id,
+                        receiptFileNames,
+                        receiptUploadedAtById,
+                      }
+                    )
+                  )}
                   onToggleExpanded={() => onToggleExpanded(row.id)}
                   onRequestDismiss={() => onRequestDismiss(candidate)}
                   onRequestReview={() => onRequestReview(candidate)}

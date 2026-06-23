@@ -1,3 +1,8 @@
+import {
+  canRetryExtraction,
+  persistedExtractionErrorLabel,
+  unsupportedFileErrorMessage,
+} from "@/lib/receipt-errors";
 import type { InsertTables, ReceiptUpload, ReceiptUploadStatus } from "@/lib/types";
 
 /** Maximum receipt upload size (10 MB). */
@@ -60,6 +65,8 @@ export interface ReceiptUploadDisplayRow {
   mimeTypeLabel: string;
   sizeLabel: string;
   pendingCopy: string;
+  extractionErrorLabel: string | null;
+  canRetryExtraction: boolean;
 }
 
 const MIME_TYPE_LABELS: Record<AllowedReceiptMimeType, string> = {
@@ -142,7 +149,7 @@ export function validateReceiptFile(
   if (!mimeType) {
     return {
       ok: false,
-      error: "Only JPEG, PNG, WebP, and PDF receipt files are supported.",
+      error: unsupportedFileErrorMessage(),
     };
   }
 
@@ -179,6 +186,8 @@ export function buildReceiptUploadInsert(params: {
   fileName: string;
   mimeType: AllowedReceiptMimeType;
   sizeBytes: number;
+  fileSha256?: string | null;
+  duplicateOfReceiptUploadId?: string | null;
 }): InsertTables<"receipt_uploads"> {
   const storagePath = buildReceiptStoragePath(
     params.userId,
@@ -197,6 +206,8 @@ export function buildReceiptUploadInsert(params: {
     size_bytes: params.sizeBytes,
     status: "uploaded",
     approved_for_shared_expense: false,
+    file_sha256: params.fileSha256 ?? null,
+    duplicate_of_receipt_upload_id: params.duplicateOfReceiptUploadId ?? null,
   };
 }
 
@@ -241,6 +252,10 @@ export function buildReceiptUploadDisplayRow(receipt: ReceiptUpload): ReceiptUpl
   const mimeType = isAllowedReceiptMimeType(receipt.mime_type)
     ? receipt.mime_type
     : "application/pdf";
+  const extractionErrorLabel = persistedExtractionErrorLabel(
+    receipt.last_extraction_status,
+    receipt.last_extraction_error
+  );
 
   return {
     id: receipt.id,
@@ -250,6 +265,8 @@ export function buildReceiptUploadDisplayRow(receipt: ReceiptUpload): ReceiptUpl
     mimeTypeLabel: describeReceiptMimeType(mimeType),
     sizeLabel: formatReceiptFileSize(receipt.size_bytes),
     pendingCopy: RECEIPT_PENDING_EXTRACTION_COPY,
+    extractionErrorLabel,
+    canRetryExtraction: canRetryExtraction(receipt.last_extraction_status),
   };
 }
 

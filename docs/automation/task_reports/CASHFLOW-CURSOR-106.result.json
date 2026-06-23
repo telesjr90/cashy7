@@ -1,0 +1,49 @@
+{
+  "taskId": "CASHFLOW-CURSOR-106",
+  "result": "PASS",
+  "filesChanged": [
+    "supabase/migrations/20260623000007_029_receipt_duplicate_errors.sql",
+    "src/lib/types.ts",
+    "src/lib/receipt-errors.ts",
+    "src/lib/receipt-errors.test.ts",
+    "src/lib/receipt-duplicates.ts",
+    "src/lib/receipt-duplicates.test.ts",
+    "src/lib/receipt-upload.ts",
+    "src/lib/receipt-upload.test.ts",
+    "src/lib/receipt-upload-service.ts",
+    "src/lib/receipt-upload-service.test.ts",
+    "src/lib/receipt-extraction.ts",
+    "src/lib/receipt-extraction.test.ts",
+    "src/lib/receipt-extraction-service.ts",
+    "src/lib/receipt-candidates.ts",
+    "src/lib/receipt-candidate-review.ts",
+    "src/lib/receipt-approval.ts",
+    "src/lib/receipt-approval-service.ts",
+    "src/lib/receipt-approval-service.test.ts",
+    "src/lib/receipt-candidate-service.test.ts",
+    "src/components/receipt-upload-card.tsx",
+    "src/components/receipt-candidate-panel.tsx",
+    "src/components/receipt-candidate-review-dialog.tsx",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-106.md",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-106.result.json"
+  ],
+  "migrationsCreated": [
+    "supabase/migrations/20260623000007_029_receipt_duplicate_errors.sql"
+  ],
+  "functionsCreated": [],
+  "dependenciesAdded": [],
+  "validation": {
+    "typecheck": "PASS",
+    "build": "PASS",
+    "testRun": "PASS"
+  },
+  "browserSmoke": {
+    "required": true,
+    "result": "PASS",
+    "note": "Unsupported file, duplicate reselect, core page loads; review-dialog missing-total/approved-duplicate confirm not exercised live."
+  },
+  "privacy": "PASS",
+  "productRules": "PASS",
+  "readyToCommit": true,
+  "nextTaskId": "CASHFLOW-CURSOR-107"
+}

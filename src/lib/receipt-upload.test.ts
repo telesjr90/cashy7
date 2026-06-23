@@ -63,7 +63,8 @@ describe("receipt upload helpers", () => {
     const result = validateReceiptFile(makeFile({ name: "notes.txt", type: "text/plain" }));
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.error).toMatch(/JPEG, PNG, WebP, and PDF/i);
+      expect(result.error).toMatch(/Unsupported receipt file/i);
+      expect(result.error).toMatch(/JPEG, PNG, WebP, or PDF/i);
     }
   });
 
@@ -146,6 +147,11 @@ describe("receipt upload helpers", () => {
       approved_for_shared_expense: false,
       approved_at: null,
       approved_by: null,
+      file_sha256: null,
+      duplicate_of_receipt_upload_id: null,
+      last_extraction_status: null,
+      last_extraction_error: null,
+      last_extraction_at: null,
       created_at: "2026-06-23T12:00:00.000Z",
       updated_at: "2026-06-23T12:00:00.000Z",
     });
