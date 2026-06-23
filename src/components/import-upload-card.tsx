@@ -1,14 +1,12 @@
-import { useCallback, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import {
   buildImportFileMetadata,
-  IMPORT_COLUMN_MAPPING_NEXT_COPY,
-  IMPORT_NEXT_PARSE_PREVIEW_LABEL,
   IMPORT_NO_RECORDS_CHANGED_COPY,
   IMPORT_PARSED_CANDIDATES_COPY,
   IMPORT_PARSE_FILE_LABEL,
-  IMPORT_REVIEW_BEFORE_SAVE_COPY,
   IMPORT_UPLOAD_HELP_COPY,
   IMPORT_UPLOAD_MAX_SIZE_LABEL,
+  IMPORT_VALIDATION_NEXT_COPY,
   type ImportFileMetadata,
   validateImportFile,
 } from "@/lib/import-upload";
@@ -17,6 +15,12 @@ import {
   type ImportParseResult,
   type ImportParsedRow,
 } from "@/lib/import-parser";
+import {
+  buildImportSourceColumns,
+  resetImportColumnMapping,
+  type ImportColumnMapping,
+} from "@/lib/import-column-mapping";
+import { ImportColumnMappingPanel } from "@/components/import-column-mapping-panel";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -27,6 +31,13 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { FileSpreadsheet, Loader2, Upload, X } from "lucide-react";
 
 const PREVIEW_ROW_LIMIT = 5;
@@ -58,8 +69,12 @@ function formatCellPreview(value: ImportParsedRow["values"][number]): string {
   return String(value);
 }
 
-function getPreviewRows(result: ImportParseResult): ImportParsedRow[] {
-  return result.sheets.flatMap((sheet) => sheet.rows).slice(0, PREVIEW_ROW_LIMIT);
+function getPreviewRows(result: ImportParseResult, sheetIndex: number): ImportParsedRow[] {
+  const sheet = result.sheets[sheetIndex];
+  if (!sheet) {
+    return [];
+  }
+  return sheet.rows.slice(0, PREVIEW_ROW_LIMIT);
 }
 
 export function ImportUploadCard() {
@@ -74,13 +89,21 @@ export function ImportUploadCard() {
   const [parseStatus, setParseStatus] = useState<ParseStatus>("idle");
   const [parseResult, setParseResult] = useState<ImportParseResult | null>(null);
   const [parseError, setParseError] = useState<string | null>(null);
+  const [selectedSheetIndex, setSelectedSheetIndex] = useState(0);
+  const [columnMapping, setColumnMapping] = useState<ImportColumnMapping>({});
   const [isDragging, setIsDragging] = useState(false);
+
+  const resetMappingState = useCallback(() => {
+    setSelectedSheetIndex(0);
+    setColumnMapping({});
+  }, []);
 
   const resetParseState = useCallback(() => {
     setParseStatus("idle");
     setParseResult(null);
     setParseError(null);
-  }, []);
+    resetMappingState();
+  }, [resetMappingState]);
 
   const processFile = useCallback(
     (file: File | null | undefined) => {
@@ -103,8 +126,9 @@ export function ImportUploadCard() {
       setParseStatus("ready");
       setParseResult(null);
       setParseError(null);
+      resetMappingState();
     },
-    [resetParseState]
+    [resetParseState, resetMappingState]
   );
 
   const handleInputChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -130,6 +154,7 @@ export function ImportUploadCard() {
     setParseStatus("parsing");
     setParseError(null);
     setParseResult(null);
+    resetMappingState();
 
     const outcome = await parseImportFile(selectedFile);
     if (!outcome.ok) {
@@ -140,7 +165,39 @@ export function ImportUploadCard() {
 
     setParseResult(outcome.result);
     setParseStatus("parsed");
+    setSelectedSheetIndex(0);
+
+    const firstSheet = outcome.result.sheets[0];
+    if (firstSheet) {
+      const columns = buildImportSourceColumns(firstSheet);
+      setColumnMapping(resetImportColumnMapping(columns, "suggested"));
+    }
   };
+
+  const handleSheetChange = (value: string) => {
+    const index = Number.parseInt(value, 10);
+    if (!parseResult || Number.isNaN(index)) {
+      return;
+    }
+
+    setSelectedSheetIndex(index);
+    const sheet = parseResult.sheets[index];
+    if (sheet) {
+      const columns = buildImportSourceColumns(sheet);
+      setColumnMapping(resetImportColumnMapping(columns, "suggested"));
+    } else {
+      setColumnMapping({});
+    }
+  };
+
+  useEffect(() => {
+    if (!parseResult || parseStatus !== "parsed") {
+      return;
+    }
+    if (selectedSheetIndex >= parseResult.sheets.length) {
+      setSelectedSheetIndex(0);
+    }
+  }, [parseResult, parseStatus, selectedSheetIndex]);
 
   const handleDragEnter = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
@@ -166,7 +223,9 @@ export function ImportUploadCard() {
     processFile(event.dataTransfer.files?.[0]);
   };
 
-  const previewRows = parseResult ? getPreviewRows(parseResult) : [];
+  const selectedSheet = parseResult?.sheets[selectedSheetIndex] ?? null;
+  const previewRows = parseResult ? getPreviewRows(parseResult, selectedSheetIndex) : [];
+  const hasMultipleSheets = (parseResult?.sheets.length ?? 0) > 1;
 
   return (
     <Card>
@@ -290,9 +349,6 @@ export function ImportUploadCard() {
                 ) : null}
                 {IMPORT_PARSE_FILE_LABEL}
               </Button>
-              <Button type="button" disabled aria-disabled="true">
-                {IMPORT_NEXT_PARSE_PREVIEW_LABEL}
-              </Button>
             </div>
 
             {parseError && (
@@ -345,13 +401,36 @@ export function ImportUploadCard() {
                   </Alert>
                 )}
 
+                {hasMultipleSheets && (
+                  <div className="space-y-2">
+                    <Label htmlFor="import-sheet-select">Sheet for mapping</Label>
+                    <Select
+                      value={String(selectedSheetIndex)}
+                      onValueChange={handleSheetChange}
+                    >
+                      <SelectTrigger id="import-sheet-select" className="w-full sm:w-72">
+                        <SelectValue placeholder="Choose a sheet" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {parseResult.sheets.map((sheet, index) => (
+                          <SelectItem key={sheet.name} value={String(index)}>
+                            {sheet.name} ({sheet.nonEmptyRowCount} rows)
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
                 <div className="space-y-2">
                   <h4 className="text-sm font-medium">Sheets</h4>
                   <ul className="space-y-1 text-sm">
-                    {parseResult.sheets.map((sheet) => (
+                    {parseResult.sheets.map((sheet, index) => (
                       <li
                         key={sheet.name}
-                        className="flex flex-wrap items-center justify-between gap-2 rounded-md border bg-background px-3 py-2"
+                        className={`flex flex-wrap items-center justify-between gap-2 rounded-md border bg-background px-3 py-2 ${
+                          index === selectedSheetIndex ? "border-primary" : ""
+                        }`}
                       >
                         <span className="font-medium">{sheet.name}</span>
                         <span className="text-muted-foreground">
@@ -364,7 +443,7 @@ export function ImportUploadCard() {
 
                 {previewRows.length > 0 && (
                   <div className="space-y-2">
-                    <h4 className="text-sm font-medium">Candidate row preview</h4>
+                    <h4 className="text-sm font-medium">Raw candidate row preview</h4>
                     <div className="overflow-x-auto rounded-md border bg-background">
                       <table className="w-full min-w-[28rem] text-left text-sm">
                         <thead className="border-b bg-muted/40">
@@ -393,16 +472,22 @@ export function ImportUploadCard() {
                 <div className="space-y-1 rounded-md bg-background px-3 py-2 text-sm">
                   <p>{IMPORT_PARSED_CANDIDATES_COPY}</p>
                   <p className="text-muted-foreground">{IMPORT_NO_RECORDS_CHANGED_COPY}</p>
-                  <p className="text-muted-foreground">{IMPORT_COLUMN_MAPPING_NEXT_COPY}</p>
-                  <p className="text-muted-foreground">{IMPORT_REVIEW_BEFORE_SAVE_COPY}</p>
                 </div>
+
+                {selectedSheet && (
+                  <ImportColumnMappingPanel
+                    sheet={selectedSheet}
+                    mapping={columnMapping}
+                    onMappingChange={setColumnMapping}
+                  />
+                )}
               </div>
             )}
 
             {!parseResult && (
               <div className="space-y-1 rounded-md bg-background px-3 py-2 text-sm">
                 <p className="text-muted-foreground">{IMPORT_NO_RECORDS_CHANGED_COPY}</p>
-                <p className="text-muted-foreground">{IMPORT_COLUMN_MAPPING_NEXT_COPY}</p>
+                <p className="text-muted-foreground">{IMPORT_VALIDATION_NEXT_COPY}</p>
               </div>
             )}
           </div>

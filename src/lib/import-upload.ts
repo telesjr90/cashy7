@@ -23,6 +23,12 @@ export const IMPORT_PARSED_CANDIDATES_COPY = "Parsed rows are candidates only.";
 
 export const IMPORT_COLUMN_MAPPING_NEXT_COPY = "Column mapping happens next.";
 
+export const IMPORT_MAPPED_CANDIDATES_COPY = "Mapped rows are still candidates only.";
+
+export const IMPORT_VALIDATION_NEXT_COPY = "Validation happens next.";
+
+export const IMPORT_NEXT_VALIDATE_ROWS_LABEL = "Next: validate rows";
+
 export const IMPORT_PARSE_FILE_LABEL = "Parse file";
 
 export const IMPORT_UPLOAD_HELP_COPY =
