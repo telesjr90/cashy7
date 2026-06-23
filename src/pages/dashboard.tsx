@@ -28,7 +28,14 @@ import { getHouseholdPeople } from "@/lib/user-person";
 import type { Person } from "@/lib/types";
 import { useAuth } from "@/lib/auth-context";
 import { supabase } from "@/lib/supabase";
-import type { Bill, BillInstance, CashPaymentTransaction, ManualExpense } from "@/lib/types";
+import type {
+  Bill,
+  BillInstance,
+  CashPaymentTransaction,
+  DebtAccount,
+  DebtPayment,
+  ManualExpense,
+} from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -72,6 +79,8 @@ import {
   filterBillsForDashboardView,
 } from "@/lib/dashboard-drilldowns";
 import { buildMySavingsDrilldown } from "@/lib/dashboard-savings-drilldown";
+import { buildDashboardDebtSummary } from "@/lib/dashboard-debt-summary";
+import { DashboardDebtSummary } from "@/components/dashboard-debt-summary";
 import {
   buildDashboardBillViewLabel,
   buildUnpaidBillDrilldown,
@@ -169,6 +178,10 @@ export function DashboardPage() {
   >([]);
   const [savingsGoalsForDrilldownLoading, setSavingsGoalsForDrilldownLoading] =
     useState(false);
+  const [debtAccounts, setDebtAccounts] = useState<DebtAccount[]>([]);
+  const [debtPayments, setDebtPayments] = useState<DebtPayment[]>([]);
+  const [debtSummaryLoading, setDebtSummaryLoading] = useState(true);
+  const [debtSummaryError, setDebtSummaryError] = useState<string | null>(null);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth() + 1;
@@ -288,6 +301,35 @@ export function DashboardPage() {
     }
     setSavingsContributionsLoading(false);
   }, [household, user]);
+
+  const fetchDebtSummary = useCallback(async () => {
+    if (!household) return;
+
+    setDebtSummaryLoading(true);
+    const [accountsResult, paymentsResult] = await Promise.all([
+      supabase
+        .from("debt_accounts")
+        .select("*")
+        .eq("household_id", household.id)
+        .order("name"),
+      supabase.from("debt_payments").select("*").eq("household_id", household.id),
+    ]);
+
+    if (accountsResult.error || paymentsResult.error) {
+      setDebtSummaryError(
+        accountsResult.error?.message ??
+          paymentsResult.error?.message ??
+          "Failed to load debt summary"
+      );
+      setDebtAccounts([]);
+      setDebtPayments([]);
+    } else {
+      setDebtSummaryError(null);
+      setDebtAccounts((accountsResult.data ?? []) as DebtAccount[]);
+      setDebtPayments((paymentsResult.data ?? []) as DebtPayment[]);
+    }
+    setDebtSummaryLoading(false);
+  }, [household]);
 
   const fetchManualExpenses = useCallback(async () => {
     if (!household) return;
@@ -450,6 +492,8 @@ export function DashboardPage() {
           transactionsResult,
           participantsResult,
           contributionsResult,
+          debtAccountsResult,
+          debtPaymentsResult,
         ] = await Promise.all([
           getMyLatestCashSnapshot(household.id, user.id),
           supabase
@@ -462,6 +506,12 @@ export function DashboardPage() {
           getMyCashPaymentTransactions(household.id, user.id),
           getMySavingsGoalParticipants(household.id, user.id),
           getMySavingsContributions(household.id, user.id),
+          supabase
+            .from("debt_accounts")
+            .select("*")
+            .eq("household_id", household.id)
+            .order("name"),
+          supabase.from("debt_payments").select("*").eq("household_id", household.id),
         ]);
 
         if (settingsFetchError) {
@@ -541,6 +591,26 @@ export function DashboardPage() {
           setSavingsContributions(contributions);
         }
 
+        const { error: debtAccountsError, data: debtAccountsData } =
+          debtAccountsResult;
+        const { error: debtPaymentsError, data: debtPaymentsData } =
+          debtPaymentsResult;
+        if (debtAccountsError || debtPaymentsError) {
+          setDebtSummaryError(
+            debtAccountsError?.message ??
+              debtPaymentsError?.message ??
+              "Failed to load debt summary"
+          );
+          if (!background) {
+            setDebtAccounts([]);
+            setDebtPayments([]);
+          }
+        } else {
+          setDebtSummaryError(null);
+          setDebtAccounts((debtAccountsData ?? []) as DebtAccount[]);
+          setDebtPayments((debtPaymentsData ?? []) as DebtPayment[]);
+        }
+
         await fetchRecentCashActivity({ background: true });
       } finally {
         refreshInFlightRef.current = false;
@@ -614,6 +684,10 @@ export function DashboardPage() {
   useEffect(() => {
     fetchBills();
   }, [fetchBills]);
+
+  useEffect(() => {
+    void fetchDebtSummary();
+  }, [fetchDebtSummary]);
 
   useEffect(() => {
     let cancelled = false;
@@ -947,6 +1021,14 @@ export function DashboardPage() {
     drilldownBills,
     shareKey,
     debtLinkedBillIds
+  );
+  const dashboardDebtSummary = useMemo(
+    () =>
+      buildDashboardDebtSummary({
+        accounts: debtAccounts,
+        payments: debtPayments,
+      }),
+    [debtAccounts, debtPayments]
   );
   const savingsDrilldown = useMemo(() => {
     if (!user) {
@@ -1684,6 +1766,12 @@ export function DashboardPage() {
             )}
           </CardContent>
         </Card>
+
+        <DashboardDebtSummary
+          summary={dashboardDebtSummary}
+          loading={debtSummaryLoading}
+          error={debtSummaryError}
+        />
 
         <div className="mb-6 flex items-center justify-between">
           <div className="flex items-center gap-2">
