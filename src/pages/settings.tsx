@@ -37,7 +37,6 @@ import {
   getMySavingsGoalTargetPeriodSummary,
   getParticipantSummaryMonthHint,
   getSavingsGoals,
-  sumMyContributionsForGoal,
 } from "@/lib/savings";
 import {
   buildSavingsContributionGoalNameLookup,
@@ -71,6 +70,17 @@ import { PaycheckScheduleSettingsPanel } from "@/components/paycheck-schedule-se
 import { getMyPaycheckSchedule } from "@/lib/paycheck-schedule";
 import { buildSavingsGoalDetailView } from "@/lib/savings-detail";
 import { buildSavingsRolloverDisplayView } from "@/lib/savings-rollover";
+import {
+  filterSavingsContributionsByCashflowStart,
+  getSavingsContributionPreStartLabel,
+  getSavingsPageVisibleContributions,
+  isSavingsContributionPreStart,
+  SAVINGS_ACTIVE_TOTAL_EXCLUDES_PRE_START_NOTICE,
+  SAVINGS_CONTRIBUTIONS_PRE_START_HIDDEN_NOTICE,
+  SAVINGS_PRE_START_LABEL,
+  SHOW_PRE_START_SAVINGS_CONTRIBUTIONS_LABEL,
+  sumActiveSavingsContributionAmounts,
+} from "@/lib/savings-cashflow-start";
 import type {
   CashSnapshot,
   HouseholdSettings,
@@ -102,9 +112,11 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Loader as Loader2, Settings } from "lucide-react";
 import { format, parseISO } from "date-fns";
+import { Badge } from "@/components/ui/badge";
 
 function todayIsoDate(): string {
   return format(new Date(), "yyyy-MM-dd");
@@ -132,6 +144,8 @@ interface SavingsGoalPanelProps {
   personId: string | null;
   householdId: string;
   userId: string;
+  cashflowStartDate: string | null;
+  showPreStartSavingsContributions: boolean;
   onRefresh: () => Promise<void>;
   onCashDataRefresh: () => Promise<void>;
 }
@@ -144,6 +158,8 @@ function SavingsGoalPanel({
   personId,
   householdId,
   userId,
+  cashflowStartDate,
+  showPreStartSavingsContributions,
   onRefresh,
   onCashDataRefresh,
 }: SavingsGoalPanelProps) {
@@ -170,22 +186,47 @@ function SavingsGoalPanel({
     () => filterMyContributionsForGoal(contributions, goal.id, userId),
     [contributions, goal.id, userId]
   );
-  const myTotalContributed = useMemo(
-    () => sumMyContributionsForGoal(contributions, goal.id, userId),
-    [contributions, goal.id, userId]
+  const planningContributions = useMemo(
+    () =>
+      filterSavingsContributionsByCashflowStart(goalContributions, cashflowStartDate),
+    [goalContributions, cashflowStartDate]
+  );
+  const visibleContributions = useMemo(
+    () =>
+      getSavingsPageVisibleContributions(
+        goalContributions,
+        cashflowStartDate,
+        showPreStartSavingsContributions
+      ),
+    [goalContributions, cashflowStartDate, showPreStartSavingsContributions]
+  );
+  const myActiveContributed = useMemo(
+    () => sumActiveSavingsContributionAmounts(goalContributions, cashflowStartDate),
+    [goalContributions, cashflowStartDate]
+  );
+  const hasPreStartContributions = useMemo(
+    () =>
+      cashflowStartDate != null &&
+      goalContributions.some((row) =>
+        isSavingsContributionPreStart(row, cashflowStartDate)
+      ),
+    [goalContributions, cashflowStartDate]
   );
   const targetPeriodSummary = useMemo(
     () =>
       participant
-        ? getMySavingsGoalTargetPeriodSummary(participant, contributions)
+        ? getMySavingsGoalTargetPeriodSummary(
+            participant,
+            planningContributions
+          )
         : null,
-    [participant, contributions]
+    [participant, planningContributions]
   );
   const targetPeriodMonthHint = useMemo(
     () => (participant ? getParticipantSummaryMonthHint(participant) : null),
     [participant]
   );
-  const recentContributions = goalContributions.slice(0, 5);
+  const recentContributions = visibleContributions.slice(0, 5);
   const isGoalCreator = canUserEditGoal(goal, userId);
   const sharedGoalDisplay = useMemo(
     () =>
@@ -193,10 +234,10 @@ function SavingsGoalPanel({
         ? buildPrivacySafeSharedGoalDisplay({
             goal,
             myParticipant: participant,
-            mySavedAmount: myTotalContributed,
+            mySavedAmount: myActiveContributed,
           })
         : null,
-    [goal, participant, myTotalContributed]
+    [goal, participant, myActiveContributed]
   );
   const detailView = useMemo(
     () =>
@@ -206,8 +247,18 @@ function SavingsGoalPanel({
         contributions,
         userId,
         cashDeductionSourceIds,
+        cashflowStartDate,
+        showPreStartSavingsContributions,
       }),
-    [goal, participant, contributions, userId, cashDeductionSourceIds]
+    [
+      goal,
+      participant,
+      contributions,
+      userId,
+      cashDeductionSourceIds,
+      cashflowStartDate,
+      showPreStartSavingsContributions,
+    ]
   );
   const rolloverDisplay = useMemo(
     () =>
@@ -215,11 +266,12 @@ function SavingsGoalPanel({
         ? buildSavingsRolloverDisplayView({
             goal,
             participant,
-            contributions,
+            contributions: planningContributions,
             userId,
+            cashflowStartDate,
           })
         : null,
-    [goal, participant, contributions, userId]
+    [goal, participant, planningContributions, userId, cashflowStartDate]
   );
 
   const handleLogContribution = async () => {
@@ -464,6 +516,11 @@ function SavingsGoalPanel({
           <h4 className="text-sm font-medium">
             Your contributions for this target period
           </h4>
+          {cashflowStartDate && hasPreStartContributions && (
+            <p className="text-xs text-muted-foreground">
+              {SAVINGS_ACTIVE_TOTAL_EXCLUDES_PRE_START_NOTICE}
+            </p>
+          )}
           {targetPeriodMonthHint && (
             <p className="text-xs text-muted-foreground">{targetPeriodMonthHint}</p>
           )}
@@ -518,7 +575,7 @@ function SavingsGoalPanel({
           continueDialog={
             <SavingsContinuePeriodDialog
               participant={participant}
-              contributions={contributions}
+              contributions={planningContributions}
               householdId={householdId}
               userId={userId}
               personId={personId}
@@ -542,8 +599,11 @@ function SavingsGoalPanel({
             </p>
           ) : (
             <p className="mt-1 text-sm">
-              My all-time contributions:{" "}
-              <span className="font-medium">{formatCurrency(myTotalContributed)}</span>
+              {cashflowStartDate ? "My active contributions" : "My all-time contributions"}
+              :{" "}
+              <span className="font-medium">
+                {formatCurrency(myActiveContributed)}
+              </span>
             </p>
           )}
         </div>
@@ -555,17 +615,30 @@ function SavingsGoalPanel({
                 contributionRow.id,
                 cashDeductionSourceIds
               );
+              const preStartLabel = getSavingsContributionPreStartLabel(
+                contributionRow,
+                cashflowStartDate
+              );
+              const isPreStart =
+                preStartLabel != null && showPreStartSavingsContributions;
 
               return (
               <li
                 key={contributionRow.id}
-                className="flex flex-wrap items-baseline justify-between gap-2 rounded-md bg-muted/40 px-3 py-2"
+                className={`flex flex-wrap items-baseline justify-between gap-2 rounded-md px-3 py-2 ${
+                  isPreStart ? "border border-dashed bg-muted/20" : "bg-muted/40"
+                }`}
               >
                 <span className="font-medium">
                   {formatCurrency(Number(contributionRow.amount))}
                 </span>
-                <span className="text-muted-foreground">
-                  {formatDisplayDate(contributionRow.contribution_date)}
+                <span className="flex flex-wrap items-center justify-end gap-2 text-muted-foreground">
+                  {isPreStart && (
+                    <Badge variant="outline" className="text-xs">
+                      {SAVINGS_PRE_START_LABEL}
+                    </Badge>
+                  )}
+                  <span>{formatDisplayDate(contributionRow.contribution_date)}</span>
                 </span>
                 {contributionRow.notes && (
                   <span className="w-full text-muted-foreground">
@@ -719,6 +792,19 @@ export function SettingsPage() {
   const [goalCreating, setGoalCreating] = useState(false);
   const [goalCreateError, setGoalCreateError] = useState<string | null>(null);
   const [goalCreateSuccess, setGoalCreateSuccess] = useState<string | null>(null);
+  const [showPreStartSavingsContributions, setShowPreStartSavingsContributions] =
+    useState(false);
+
+  const cashflowStartDate = settings?.cashflow_start_date ?? null;
+
+  const hasPreStartSavingsContributions = useMemo(
+    () =>
+      cashflowStartDate != null &&
+      myContributions.some((row) =>
+        isSavingsContributionPreStart(row, cashflowStartDate)
+      ),
+    [myContributions, cashflowStartDate]
+  );
 
   const participantsByGoalId = useMemo(() => {
     const map = new Map<string, SavingsGoalParticipant>();
@@ -1611,6 +1697,30 @@ export function SettingsPage() {
               <p className="text-sm text-muted-foreground">No savings goals yet.</p>
             ) : (
               <div className="space-y-4">
+                {!settingsLoading &&
+                  cashflowStartDate &&
+                  hasPreStartSavingsContributions && (
+                    <Alert>
+                      <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                        <span>{SAVINGS_CONTRIBUTIONS_PRE_START_HIDDEN_NOTICE}</span>
+                        <div className="flex items-center gap-2">
+                          <Checkbox
+                            id="show-pre-start-savings-contributions"
+                            checked={showPreStartSavingsContributions}
+                            onCheckedChange={(checked) =>
+                              setShowPreStartSavingsContributions(checked === true)
+                            }
+                          />
+                          <Label
+                            htmlFor="show-pre-start-savings-contributions"
+                            className="text-sm font-normal"
+                          >
+                            {SHOW_PRE_START_SAVINGS_CONTRIBUTIONS_LABEL}
+                          </Label>
+                        </div>
+                      </AlertDescription>
+                    </Alert>
+                  )}
                 {savingsGoals.map((goal) => (
                   <SavingsGoalPanel
                     key={goal.id}
@@ -1621,6 +1731,8 @@ export function SettingsPage() {
                     personId={membership?.person_id ?? null}
                     householdId={household.id}
                     userId={user.id}
+                    cashflowStartDate={cashflowStartDate}
+                    showPreStartSavingsContributions={showPreStartSavingsContributions}
                     onRefresh={loadSavings}
                     onCashDataRefresh={refreshCashData}
                   />

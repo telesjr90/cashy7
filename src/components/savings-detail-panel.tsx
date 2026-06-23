@@ -165,6 +165,11 @@ export function SavingsDetailPanel({
 
               <section className="space-y-3">
                 <h3 className="text-sm font-semibold">Your contributions</h3>
+                {detail.cashflowStartExcludesPreStartNotice && (
+                  <p className="text-xs text-muted-foreground">
+                    {detail.cashflowStartExcludesPreStartNotice}
+                  </p>
+                )}
                 {detail.contributions.length > 0 ? (
                   <>
                     <dl className="grid gap-2 text-sm">
@@ -172,6 +177,18 @@ export function SavingsDetailPanel({
                         <DetailRow
                           label="Total this period"
                           value={detail.periodContributionsTotalLabel}
+                        />
+                      )}
+                      {detail.activeContributionsTotalLabel && (
+                        <DetailRow
+                          label="Total (active planning)"
+                          value={detail.activeContributionsTotalLabel}
+                        />
+                      )}
+                      {detail.preStartContributionsTotalLabel && (
+                        <DetailRow
+                          label="Total (before cashflow start)"
+                          value={detail.preStartContributionsTotalLabel}
                         />
                       )}
                       {detail.allTimeContributionsTotalLabel && (
@@ -185,7 +202,11 @@ export function SavingsDetailPanel({
                       {detail.contributions.map((contribution, index) => (
                         <li
                           key={`${contribution.dateLabel}-${contribution.amountLabel}-${index}`}
-                          className="rounded-md border px-3 py-2"
+                          className={`rounded-md border px-3 py-2 ${
+                            contribution.beforeCashflowStartLabel
+                              ? "border-dashed bg-muted/20"
+                              : ""
+                          }`}
                         >
                           <div className="flex items-baseline justify-between gap-2">
                             <span className="font-medium">
@@ -195,6 +216,11 @@ export function SavingsDetailPanel({
                               {contribution.dateLabel}
                             </span>
                           </div>
+                          {contribution.beforeCashflowStartLabel && (
+                            <p className="mt-1 text-xs text-muted-foreground">
+                              {contribution.beforeCashflowStartLabel}
+                            </p>
+                          )}
                           {contribution.notes && (
                             <p className="mt-1 text-muted-foreground">
                               {contribution.notes}

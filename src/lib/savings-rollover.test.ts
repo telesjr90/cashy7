@@ -430,6 +430,26 @@ describe("buildSavingsRolloverDisplayView", () => {
 
     expect(savingsRolloverViewContainsRawUuid(view)).toBe(false);
   });
+
+  it("ignores pre-start contributions in active planning totals", () => {
+    const current = buildCurrentPeriodInfo(
+      participant({ period_start: "2026-06-01", period_end: "2026-06-30" }),
+      [
+        contribution({ amount: 40, contribution_date: "2026-06-10" }),
+        contribution({
+          id: "active",
+          amount: 60,
+          contribution_date: "2026-06-20",
+        }),
+      ],
+      userA,
+      new Date("2026-06-25T12:00:00.000Z"),
+      "2026-06-15"
+    );
+
+    expect(current.contributedAmount).toBe(60);
+    expect(current.remainingObligation).toBe(140);
+  });
 });
 
 describe("getCalendarPeriodBounds", () => {

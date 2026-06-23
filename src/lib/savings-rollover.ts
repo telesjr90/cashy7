@@ -3,6 +3,7 @@ import {
   calculateRemainingSavingsObligation,
   filterMyContributionsForGoal,
 } from "@/lib/savings";
+import { isSavingsContributionPreStart } from "@/lib/savings-cashflow-start";
 import {
   SHARED_GOAL_METADATA_ONLY_COPY,
   SHARED_GOAL_PRIVACY_COPY,
@@ -183,7 +184,8 @@ export function sumOwnContributionsInPeriodWindow(
   contributions: SavingsContribution[],
   userId: string,
   periodStart: string,
-  periodEnd: string
+  periodEnd: string,
+  cashflowStartDate?: string | null
 ): number {
   const goalContributions = filterMyContributionsForGoal(
     contributions,
@@ -193,6 +195,13 @@ export function sumOwnContributionsInPeriodWindow(
 
   return goalContributions.reduce((sum, contribution) => {
     if (contribution.user_id !== userId) {
+      return sum;
+    }
+
+    if (
+      cashflowStartDate &&
+      isSavingsContributionPreStart(contribution, cashflowStartDate)
+    ) {
       return sum;
     }
 
@@ -225,7 +234,8 @@ export function buildCurrentPeriodInfo(
   participant: SavingsGoalParticipant,
   contributions: SavingsContribution[],
   userId: string,
-  referenceDate: Date = new Date()
+  referenceDate: Date = new Date(),
+  cashflowStartDate?: string | null
 ): SavingsCurrentPeriodInfo {
   const configuredStart = parseDateOnly(participant.period_start);
   const configuredEnd = parseDateOnly(participant.period_end);
@@ -253,7 +263,8 @@ export function buildCurrentPeriodInfo(
     contributions,
     userId,
     periodStart,
-    periodEnd
+    periodEnd,
+    cashflowStartDate
   );
 
   return {
@@ -284,7 +295,8 @@ export function buildRolloverInfo(
   participant: SavingsGoalParticipant,
   contributions: SavingsContribution[],
   userId: string,
-  referenceDate: Date = new Date()
+  referenceDate: Date = new Date(),
+  cashflowStartDate?: string | null
 ): SavingsRolloverInfo {
   const periodStart = parseDateOnly(participant.period_start);
   const periodEnd = parseDateOnly(participant.period_end);
@@ -328,7 +340,8 @@ export function buildRolloverInfo(
     contributions,
     userId,
     periodStart,
-    periodEnd
+    periodEnd,
+    cashflowStartDate
   );
   const priorShortfall = calculateRemainingSavingsObligation(
     targetAmount,
@@ -435,7 +448,8 @@ export function buildNextPeriodPreview(
   contributions: SavingsContribution[],
   userId: string,
   referenceDate: Date = new Date(),
-  includeRollover = true
+  includeRollover = true,
+  cashflowStartDate?: string | null
 ): SavingsNextPeriodPreview | null {
   const periodEnd = parseDateOnly(participant.period_end);
   if (!periodEnd || !canContinueToNextPeriod(participant, referenceDate)) {
@@ -444,7 +458,13 @@ export function buildNextPeriodPreview(
 
   const nextBounds = getNextPeriodBounds(participant.contribution_period, periodEnd);
   const baseTargetAmount = toSafeNumber(participant.target_contribution_amount);
-  const rollover = buildRolloverInfo(participant, contributions, userId, referenceDate);
+  const rollover = buildRolloverInfo(
+    participant,
+    contributions,
+    userId,
+    referenceDate,
+    cashflowStartDate
+  );
   const rolloverAmount =
     includeRollover && rollover.rolloverAmount && rollover.rolloverAmount > 0
       ? rollover.rolloverAmount
@@ -522,26 +542,31 @@ export function buildSavingsRolloverDisplayView(input: {
   contributions: SavingsContribution[];
   userId: string;
   referenceDate?: Date;
+  cashflowStartDate?: string | null;
 }): SavingsRolloverDisplayView {
   const referenceDate = input.referenceDate ?? new Date();
+  const cashflowStartDate = input.cashflowStartDate ?? null;
   const currentPeriod = buildCurrentPeriodInfo(
     input.participant,
     input.contributions,
     input.userId,
-    referenceDate
+    referenceDate,
+    cashflowStartDate
   );
   const rollover = buildRolloverInfo(
     input.participant,
     input.contributions,
     input.userId,
-    referenceDate
+    referenceDate,
+    cashflowStartDate
   );
   const nextPreview = buildNextPeriodPreview(
     input.participant,
     input.contributions,
     input.userId,
     referenceDate,
-    true
+    true,
+    cashflowStartDate
   );
   const isSharedGoal = input.goal.goal_type === "shared";
 

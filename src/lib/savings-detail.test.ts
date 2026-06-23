@@ -19,6 +19,10 @@ import {
   collectSavingsDetailUserFacingStrings,
   savingsDetailViewContainsRawUuid,
 } from "@/lib/savings-detail";
+import {
+  SAVINGS_ACTIVE_TOTAL_EXCLUDES_PRE_START_NOTICE,
+  SAVINGS_PRE_START_LABEL,
+} from "@/lib/savings-cashflow-start";
 
 const userA = "user-a";
 const userB = "user-b";
@@ -278,5 +282,79 @@ describe("buildSavingsGoalDetailView", () => {
     });
 
     expect(savingsDetailViewContainsRawUuid(detail)).toBe(false);
+  });
+
+  it("excludes pre-start contributions from active totals when start date is set", () => {
+    const detail = buildSavingsGoalDetailView({
+      goal: goal(),
+      participant: participant(),
+      contributions: [
+        contribution({ amount: 25, contribution_date: "2026-06-10" }),
+        contribution({
+          id: "contrib-active",
+          amount: 75,
+          contribution_date: "2026-06-20",
+        }),
+      ],
+      userId: userA,
+      cashflowStartDate: "2026-06-15",
+      referenceDate: new Date("2026-06-25T12:00:00.000Z"),
+    });
+
+    expect(detail.activeContributionsTotalLabel).toBe(formatCurrency(75));
+    expect(detail.preStartContributionsTotalLabel).toBe(formatCurrency(25));
+    expect(detail.allTimeContributionsTotalLabel).toBeNull();
+    expect(detail.cashflowStartExcludesPreStartNotice).toBe(
+      SAVINGS_ACTIVE_TOTAL_EXCLUDES_PRE_START_NOTICE
+    );
+    expect(detail.contributions).toHaveLength(1);
+    expect(detail.periodContributionsTotalLabel).toBe(formatCurrency(75));
+  });
+
+  it("labels pre-start contributions when show-pre-start mode is enabled", () => {
+    const detail = buildSavingsGoalDetailView({
+      goal: goal(),
+      participant: participant(),
+      contributions: [
+        contribution({ amount: 25, contribution_date: "2026-06-10" }),
+        contribution({
+          id: "contrib-active",
+          amount: 75,
+          contribution_date: "2026-06-20",
+        }),
+      ],
+      userId: userA,
+      cashflowStartDate: "2026-06-15",
+      showPreStartSavingsContributions: true,
+    });
+
+    expect(detail.contributions).toHaveLength(2);
+    const preStartRow = detail.contributions.find(
+      (row) => row.beforeCashflowStartLabel != null
+    );
+    expect(preStartRow?.beforeCashflowStartLabel).toBe(SAVINGS_PRE_START_LABEL);
+  });
+
+  it("keeps shared goal privacy copy and excludes other-user amounts", () => {
+    const detail = buildSavingsGoalDetailView({
+      goal: goal({ goal_type: "shared" }),
+      participant: participant(),
+      contributions: [
+        contribution({ amount: 50, user_id: userA }),
+        contribution({
+          id: "contrib-other",
+          amount: 125,
+          user_id: userB,
+          contribution_date: "2026-06-05",
+        }),
+      ],
+      userId: userA,
+      cashflowStartDate: "2026-06-15",
+    });
+
+    expect(detail.sharedPrivacyCopy).toBe(SAVINGS_DETAIL_SHARED_PRIVACY_COPY);
+    expect(detail.otherUserPrivacyLabel).toBe(SAVINGS_DETAIL_OTHER_USER_PRIVACY_COPY);
+    const strings = collectSavingsDetailUserFacingStrings(detail).join(" ");
+    expect(strings).not.toContain(formatCurrency(125));
   });
 });

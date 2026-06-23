@@ -4,6 +4,14 @@ import {
   buildContributionCashDeductionDetailLabel,
 } from "@/lib/savings-cash-actions";
 import {
+  filterSavingsContributionsByCashflowStart,
+  getSavingsContributionPreStartLabel,
+  getSavingsPageVisibleContributions,
+  SAVINGS_ACTIVE_TOTAL_EXCLUDES_PRE_START_NOTICE,
+  sumActiveSavingsContributionAmounts,
+  sumPreStartSavingsContributionAmounts,
+} from "@/lib/savings-cashflow-start";
+import {
   filterMyContributionsForGoal,
   getMySavingsGoalTargetPeriodSummary,
   getParticipantSummaryMonthHint,
@@ -83,6 +91,7 @@ export interface SavingsContributionDetailRow {
   amountLabel: string;
   notes: string | null;
   cashDeductionLabel: string | null;
+  beforeCashflowStartLabel: string | null;
 }
 
 export interface SavingsGoalDetailView {
@@ -108,6 +117,9 @@ export interface SavingsGoalDetailView {
   contributions: SavingsContributionDetailRow[];
   periodContributionsTotalLabel: string | null;
   allTimeContributionsTotalLabel: string | null;
+  activeContributionsTotalLabel: string | null;
+  preStartContributionsTotalLabel: string | null;
+  cashflowStartExcludesPreStartNotice: string | null;
   noContributionsFallback: string | null;
   isSharedGoal: boolean;
   sharedPrivacyCopy: string | null;
@@ -125,11 +137,14 @@ export type BuildSavingsGoalDetailViewInput = {
   userId: string;
   cashDeductionSourceIds?: ReadonlySet<string>;
   referenceDate?: Date;
+  cashflowStartDate?: string | null;
+  showPreStartSavingsContributions?: boolean;
 };
 
 function buildContributionRows(
   goalContributions: SavingsContribution[],
-  cashDeductionSourceIds: ReadonlySet<string>
+  cashDeductionSourceIds: ReadonlySet<string>,
+  cashflowStartDate: string | null | undefined
 ): SavingsContributionDetailRow[] {
   return [...goalContributions]
     .sort((left, right) => {
@@ -147,6 +162,10 @@ function buildContributionRows(
         contribution.id,
         cashDeductionSourceIds
       ),
+      beforeCashflowStartLabel: getSavingsContributionPreStartLabel(
+        contribution,
+        cashflowStartDate
+      ),
     }));
 }
 
@@ -156,14 +175,38 @@ export function buildSavingsGoalDetailView(
   const { goal, participant, contributions, userId } = input;
   const referenceDate = input.referenceDate ?? new Date();
   const cashDeductionSourceIds = input.cashDeductionSourceIds ?? new Set<string>();
+  const cashflowStartDate = input.cashflowStartDate ?? null;
+  const showPreStartSavingsContributions =
+    input.showPreStartSavingsContributions ?? false;
   const goalContributions = filterMyContributionsForGoal(
     contributions,
     goal.id,
     userId
   );
+  const planningContributions = filterSavingsContributionsByCashflowStart(
+    goalContributions,
+    cashflowStartDate
+  );
+  const visibleContributions = getSavingsPageVisibleContributions(
+    goalContributions,
+    cashflowStartDate,
+    showPreStartSavingsContributions
+  );
   const allTimeTotal = sumMyContributionsForGoal(contributions, goal.id, userId);
+  const activeTotal = sumActiveSavingsContributionAmounts(
+    goalContributions,
+    cashflowStartDate
+  );
+  const preStartTotal = sumPreStartSavingsContributionAmounts(
+    goalContributions,
+    cashflowStartDate
+  );
   const targetPeriodSummary = participant
-    ? getMySavingsGoalTargetPeriodSummary(participant, contributions, referenceDate)
+    ? getMySavingsGoalTargetPeriodSummary(
+        participant,
+        planningContributions,
+        referenceDate
+      )
     : null;
   const periodSummaryHint = participant
     ? getParticipantSummaryMonthHint(participant, referenceDate)
@@ -218,14 +261,31 @@ export function buildSavingsGoalDetailView(
     ownProgressPercentLabel:
       progressPercent === null ? null : `${progressPercent}%`,
     noOwnTargetFallback: participant ? null : SAVINGS_DETAIL_NO_OWN_TARGET_FALLBACK,
-    contributions: buildContributionRows(goalContributions, cashDeductionSourceIds),
+    contributions: buildContributionRows(
+      visibleContributions,
+      cashDeductionSourceIds,
+      cashflowStartDate
+    ),
     periodContributionsTotalLabel: targetPeriodSummary
       ? formatCurrency(targetPeriodSummary.contributedAmount)
       : null,
     allTimeContributionsTotalLabel:
-      goalContributions.length > 0 ? formatCurrency(allTimeTotal) : null,
+      !cashflowStartDate && goalContributions.length > 0
+        ? formatCurrency(allTimeTotal)
+        : null,
+    activeContributionsTotalLabel:
+      cashflowStartDate && goalContributions.length > 0
+        ? formatCurrency(activeTotal)
+        : null,
+    preStartContributionsTotalLabel:
+      cashflowStartDate && preStartTotal > 0
+        ? formatCurrency(preStartTotal)
+        : null,
+    cashflowStartExcludesPreStartNotice: cashflowStartDate
+      ? SAVINGS_ACTIVE_TOTAL_EXCLUDES_PRE_START_NOTICE
+      : null,
     noContributionsFallback:
-      goalContributions.length > 0 ? null : SAVINGS_DETAIL_NO_CONTRIBUTIONS_FALLBACK,
+      visibleContributions.length > 0 ? null : SAVINGS_DETAIL_NO_CONTRIBUTIONS_FALLBACK,
     isSharedGoal,
     sharedPrivacyCopy: isSharedGoal ? SAVINGS_DETAIL_SHARED_PRIVACY_COPY : null,
     otherUserPrivacyLabel: isSharedGoal ? SAVINGS_DETAIL_OTHER_USER_PRIVACY_COPY : null,
@@ -261,6 +321,7 @@ export function collectSavingsDetailUserFacingStrings(
       row.amountLabel,
       ...(row.notes ? [row.notes] : []),
       ...(row.cashDeductionLabel ? [row.cashDeductionLabel] : []),
+      ...(row.beforeCashflowStartLabel ? [row.beforeCashflowStartLabel] : []),
     ]),
   ];
 
@@ -277,6 +338,9 @@ export function collectSavingsDetailUserFacingStrings(
     detail.noOwnTargetFallback,
     detail.periodContributionsTotalLabel,
     detail.allTimeContributionsTotalLabel,
+    detail.activeContributionsTotalLabel,
+    detail.preStartContributionsTotalLabel,
+    detail.cashflowStartExcludesPreStartNotice,
     detail.noContributionsFallback,
     detail.sharedPrivacyCopy,
     detail.otherUserPrivacyLabel,
