@@ -1,0 +1,34 @@
+{
+  "taskId": "CASHFLOW-CURSOR-109",
+  "result": "PASS",
+  "filesChanged": [
+    "supabase/migrations/20260623000009_031_household_member_states.sql",
+    "supabase/functions/manage-household-members/index.ts",
+    "src/lib/types.ts",
+    "src/lib/household-member-management.ts",
+    "src/lib/household-member-management.test.ts",
+    "src/lib/household-member-management-service.ts",
+    "src/lib/household-member-management-service.test.ts",
+    "src/lib/user-person.ts",
+    "src/components/household-member-management-card.tsx",
+    "src/pages/settings.tsx",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-109.md",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-109.result.json"
+  ],
+  "migrationsCreated": ["20260623000009_031_household_member_states.sql"],
+  "functionsCreated": ["manage-household-members"],
+  "dependenciesAdded": [],
+  "validation": {
+    "typecheck": "PASS",
+    "build": "PASS",
+    "testRun": "PASS"
+  },
+  "browserSmoke": {
+    "required": true,
+    "result": "PASS"
+  },
+  "privacy": "PASS",
+  "productRules": "PASS",
+  "readyToCommit": true,
+  "nextTaskId": "CASHFLOW-CURSOR-110"
+}

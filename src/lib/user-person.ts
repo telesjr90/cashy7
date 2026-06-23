@@ -24,7 +24,9 @@ export async function getHouseholdMembers(householdId: string): Promise<{
 }> {
   const { data, error } = await supabase
     .from("household_members")
-    .select("id, household_id, user_id, email, role, status, is_owner, is_active")
+    .select(
+      "id, household_id, user_id, email, display_name, role, status, is_owner, is_active, removed_at, removed_by"
+    )
     .eq("household_id", householdId);
 
   if (error) {

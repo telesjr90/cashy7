@@ -41,9 +41,11 @@ export interface Database {
           email: string | null;
           display_name: string | null;
           role: "owner" | "member";
-          status: "active" | "invited";
+          status: "active" | "invited" | "removed";
           is_owner: boolean;
           is_active: boolean;
+          removed_at: string | null;
+          removed_by: string | null;
           created_at: string;
         };
         Insert: {
@@ -54,9 +56,11 @@ export interface Database {
           email?: string | null;
           display_name?: string | null;
           role?: "owner" | "member";
-          status?: "active" | "invited";
+          status?: "active" | "invited" | "removed";
           is_owner?: boolean;
           is_active?: boolean;
+          removed_at?: string | null;
+          removed_by?: string | null;
           created_at?: string;
         };
         Update: {
@@ -67,9 +71,11 @@ export interface Database {
           email?: string | null;
           display_name?: string | null;
           role?: "owner" | "member";
-          status?: "active" | "invited";
+          status?: "active" | "invited" | "removed";
           is_owner?: boolean;
           is_active?: boolean;
+          removed_at?: string | null;
+          removed_by?: string | null;
           created_at?: string;
         };
       };
