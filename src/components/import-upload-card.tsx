@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   buildImportFileMetadata,
   IMPORT_NO_RECORDS_CHANGED_COPY,
@@ -21,6 +21,8 @@ import {
   type ImportColumnMapping,
 } from "@/lib/import-column-mapping";
 import { ImportColumnMappingPanel } from "@/components/import-column-mapping-panel";
+import { ImportValidationPanel } from "@/components/import-validation-panel";
+import { buildImportValidationResult } from "@/lib/import-validation";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -226,6 +228,13 @@ export function ImportUploadCard() {
   const selectedSheet = parseResult?.sheets[selectedSheetIndex] ?? null;
   const previewRows = parseResult ? getPreviewRows(parseResult, selectedSheetIndex) : [];
   const hasMultipleSheets = (parseResult?.sheets.length ?? 0) > 1;
+  const validationResult = useMemo(() => {
+    if (!selectedSheet) {
+      return null;
+    }
+    const columns = buildImportSourceColumns(selectedSheet);
+    return buildImportValidationResult(selectedSheet, columnMapping, columns);
+  }, [selectedSheet, columnMapping]);
 
   return (
     <Card>
@@ -475,11 +484,16 @@ export function ImportUploadCard() {
                 </div>
 
                 {selectedSheet && (
-                  <ImportColumnMappingPanel
-                    sheet={selectedSheet}
-                    mapping={columnMapping}
-                    onMappingChange={setColumnMapping}
-                  />
+                  <>
+                    <ImportColumnMappingPanel
+                      sheet={selectedSheet}
+                      mapping={columnMapping}
+                      onMappingChange={setColumnMapping}
+                    />
+                    {validationResult && (
+                      <ImportValidationPanel validation={validationResult} />
+                    )}
+                  </>
                 )}
               </div>
             )}

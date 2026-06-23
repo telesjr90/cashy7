@@ -19,7 +19,6 @@ import {
 import {
   IMPORT_MAPPED_CANDIDATES_COPY,
   IMPORT_NO_RECORDS_CHANGED_COPY,
-  IMPORT_NEXT_VALIDATE_ROWS_LABEL,
   IMPORT_VALIDATION_NEXT_COPY,
 } from "@/lib/import-upload";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -277,10 +276,6 @@ export function ImportColumnMappingPanel({
         <p className="text-muted-foreground">{IMPORT_NO_RECORDS_CHANGED_COPY}</p>
         <p className="text-muted-foreground">{IMPORT_VALIDATION_NEXT_COPY}</p>
       </div>
-
-      <Button type="button" disabled aria-disabled="true">
-        {IMPORT_NEXT_VALIDATE_ROWS_LABEL}
-      </Button>
     </div>
   );
 }

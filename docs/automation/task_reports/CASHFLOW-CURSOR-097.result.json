@@ -1,0 +1,30 @@
+{
+  "taskId": "CASHFLOW-CURSOR-097",
+  "result": "PASS",
+  "filesChanged": [
+    "src/lib/import-validation.ts",
+    "src/lib/import-validation.test.ts",
+    "src/lib/import-column-mapping.ts",
+    "src/lib/import-upload.ts",
+    "src/components/import-validation-panel.tsx",
+    "src/components/import-column-mapping-panel.tsx",
+    "src/components/import-upload-card.tsx",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-097.md",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-097.result.json"
+  ],
+  "migrationsCreated": [],
+  "dependenciesAdded": [],
+  "validation": {
+    "typecheck": "PASS",
+    "build": "PASS",
+    "testRun": "PASS"
+  },
+  "browserSmoke": {
+    "required": true,
+    "result": "PASS"
+  },
+  "privacy": "PASS",
+  "productRules": "PASS",
+  "readyToCommit": true,
+  "nextTaskId": "CASHFLOW-CURSOR-098"
+}

@@ -366,14 +366,19 @@ export function buildMappedPreviewRows(
   columns: ImportSourceColumn[],
   limit = 5
 ): MappedImportPreviewRow[] {
-  return sheet.rows
-    .filter((row) => !row.isEmpty)
-    .slice(0, limit)
-    .map((row) => ({
-      sourceRowId: row.id,
-      sourceRowNumber: row.rowNumber,
-      fields: applyMappingToRow(row, mapping, columns),
-    }));
+  return buildAllMappedRows(sheet, mapping, columns).slice(0, limit);
+}
+
+export function buildAllMappedRows(
+  sheet: ImportParsedSheet,
+  mapping: ImportColumnMapping,
+  columns: ImportSourceColumn[]
+): MappedImportPreviewRow[] {
+  return sheet.rows.map((row) => ({
+    sourceRowId: row.id,
+    sourceRowNumber: row.rowNumber,
+    fields: applyMappingToRow(row, mapping, columns),
+  }));
 }
 
 export function formatMappedCellValue(value: ImportParsedCellValue): string {
