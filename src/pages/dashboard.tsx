@@ -81,6 +81,7 @@ import {
 import { buildMySavingsDrilldown } from "@/lib/dashboard-savings-drilldown";
 import { buildDashboardDebtSummary } from "@/lib/dashboard-debt-summary";
 import { DashboardDebtSummary } from "@/components/dashboard-debt-summary";
+import { DashboardSafeToSpendForecast } from "@/components/dashboard-safe-to-spend-forecast";
 import {
   buildDashboardBillViewLabel,
   buildUnpaidBillDrilldown,
@@ -113,6 +114,13 @@ import {
   PERIOD_LABELS,
   type PeriodView,
 } from "@/lib/periods";
+import {
+  buildDaysDateRange,
+  buildNextMonthDateRange,
+  getYearMonthKeysInDateRange,
+  type BuildSafeToSpendForecastInput,
+} from "@/lib/safe-to-spend-forecast";
+import { getDashboardViewDateRange } from "@/lib/savings";
 
 const MONTHS = [
   "January", "February", "March", "April", "May", "June",
@@ -182,6 +190,11 @@ export function DashboardPage() {
   const [debtPayments, setDebtPayments] = useState<DebtPayment[]>([]);
   const [debtSummaryLoading, setDebtSummaryLoading] = useState(true);
   const [debtSummaryError, setDebtSummaryError] = useState<string | null>(null);
+  const [forecastBills, setForecastBills] = useState<BillInstance[]>([]);
+  const [forecastBillsLoading, setForecastBillsLoading] = useState(true);
+  const [forecastDebtLinkedBillIds, setForecastDebtLinkedBillIds] = useState<
+    Set<string>
+  >(new Set());
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth() + 1;
@@ -689,6 +702,98 @@ export function DashboardPage() {
     void fetchDebtSummary();
   }, [fetchDebtSummary]);
 
+  const forecastMonthKeys = useMemo(() => {
+    const today = format(new Date(), "yyyy-MM-dd");
+    const keyMap = new Map<string, { year: number; month: number }>();
+
+    for (const range of [
+      buildDaysDateRange(90, today),
+      buildNextMonthDateRange(today),
+      getDashboardViewDateRange(periodView, year, month),
+    ]) {
+      for (const key of getYearMonthKeysInDateRange(range)) {
+        keyMap.set(`${key.year}-${key.month}`, key);
+      }
+    }
+
+    return [...keyMap.values()];
+  }, [periodView, year, month]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function fetchForecastBills() {
+      if (!household || !settingsLoaded) {
+        return;
+      }
+
+      setForecastBillsLoading(true);
+
+      const billResults = await Promise.all(
+        forecastMonthKeys.map(async ({ year: billYear, month: billMonth }) => {
+          const { data, error } = await supabase
+            .from("bill_instances")
+            .select("*")
+            .eq("household_id", household.id)
+            .eq("year", billYear)
+            .eq("month", billMonth);
+
+          if (error || !data) {
+            return [] as BillInstance[];
+          }
+
+          return filterBillInstancesByCashflowStart(
+            data as BillInstance[],
+            cashflowStartDate
+          );
+        })
+      );
+
+      if (!cancelled) {
+        const billById = new Map<string, BillInstance>();
+        for (const monthBills of billResults) {
+          for (const bill of monthBills) {
+            billById.set(bill.id, bill);
+          }
+        }
+        setForecastBills([...billById.values()]);
+        setForecastBillsLoading(false);
+      }
+    }
+
+    void fetchForecastBills();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [household, settingsLoaded, forecastMonthKeys, cashflowStartDate]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadForecastDebtLinkedBillIds() {
+      if (forecastBills.length === 0) {
+        if (!cancelled) {
+          setForecastDebtLinkedBillIds(new Set());
+        }
+        return;
+      }
+
+      const { linkedIds } = await fetchDebtLinkedBillContext(
+        forecastBills.map((bill) => bill.id)
+      );
+      if (!cancelled) {
+        setForecastDebtLinkedBillIds(linkedIds);
+      }
+    }
+
+    void loadForecastDebtLinkedBillIds();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [forecastBills]);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -757,6 +862,22 @@ export function DashboardPage() {
       debtLinkedBillIds,
     }),
     [billTemplates, debtLinkedBillIds]
+  );
+
+  const forecastDebtLinkedBillIdSet = useMemo(() => {
+    const merged = new Set(debtLinkedBillIds);
+    for (const billId of forecastDebtLinkedBillIds) {
+      merged.add(billId);
+    }
+    return merged;
+  }, [debtLinkedBillIds, forecastDebtLinkedBillIds]);
+
+  const forecastVariableBillContext = useMemo(
+    () => ({
+      templateByBillId: buildBillTemplateLookup(billTemplates),
+      debtLinkedBillIds: forecastDebtLinkedBillIdSet,
+    }),
+    [billTemplates, forecastDebtLinkedBillIdSet]
   );
 
   const variableConfirmationCountForView = useMemo(
@@ -1059,6 +1180,67 @@ export function DashboardPage() {
     paymentTransactions,
     paymentTransactionsLoading,
   ]);
+  const debtAccountNameById = useMemo(
+    () => new Map(debtAccounts.map((account) => [account.id, account.name])),
+    [debtAccounts]
+  );
+
+  const safeToSpendForecastInput = useMemo((): BuildSafeToSpendForecastInput | null => {
+    if (!user) {
+      return null;
+    }
+
+    return {
+      startingCash: cashSnapshot ? Number(cashSnapshot.amount) : null,
+      snapshotDate: cashSnapshot?.snapshot_date ?? null,
+      shareKey,
+      signedInUserId: user.id,
+      windowKind: "rest_of_month",
+      periodView,
+      selectedYear: year,
+      selectedMonth: month,
+      bills: forecastBills,
+      debtPayments,
+      debtLinkedBillIds: forecastDebtLinkedBillIdSet,
+      debtAccountNames: debtAccountNameById,
+      manualExpenses,
+      deductedManualExpenseIds: paymentTransactionsLoading
+        ? undefined
+        : deductedManualExpenseIds,
+      savingsParticipants,
+      savingsContributions,
+      savingsGoals: savingsGoalsForDrilldown,
+      variableBillContext: forecastVariableBillContext,
+    };
+  }, [
+    user,
+    cashSnapshot,
+    shareKey,
+    periodView,
+    year,
+    month,
+    forecastBills,
+    debtPayments,
+    forecastDebtLinkedBillIdSet,
+    debtAccountNameById,
+    manualExpenses,
+    paymentTransactionsLoading,
+    deductedManualExpenseIds,
+    savingsParticipants,
+    savingsContributions,
+    savingsGoalsForDrilldown,
+    forecastVariableBillContext,
+  ]);
+
+  const safeToSpendForecastLoading =
+    cashSnapshotLoading ||
+    forecastBillsLoading ||
+    manualExpensesLoading ||
+    paymentTransactionsLoading ||
+    savingsParticipantsLoading ||
+    savingsContributionsLoading ||
+    debtSummaryLoading;
+
   const safeToSpendBreakdown: SafeToSpendBreakdown | null =
     cashSnapshot && safeToSpendBeforeSavings !== null && safeToSpendAfterSavings !== null
       ? {
@@ -1766,6 +1948,11 @@ export function DashboardPage() {
             )}
           </CardContent>
         </Card>
+
+        <DashboardSafeToSpendForecast
+          forecastInput={safeToSpendForecastInput}
+          loading={safeToSpendForecastLoading}
+        />
 
         <DashboardDebtSummary
           summary={dashboardDebtSummary}

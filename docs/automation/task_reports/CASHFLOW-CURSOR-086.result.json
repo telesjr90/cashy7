@@ -1,0 +1,26 @@
+{
+  "taskId": "CASHFLOW-CURSOR-086",
+  "result": "PASS",
+  "filesChanged": [
+    "src/lib/safe-to-spend-forecast.ts",
+    "src/lib/safe-to-spend-forecast.test.ts",
+    "src/components/dashboard-safe-to-spend-forecast.tsx",
+    "src/pages/dashboard.tsx",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-086.md",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-086.result.json"
+  ],
+  "migrationsCreated": [],
+  "validation": {
+    "typecheck": "PASS",
+    "build": "PASS",
+    "testRun": "PASS"
+  },
+  "browserSmoke": {
+    "required": true,
+    "result": "PASS"
+  },
+  "privacy": "PASS",
+  "productRules": "PASS",
+  "readyToCommit": true,
+  "nextTaskId": "CASHFLOW-CURSOR-087"
+}
