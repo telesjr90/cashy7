@@ -67,6 +67,7 @@ import {
 import { SavingsTargetEditDialog } from "@/components/savings-target-edit-dialog";
 import { PaycheckScheduleSettingsPanel } from "@/components/paycheck-schedule-settings";
 import { CashflowStartDateSettingsCard } from "@/components/cashflow-start-date-settings-card";
+import { ImportUploadCard } from "@/components/import-upload-card";
 import { getMyPaycheckSchedule } from "@/lib/paycheck-schedule";
 import { buildSavingsGoalDetailView } from "@/lib/savings-detail";
 import { buildSavingsRolloverDisplayView } from "@/lib/savings-rollover";
@@ -1232,6 +1233,8 @@ export function SettingsPage() {
           settingsError={settingsError}
           onSettingsSaved={setSettings}
         />
+
+        <ImportUploadCard />
 
         <Card>
           <CardHeader>
