@@ -598,6 +598,59 @@ export interface Database {
           created_at?: string;
         };
       };
+      paycheck_schedules: {
+        Row: {
+          id: string;
+          household_id: string;
+          user_id: string;
+          amount: number;
+          schedule_type:
+            | "disabled"
+            | "semi_monthly_15_30"
+            | "semi_monthly_15_last_business_day";
+          first_pay_day: number | null;
+          second_pay_day: number | null;
+          use_last_business_day: boolean;
+          is_active: boolean;
+          effective_from: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          household_id: string;
+          user_id: string;
+          amount?: number;
+          schedule_type?:
+            | "disabled"
+            | "semi_monthly_15_30"
+            | "semi_monthly_15_last_business_day";
+          first_pay_day?: number | null;
+          second_pay_day?: number | null;
+          use_last_business_day?: boolean;
+          is_active?: boolean;
+          effective_from?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          household_id?: string;
+          user_id?: string;
+          amount?: number;
+          schedule_type?:
+            | "disabled"
+            | "semi_monthly_15_30"
+            | "semi_monthly_15_last_business_day";
+          first_pay_day?: number | null;
+          second_pay_day?: number | null;
+          use_last_business_day?: boolean;
+          is_active?: boolean;
+          effective_from?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
       cash_adjustment_transactions: {
         Row: {
           id: string;
@@ -700,6 +753,7 @@ export type ManualExpenseSplitType = ManualExpense["split_type"];
 export type ManualExpenseAdjustmentDirection = NonNullable<
   ManualExpense["adjustment_direction"]
 >;
+export type PaycheckSchedule = Tables<"paycheck_schedules">;
 export type CashPaymentTransaction = Tables<"cash_payment_transactions">;
 export type PaymentSourceType = CashPaymentTransaction["source_type"];
 export type CashAdjustmentTransaction = Tables<"cash_adjustment_transactions">;

@@ -70,7 +70,7 @@ function ForecastEventRow({
     event.type !== "income" &&
     event.signedAmount > 0;
   const amountLabel =
-    event.type === "starting_balance"
+    event.type === "starting_balance" || event.type === "income"
       ? formatCurrency(event.amount)
       : isOutflow
         ? formatDeductionAmount(event.signedAmount)
@@ -171,8 +171,8 @@ export function DashboardSafeToSpendForecast({
               Future safe-to-spend forecast
             </CardTitle>
             <CardDescription>
-              Read-only projection of your available amount after scheduled obligations.
-              {summary.incomeLabel}
+              Read-only projection of your available amount after expected income and scheduled
+              obligations. {summary.incomeLabel}
             </CardDescription>
           </div>
           <Select
@@ -244,7 +244,11 @@ export function DashboardSafeToSpendForecast({
               />
               <SummaryMetric
                 label="Income in forecast"
-                value="Not configured"
+                value={
+                  summary.incomeStatus === "configured"
+                    ? formatCurrency(summary.totalProjectedIncome)
+                    : "Not configured"
+                }
               />
               <SummaryMetric
                 label="Forecast window"

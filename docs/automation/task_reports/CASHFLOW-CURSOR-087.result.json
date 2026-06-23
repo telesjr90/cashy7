@@ -1,0 +1,34 @@
+{
+  "taskId": "CASHFLOW-CURSOR-087",
+  "result": "PASS",
+  "filesChanged": [
+    "supabase/migrations/20260622000001_021_paycheck_schedules.sql",
+    "src/lib/types.ts",
+    "src/lib/paycheck-schedule.ts",
+    "src/lib/paycheck-schedule.test.ts",
+    "src/lib/safe-to-spend-forecast.ts",
+    "src/lib/safe-to-spend-forecast.test.ts",
+    "src/components/paycheck-schedule-settings.tsx",
+    "src/components/dashboard-safe-to-spend-forecast.tsx",
+    "src/pages/settings.tsx",
+    "src/pages/dashboard.tsx",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-087.md",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-087.result.json"
+  ],
+  "migrationsCreated": [
+    "supabase/migrations/20260622000001_021_paycheck_schedules.sql"
+  ],
+  "validation": {
+    "typecheck": "PASS",
+    "build": "PASS",
+    "testRun": "PASS"
+  },
+  "browserSmoke": {
+    "required": true,
+    "result": "PASS"
+  },
+  "privacy": "PASS",
+  "productRules": "PASS",
+  "readyToCommit": true,
+  "nextTaskId": "CASHFLOW-CURSOR-088"
+}

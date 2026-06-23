@@ -67,11 +67,14 @@ import {
   SavingsRolloverPanel,
 } from "@/components/savings-rollover-panel";
 import { SavingsTargetEditDialog } from "@/components/savings-target-edit-dialog";
+import { PaycheckScheduleSettingsPanel } from "@/components/paycheck-schedule-settings";
+import { getMyPaycheckSchedule } from "@/lib/paycheck-schedule";
 import { buildSavingsGoalDetailView } from "@/lib/savings-detail";
 import { buildSavingsRolloverDisplayView } from "@/lib/savings-rollover";
 import type {
   CashSnapshot,
   HouseholdSettings,
+  PaycheckSchedule,
   Person,
   SavingsContribution,
   SavingsContributionPeriod,
@@ -669,6 +672,9 @@ export function SettingsPage() {
   const [profileSaveError, setProfileSaveError] = useState<string | null>(null);
   const [profileSuccess, setProfileSuccess] = useState<string | null>(null);
 
+  const [paycheckSchedule, setPaycheckSchedule] = useState<PaycheckSchedule | null>(null);
+  const [paycheckScheduleLoading, setPaycheckScheduleLoading] = useState(true);
+
   const [latestSnapshot, setLatestSnapshot] = useState<CashSnapshot | null>(null);
   const [snapshotLoading, setSnapshotLoading] = useState(true);
   const [snapshotError, setSnapshotError] = useState<string | null>(null);
@@ -768,6 +774,15 @@ export function SettingsPage() {
     }
 
     setPeopleLoading(false);
+  }, [household, user]);
+
+  const loadPaycheckSchedule = useCallback(async () => {
+    if (!household || !user) return;
+
+    setPaycheckScheduleLoading(true);
+    const { schedule } = await getMyPaycheckSchedule(household.id, user.id);
+    setPaycheckSchedule(schedule);
+    setPaycheckScheduleLoading(false);
   }, [household, user]);
 
   const loadLatestSnapshot = useCallback(async () => {
@@ -938,6 +953,10 @@ export function SettingsPage() {
   useEffect(() => {
     loadBudgetProfile();
   }, [loadBudgetProfile]);
+
+  useEffect(() => {
+    loadPaycheckSchedule();
+  }, [loadPaycheckSchedule]);
 
   useEffect(() => {
     loadLatestSnapshot();
@@ -1287,6 +1306,16 @@ export function SettingsPage() {
             )}
           </CardContent>
         </Card>
+
+        {user ? (
+          <PaycheckScheduleSettingsPanel
+            householdId={household.id}
+            userId={user.id}
+            initialSchedule={paycheckSchedule}
+            loading={paycheckScheduleLoading}
+            onSaved={setPaycheckSchedule}
+          />
+        ) : null}
 
         <Card>
           <CardHeader>

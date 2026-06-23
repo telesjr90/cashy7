@@ -20,6 +20,15 @@ import type {
   SavingsGoalParticipant,
 } from "@/lib/types";
 import {
+  buildPaycheckForecastIncomeEvents,
+  filterOwnPaycheckIncomeEvents,
+  FORECAST_INCOME_CONFIGURED_LABEL,
+  FORECAST_INCOME_NOT_CONFIGURED_LABEL,
+  isPaycheckScheduleConfigured,
+  type PaycheckForecastIncomeEvent,
+  type PaycheckScheduleSettings,
+} from "@/lib/paycheck-schedule";
+import {
   needsVariableAmountConfirmation,
   type VariableBillContext,
 } from "@/lib/variable-bills";
@@ -41,7 +50,7 @@ export type ForecastEventType =
   | "adjustment"
   | "income";
 
-export type ForecastIncomeStatus = "not_configured" | "deferred";
+export type ForecastIncomeStatus = "not_configured" | "configured";
 
 export interface ForecastDateRange {
   start: string;
@@ -74,6 +83,7 @@ export interface SafeToSpendForecastSummary {
   lowestProjectedBalance: number;
   firstShortfallDate: string | null;
   totalProjectedObligations: number;
+  totalProjectedIncome: number;
   incomeStatus: ForecastIncomeStatus;
   incomeLabel: string;
   incompleteVariableBillCount: number;
@@ -122,10 +132,9 @@ export interface BuildSafeToSpendForecastInput {
   savingsContributions: SavingsContribution[];
   savingsGoals?: ReadonlyArray<Pick<SavingsGoal, "id" | "name">>;
   variableBillContext: VariableBillContext;
+  paycheckSchedule?: PaycheckScheduleSettings | null;
+  incomeEvents?: readonly PaycheckForecastIncomeEvent[];
 }
-
-export const FORECAST_INCOME_DEFERRED_LABEL =
-  "Future paycheck income is not included. Paycheck schedule forecast is planned separately.";
 
 export const FORECAST_MISSING_CASH_LABEL =
   "Record your current amount in Settings to build a forecast.";
@@ -709,7 +718,10 @@ export function buildSafeToSpendForecast(
     today: input.today,
   });
 
-  const incomeLabel = FORECAST_INCOME_DEFERRED_LABEL;
+  const incomeConfigured = isPaycheckScheduleConfigured(input.paycheckSchedule);
+  const incomeLabel = incomeConfigured
+    ? FORECAST_INCOME_CONFIGURED_LABEL
+    : FORECAST_INCOME_NOT_CONFIGURED_LABEL;
 
   if (input.shareKey === null) {
     return {
@@ -720,7 +732,8 @@ export function buildSafeToSpendForecast(
         lowestProjectedBalance: 0,
         firstShortfallDate: null,
         totalProjectedObligations: 0,
-        incomeStatus: "deferred",
+        totalProjectedIncome: 0,
+        incomeStatus: "not_configured",
         incomeLabel,
         incompleteVariableBillCount: 0,
         hasShortfall: false,
@@ -741,7 +754,8 @@ export function buildSafeToSpendForecast(
         lowestProjectedBalance: 0,
         firstShortfallDate: null,
         totalProjectedObligations: 0,
-        incomeStatus: "deferred",
+        totalProjectedIncome: 0,
+        incomeStatus: incomeConfigured ? "configured" : "not_configured",
         incomeLabel,
         incompleteVariableBillCount: 0,
         hasShortfall: false,
@@ -793,6 +807,19 @@ export function buildSafeToSpendForecast(
     savingsGoals: input.savingsGoals ?? [],
   });
 
+  const ownIncomeEvents = filterOwnPaycheckIncomeEvents(
+    input.incomeEvents ??
+      (input.paycheckSchedule
+        ? buildPaycheckForecastIncomeEvents({
+            settings: input.paycheckSchedule,
+            range,
+            signedInUserId: input.signedInUserId,
+            snapshotDate: input.snapshotDate,
+          })
+        : []),
+    input.signedInUserId
+  );
+
   const rawEvents: Array<{
     id: string;
     date: string;
@@ -804,6 +831,17 @@ export function buildSafeToSpendForecast(
     sourceLabel: string;
     warningLabels: string[];
   }> = [
+    ...ownIncomeEvents.map((event) => ({
+      id: event.id,
+      date: event.date,
+      type: "income" as const,
+      label: event.label,
+      amount: event.amount,
+      signedAmount: -event.amount,
+      periodLabel: null,
+      sourceLabel: event.sourceLabel,
+      warningLabels: [] as string[],
+    })),
     ...billEvents.map((event) => ({
       ...event,
       type: "bill" as const,
@@ -835,9 +873,17 @@ export function buildSafeToSpendForecast(
 
   const events = applyRunningBalance(input.startingCash, rawEvents, startingDate);
 
-  const obligationEvents = events.filter((event) => event.type !== "starting_balance");
+  const obligationEvents = events.filter(
+    (event) =>
+      event.type !== "starting_balance" && event.type !== "income"
+  );
+  const incomeForecastEvents = events.filter((event) => event.type === "income");
   const totalProjectedObligations = obligationEvents.reduce(
     (sum, event) => sum + event.signedAmount,
+    0
+  );
+  const totalProjectedIncome = incomeForecastEvents.reduce(
+    (sum, event) => sum + event.amount,
     0
   );
   const projectedEndingBalance =
@@ -850,6 +896,18 @@ export function buildSafeToSpendForecast(
   const incompleteVariableBillCount = billEvents.filter((event) =>
     event.warningLabels.length > 0
   ).length;
+  const incomeNotConfigured = !incomeConfigured;
+  const incompleteReasons: string[] = [];
+
+  if (incompleteVariableBillCount > 0) {
+    incompleteReasons.push(
+      `${incompleteVariableBillCount} variable bill${incompleteVariableBillCount === 1 ? "" : "s"} still need a confirmed amount.`
+    );
+  }
+
+  if (incomeNotConfigured) {
+    incompleteReasons.push(FORECAST_INCOME_NOT_CONFIGURED_LABEL);
+  }
 
   return {
     events,
@@ -859,20 +917,19 @@ export function buildSafeToSpendForecast(
       lowestProjectedBalance,
       firstShortfallDate: firstShortfall?.date ?? null,
       totalProjectedObligations,
-      incomeStatus: "deferred",
+      totalProjectedIncome,
+      incomeStatus: incomeConfigured ? "configured" : "not_configured",
       incomeLabel,
       incompleteVariableBillCount,
       hasShortfall: firstShortfall != null,
       windowLabel: window.label,
-      isIncomplete: incompleteVariableBillCount > 0,
+      isIncomplete: incompleteReasons.length > 0,
       incompleteReason:
-        incompleteVariableBillCount > 0
-          ? `${incompleteVariableBillCount} variable bill${incompleteVariableBillCount === 1 ? "" : "s"} still need a confirmed amount.`
-          : null,
+        incompleteReasons.length > 0 ? incompleteReasons.join(" ") : null,
     },
     emptyStateMessage:
-      obligationEvents.length === 0
-        ? "No projected obligations in this window."
+      obligationEvents.length === 0 && incomeForecastEvents.length === 0
+        ? "No projected income or obligations in this window."
         : null,
   };
 }

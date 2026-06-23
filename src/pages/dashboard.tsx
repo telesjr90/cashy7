@@ -97,6 +97,11 @@ import type { SavingsGoal } from "@/lib/types";
 import type { SavingsContribution, SavingsGoalParticipant } from "@/lib/types";
 import { filterBillInstancesByCashflowStart } from "@/lib/cashflow-filter";
 import { getHouseholdSettings, getMyLatestCashSnapshot } from "@/lib/cashflow-settings";
+import {
+  getMyPaycheckSchedule,
+  mapPaycheckScheduleRow,
+  type PaycheckScheduleSettings,
+} from "@/lib/paycheck-schedule";
 import type { CashSnapshot } from "@/lib/types";
 import { syncBillPaidStatusWithDebt } from "@/lib/sync-bill-paid-status";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -195,6 +200,9 @@ export function DashboardPage() {
   const [forecastDebtLinkedBillIds, setForecastDebtLinkedBillIds] = useState<
     Set<string>
   >(new Set());
+  const [paycheckScheduleSettings, setPaycheckScheduleSettings] =
+    useState<PaycheckScheduleSettings | null>(null);
+  const [paycheckScheduleLoading, setPaycheckScheduleLoading] = useState(true);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth() + 1;
@@ -212,6 +220,17 @@ export function DashboardPage() {
       setCashSnapshot(snapshot);
     }
     setCashSnapshotLoading(false);
+  }, [household, user]);
+
+  const fetchPaycheckSchedule = useCallback(async () => {
+    if (!household || !user) return;
+
+    setPaycheckScheduleLoading(true);
+    const { schedule } = await getMyPaycheckSchedule(household.id, user.id);
+    setPaycheckScheduleSettings(
+      schedule ? mapPaycheckScheduleRow(schedule) : null
+    );
+    setPaycheckScheduleLoading(false);
   }, [household, user]);
 
   const fetchSettings = useCallback(async () => {
@@ -693,6 +712,10 @@ export function DashboardPage() {
   useEffect(() => {
     fetchCashSnapshot();
   }, [fetchCashSnapshot]);
+
+  useEffect(() => {
+    fetchPaycheckSchedule();
+  }, [fetchPaycheckSchedule]);
 
   useEffect(() => {
     fetchBills();
@@ -1211,6 +1234,7 @@ export function DashboardPage() {
       savingsContributions,
       savingsGoals: savingsGoalsForDrilldown,
       variableBillContext: forecastVariableBillContext,
+      paycheckSchedule: paycheckScheduleSettings,
     };
   }, [
     user,
@@ -1230,10 +1254,12 @@ export function DashboardPage() {
     savingsContributions,
     savingsGoalsForDrilldown,
     forecastVariableBillContext,
+    paycheckScheduleSettings,
   ]);
 
   const safeToSpendForecastLoading =
     cashSnapshotLoading ||
+    paycheckScheduleLoading ||
     forecastBillsLoading ||
     manualExpensesLoading ||
     paymentTransactionsLoading ||

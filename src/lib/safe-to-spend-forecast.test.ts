@@ -7,11 +7,15 @@ import {
   buildRestOfMonthDateRange,
   buildSafeToSpendForecast,
   forecastEventLabelsArePrivacySafe,
-  FORECAST_INCOME_DEFERRED_LABEL,
   FORECAST_MISSING_CASH_LABEL,
   FORECAST_MISSING_PROFILE_LABEL,
   getYearMonthKeysInDateRange,
 } from "@/lib/safe-to-spend-forecast";
+import {
+  buildPaycheckForecastIncomeEvents,
+  FORECAST_INCOME_NOT_CONFIGURED_LABEL,
+  normalizePaycheckScheduleSettings,
+} from "@/lib/paycheck-schedule";
 
 const TODAY = "2026-06-22";
 const SHARE_KEY = "teles_amount" as const;
@@ -365,12 +369,89 @@ describe("buildSafeToSpendForecast", () => {
     expect(result.events.some((event) => event.label.includes("bbbb"))).toBe(false);
   });
 
-  it("shows deferred income fallback instead of guessing paychecks", () => {
+  it("shows not-configured income fallback when schedule is missing", () => {
     const result = buildSafeToSpendForecast(baseInput);
 
-    expect(result.summary.incomeStatus).toBe("deferred");
-    expect(result.summary.incomeLabel).toBe(FORECAST_INCOME_DEFERRED_LABEL);
+    expect(result.summary.incomeStatus).toBe("not_configured");
+    expect(result.summary.incomeLabel).toBe(FORECAST_INCOME_NOT_CONFIGURED_LABEL);
     expect(result.events.some((event) => event.type === "income")).toBe(false);
+  });
+
+  it("includes income events that increase running projected balance", () => {
+    const paycheckSchedule = normalizePaycheckScheduleSettings({
+      amount: 500,
+      scheduleType: "semi_monthly_15_30",
+      firstPayDay: 15,
+      secondPayDay: 30,
+      useLastBusinessDay: false,
+      isActive: true,
+      effectiveFrom: null,
+    });
+    const incomeEvents = buildPaycheckForecastIncomeEvents({
+      settings: paycheckSchedule,
+      range: { start: "2026-06-22", end: "2026-06-30" },
+      signedInUserId: USER_ID,
+      snapshotDate: "2026-06-20",
+    });
+
+    const result = buildSafeToSpendForecast({
+      ...baseInput,
+      startingCash: 100,
+      bills: [
+        makeBill({ id: "b1", due_date: "2026-06-24", teles_amount: 50 }),
+      ],
+      paycheckSchedule,
+      incomeEvents,
+    });
+
+    const incomeEvent = result.events.find((event) => event.type === "income");
+    expect(incomeEvent).toMatchObject({
+      date: "2026-06-30",
+      amount: 500,
+      signedAmount: -500,
+    });
+    expect(result.summary.totalProjectedIncome).toBe(500);
+    expect(result.summary.incomeStatus).toBe("configured");
+    expect(result.summary.projectedEndingBalance).toBe(550);
+    expect(result.summary.hasShortfall).toBe(false);
+  });
+
+  it("excludes other-user paycheck events even if accidentally passed in", () => {
+    const paycheckSchedule = normalizePaycheckScheduleSettings({
+      amount: 500,
+      scheduleType: "semi_monthly_15_30",
+      firstPayDay: 15,
+      secondPayDay: 30,
+      useLastBusinessDay: false,
+      isActive: true,
+      effectiveFrom: null,
+    });
+
+    const result = buildSafeToSpendForecast({
+      ...baseInput,
+      paycheckSchedule,
+      incomeEvents: [
+        {
+          id: "mine",
+          userId: USER_ID,
+          date: "2026-06-30",
+          amount: 500,
+          label: "Expected paycheck",
+          sourceLabel: "15th and 30th of each month",
+        },
+        {
+          id: "other",
+          userId: "user-nicole",
+          date: "2026-06-30",
+          amount: 9999,
+          label: "Expected paycheck",
+          sourceLabel: "15th and 30th of each month",
+        },
+      ],
+    });
+
+    expect(result.events.filter((event) => event.type === "income")).toHaveLength(1);
+    expect(result.summary.totalProjectedIncome).toBe(500);
   });
 
   it("returns missing profile state when share key is unavailable", () => {
