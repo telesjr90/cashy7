@@ -14,6 +14,14 @@ import type {
   DashboardExpenseDrilldownRow,
   DashboardSavingsDrilldownRow,
 } from "@/lib/dashboard-drilldowns";
+import type {
+  DashboardUnpaidBillDrilldownReconciliation,
+  DashboardUnpaidBillDrilldownRow,
+} from "@/lib/dashboard-bill-drilldown";
+import {
+  UNPAID_BILL_CASH_CONTEXT_UNAVAILABLE_MESSAGE,
+  UNPAID_BILL_DRILLDOWN_EMPTY_MESSAGE,
+} from "@/lib/dashboard-bill-drilldown";
 import { formatExpensePeriodBucket } from "@/lib/expenses";
 
 export type DashboardDrilldownKind =
@@ -41,11 +49,14 @@ interface DashboardDrilldownPanelProps {
   kind: DashboardDrilldownKind | null;
   viewLabel: string;
   billRows?: DashboardBillDrilldownRow[];
+  unpaidBillRows?: DashboardUnpaidBillDrilldownRow[];
+  unpaidBillReconciliation?: DashboardUnpaidBillDrilldownReconciliation | null;
   expenseRows?: DashboardExpenseDrilldownRow[];
   savingsRows?: DashboardSavingsDrilldownRow[];
   safeToSpendBreakdown?: SafeToSpendBreakdown | null;
   loading?: boolean;
   emptyMessage?: string;
+  cashDeductionContextAvailable?: boolean;
 }
 
 function drilldownTitle(kind: DashboardDrilldownKind | null): string {
@@ -101,10 +112,26 @@ function formatExpenseDate(expenseDate: string): string {
   return format(parseISO(expenseDate), "MMM d, yyyy");
 }
 
-function BillRowsList({ rows }: { rows: DashboardBillDrilldownRow[] }) {
+function isUnpaidBillDrilldownRow(
+  row: DashboardBillDrilldownRow
+): row is DashboardUnpaidBillDrilldownRow {
+  return "sourceLabel" in row;
+}
+
+function BillRowsList({
+  rows,
+  kind,
+}: {
+  rows: DashboardBillDrilldownRow[];
+  kind: DashboardDrilldownKind | null;
+}) {
   if (rows.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground">No bills match this view.</p>
+      <p className="text-sm text-muted-foreground">
+        {kind === "unpaid-bills"
+          ? UNPAID_BILL_DRILLDOWN_EMPTY_MESSAGE
+          : "No bills match this view."}
+      </p>
     );
   }
 
@@ -134,6 +161,9 @@ function BillRowsList({ rows }: { rows: DashboardBillDrilldownRow[] }) {
             <Badge variant={row.isPaid ? "secondary" : "outline"}>
               {row.isPaid ? "Paid" : "Unpaid"}
             </Badge>
+            {isUnpaidBillDrilldownRow(row) && (
+              <Badge variant="outline">{row.sourceLabel}</Badge>
+            )}
             {row.isDebtLinked && (
               <div className="flex flex-wrap items-center gap-1 text-xs">
                 <Badge variant="outline">Debt-linked</Badge>
@@ -142,15 +172,72 @@ function BillRowsList({ rows }: { rows: DashboardBillDrilldownRow[] }) {
                 </Link>
               </div>
             )}
+            {isUnpaidBillDrilldownRow(row) && row.variableAmountWarningLabel && (
+              <Badge
+                variant="outline"
+                className="border-amber-500/50 text-amber-950 dark:text-amber-100"
+              >
+                Variable amount needs confirmation
+              </Badge>
+            )}
+            {isUnpaidBillDrilldownRow(row) && row.cashDeductionStatusLabel && (
+              <span className="text-xs text-muted-foreground">
+                {row.cashDeductionStatusLabel}
+              </span>
+            )}
             {row.myShareAmount !== null && (
               <span className="text-xs text-muted-foreground">
                 Your share {formatCurrency(row.myShareAmount)}
               </span>
             )}
           </div>
+          {isUnpaidBillDrilldownRow(row) && row.variableAmountWarningLabel && (
+            <p className="mt-2 text-xs text-amber-950 dark:text-amber-100">
+              {row.variableAmountWarningLabel}
+            </p>
+          )}
         </li>
       ))}
     </ul>
+  );
+}
+
+function UnpaidBillReconciliation({
+  reconciliation,
+}: {
+  reconciliation: DashboardUnpaidBillDrilldownReconciliation;
+}) {
+  return (
+    <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+      <p className="mb-2 font-medium">Reconciliation</p>
+      <dl className="space-y-1.5">
+        <div className="flex items-baseline justify-between gap-4">
+          <dt className="text-muted-foreground">{reconciliation.cardTotalLabel}</dt>
+          <dd className="font-medium tabular-nums">
+            {formatDeductionAmount(reconciliation.cardTotal)}
+          </dd>
+        </div>
+        <div className="flex items-baseline justify-between gap-4">
+          <dt className="text-muted-foreground">{reconciliation.rowTotalLabel}</dt>
+          <dd className="font-medium tabular-nums">
+            {formatDeductionAmount(reconciliation.displayedRowTotal)}
+          </dd>
+        </div>
+        {reconciliation.matchLabel && (
+          <div className="flex items-baseline justify-between gap-4 border-t pt-1.5">
+            <dt className="font-medium text-green-700 dark:text-green-400">
+              {reconciliation.matchLabel}
+            </dt>
+            <dd aria-hidden="true" />
+          </div>
+        )}
+      </dl>
+      {reconciliation.mismatchExplanation && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          {reconciliation.mismatchExplanation}
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -341,12 +428,18 @@ export function DashboardDrilldownPanel({
   kind,
   viewLabel,
   billRows = [],
+  unpaidBillRows = [],
+  unpaidBillReconciliation = null,
   expenseRows = [],
   savingsRows = [],
   safeToSpendBreakdown = null,
   loading = false,
   emptyMessage,
+  cashDeductionContextAvailable = true,
 }: DashboardDrilldownPanelProps) {
+  const billRowsForKind =
+    kind === "unpaid-bills" ? unpaidBillRows : billRows;
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
@@ -356,12 +449,31 @@ export function DashboardDrilldownPanel({
         </SheetHeader>
 
         <div className="space-y-4 px-4 pb-6 pt-2">
+          {kind === "unpaid-bills" && !loading && !emptyMessage && (
+            <p className="rounded-md bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+              Viewing {viewLabel}. This drilldown is read-only — pay or edit bills on the{" "}
+              <Link to="/bills" className="font-medium underline underline-offset-4">
+                Bills page
+              </Link>
+              .
+            </p>
+          )}
           {loading ? (
             <p className="text-sm text-muted-foreground">Loading details…</p>
           ) : emptyMessage ? (
             <p className="text-sm text-muted-foreground">{emptyMessage}</p>
           ) : kind === "bills" || kind === "unpaid-bills" ? (
-            <BillRowsList rows={billRows} />
+            <>
+              <BillRowsList rows={billRowsForKind} kind={kind} />
+              {kind === "unpaid-bills" && unpaidBillReconciliation && (
+                <UnpaidBillReconciliation reconciliation={unpaidBillReconciliation} />
+              )}
+              {kind === "unpaid-bills" && !cashDeductionContextAvailable && (
+                <p className="text-xs text-muted-foreground">
+                  {UNPAID_BILL_CASH_CONTEXT_UNAVAILABLE_MESSAGE}
+                </p>
+              )}
+            </>
           ) : kind === "expenses" ? (
             <ExpenseRowsList rows={expenseRows} />
           ) : kind === "savings" ? (

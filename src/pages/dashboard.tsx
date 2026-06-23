@@ -75,6 +75,10 @@ import {
   filterManualExpensesCountedInDashboardView,
 } from "@/lib/dashboard-drilldowns";
 import {
+  buildDashboardBillViewLabel,
+  buildUnpaidBillDrilldown,
+} from "@/lib/dashboard-bill-drilldown";
+import {
   DashboardDrilldownPanel,
   type DashboardDrilldownKind,
   type SafeToSpendBreakdown,
@@ -155,6 +159,9 @@ export function DashboardPage() {
     null
   );
   const [debtLinkedBillIds, setDebtLinkedBillIds] = useState<Set<string>>(new Set());
+  const [debtPaymentIdByBillId, setDebtPaymentIdByBillId] = useState<
+    Map<string, string>
+  >(new Map());
   const [billTemplates, setBillTemplates] = useState<
     Pick<Bill, "id" | "is_variable" | "default_amount">[]
   >([]);
@@ -620,11 +627,11 @@ export function DashboardPage() {
         return;
       }
 
-      const { linkedIds } = await fetchDebtLinkedBillContext(
-        bills.map((bill) => bill.id)
-      );
+      const { linkedIds, debtPaymentIdByBillId: linkedDebtPaymentsByBillId } =
+        await fetchDebtLinkedBillContext(bills.map((bill) => bill.id));
       if (!cancelled) {
         setDebtLinkedBillIds(linkedIds);
+        setDebtPaymentIdByBillId(linkedDebtPaymentsByBillId);
       }
     }
 
@@ -794,6 +801,7 @@ export function DashboardPage() {
   const myBillTotal = sumMyBillShareTotal(bills, shareKey, periodView);
   const myBillTotalViewLabel =
     periodView === "full" ? "Full Month" : PERIOD_LABELS[periodView];
+  const drilldownViewLabel = buildDashboardBillViewLabel(year, month, periodView);
   const myUnpaidBillTotal = sumMyUnpaidBillShareTotal(bills, shareKey, periodView);
   const deductedManualExpenseIds = getPaidManualExpenseSourceIds(paymentTransactions);
   const myManualExpenseTotalForView = sumMyManualExpenseShareForView(
@@ -843,10 +851,68 @@ export function DashboardPage() {
       : null;
   const hasSavingsParticipants = savingsParticipants.length > 0;
 
+  const paymentByBillId = useMemo(() => {
+    const map = new Map<string, CashPaymentTransaction>();
+    for (const transaction of paymentTransactions) {
+      if (transaction.source_type === "bill_instance") {
+        map.set(transaction.source_id, transaction);
+      }
+    }
+    return map;
+  }, [paymentTransactions]);
+
+  const paymentByDebtPaymentId = useMemo(() => {
+    const map = new Map<string, CashPaymentTransaction>();
+    for (const transaction of paymentTransactions) {
+      if (transaction.source_type === "debt_payment") {
+        map.set(transaction.source_id, transaction);
+      }
+    }
+    return map;
+  }, [paymentTransactions]);
+
+  const billCashDeductionContext = useMemo(
+    () =>
+      paymentTransactionsLoading
+        ? null
+        : {
+            billPaymentSourceIds: paymentByBillId,
+            debtPaymentTransactionSourceIds: paymentByDebtPaymentId,
+            debtPaymentIdByBillId,
+          },
+    [
+      paymentTransactionsLoading,
+      paymentByBillId,
+      paymentByDebtPaymentId,
+      debtPaymentIdByBillId,
+    ]
+  );
+
+  const unpaidBillDrilldown = useMemo(() => {
+    if (shareKey === null) {
+      return null;
+    }
+
+    return buildUnpaidBillDrilldown({
+      bills,
+      periodView,
+      shareKey,
+      debtLinkedBillIds,
+      variableBillContext,
+      cardTotal: myUnpaidBillTotal ?? 0,
+      cashDeductionContext: billCashDeductionContext,
+    });
+  }, [
+    bills,
+    periodView,
+    shareKey,
+    debtLinkedBillIds,
+    variableBillContext,
+    myUnpaidBillTotal,
+    billCashDeductionContext,
+  ]);
+
   const drilldownBills = filterBillsForDashboardView(bills, periodView);
-  const drilldownUnpaidBills = filterBillsForDashboardView(bills, periodView, {
-    unpaidOnly: true,
-  });
   const drilldownExpenses = filterManualExpensesCountedInDashboardView(
     manualExpenses,
     periodView,
@@ -856,7 +922,7 @@ export function DashboardPage() {
     paymentTransactionsLoading ? undefined : deductedManualExpenseIds
   );
   const drilldownBillRows = buildBillDrilldownRows(
-    drilldownKind === "unpaid-bills" ? drilldownUnpaidBills : drilldownBills,
+    drilldownBills,
     shareKey,
     debtLinkedBillIds
   );
@@ -1111,14 +1177,36 @@ export function DashboardPage() {
           </CardContent>
         </Card>
 
-        <Card className="mb-6">
+        <Card
+          className={`mb-6 ${shareKey !== null && !loading ? "cursor-pointer transition-colors hover:bg-muted/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" : ""}`}
+          role={shareKey !== null && !loading ? "button" : undefined}
+          tabIndex={shareKey !== null && !loading ? 0 : undefined}
+          onClick={() => {
+            if (shareKey !== null && !loading) {
+              openDrilldown("unpaid-bills");
+            }
+          }}
+          onKeyDown={(event) => {
+            if (
+              shareKey !== null &&
+              !loading &&
+              (event.key === "Enter" || event.key === " ")
+            ) {
+              event.preventDefault();
+              openDrilldown("unpaid-bills");
+            }
+          }}
+        >
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between gap-2">
               <CardTitle className="text-base">My unpaid bills for this view</CardTitle>
               <Button
                 variant="link"
                 className="h-auto p-0 text-sm"
-                onClick={() => openDrilldown("unpaid-bills")}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  openDrilldown("unpaid-bills");
+                }}
               >
                 View unpaid bills
               </Button>
@@ -1631,13 +1719,16 @@ export function DashboardPage() {
           }
         }}
         kind={drilldownKind}
-        viewLabel={myBillTotalViewLabel}
+        viewLabel={drilldownViewLabel}
         billRows={drilldownBillRows}
+        unpaidBillRows={unpaidBillDrilldown?.rows ?? []}
+        unpaidBillReconciliation={unpaidBillDrilldown?.reconciliation ?? null}
         expenseRows={drilldownExpenseRows}
         savingsRows={drilldownSavingsRows}
         safeToSpendBreakdown={safeToSpendBreakdown}
         loading={drilldownLoading}
         emptyMessage={drilldownEmptyMessage}
+        cashDeductionContextAvailable={!paymentTransactionsLoading}
       />
     </div>
   );
