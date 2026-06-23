@@ -70,6 +70,7 @@ import { CashflowStartDateSettingsCard } from "@/components/cashflow-start-date-
 import { ImportUploadCard } from "@/components/import-upload-card";
 import { ImportHistoryPanel } from "@/components/import-history-panel";
 import { ReceiptUploadCard } from "@/components/receipt-upload-card";
+import { HouseholdInviteCard } from "@/components/household-invite-card";
 import { getMyPaycheckSchedule } from "@/lib/paycheck-schedule";
 import { buildSavingsGoalDetailView } from "@/lib/savings-detail";
 import { buildSavingsRolloverDisplayView } from "@/lib/savings-rollover";
@@ -1241,6 +1242,12 @@ export function SettingsPage() {
         <ImportHistoryPanel />
 
         <ReceiptUploadCard />
+
+        <HouseholdInviteCard
+          householdId={household.id}
+          membership={membership}
+          ownerEmail={user.email}
+        />
 
         <Card>
           <CardHeader>

@@ -866,6 +866,47 @@ export interface Database {
           updated_at?: string;
         };
       };
+      household_invitations: {
+        Row: {
+          id: string;
+          household_id: string;
+          email: string;
+          role: "member";
+          status: "invited" | "accepted" | "cancelled" | "expired";
+          invited_by: string;
+          invited_user_id: string | null;
+          expires_at: string | null;
+          accepted_at: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          household_id: string;
+          email: string;
+          role?: "member";
+          status?: "invited" | "accepted" | "cancelled" | "expired";
+          invited_by: string;
+          invited_user_id?: string | null;
+          expires_at?: string | null;
+          accepted_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          household_id?: string;
+          email?: string;
+          role?: "member";
+          status?: "invited" | "accepted" | "cancelled" | "expired";
+          invited_by?: string;
+          invited_user_id?: string | null;
+          expires_at?: string | null;
+          accepted_at?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
       receipt_candidates: {
         Row: {
           id: string;
@@ -997,6 +1038,7 @@ export type CashPaymentTransaction = Tables<"cash_payment_transactions">;
 export type PaymentSourceType = CashPaymentTransaction["source_type"];
 export type CashAdjustmentTransaction = Tables<"cash_adjustment_transactions">;
 export type CashAdjustmentSourceType = CashAdjustmentTransaction["source_type"];
+export type HouseholdInvitation = Tables<"household_invitations">;
 export type ReceiptUpload = Tables<"receipt_uploads">;
 export type InsertReceiptUpload = InsertTables<"receipt_uploads">;
 export type ReceiptUploadStatus = ReceiptUpload["status"];

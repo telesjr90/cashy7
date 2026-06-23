@@ -18,6 +18,22 @@ export async function getHouseholdPeople(householdId: string): Promise<{
   return { people: (data as Person[]) ?? [], error: null };
 }
 
+export async function getHouseholdMembers(householdId: string): Promise<{
+  members: HouseholdMember[];
+  error: string | null;
+}> {
+  const { data, error } = await supabase
+    .from("household_members")
+    .select("id, household_id, user_id, email, role, status, is_owner, is_active")
+    .eq("household_id", householdId);
+
+  if (error) {
+    return { members: [], error: error.message };
+  }
+
+  return { members: (data as HouseholdMember[]) ?? [], error: null };
+}
+
 export async function getMyHouseholdMemberProfile(
   householdId: string,
   userId: string
