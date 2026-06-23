@@ -217,7 +217,6 @@ export async function listMyReceiptCandidates(
     .from("receipt_candidates")
     .select("*")
     .eq("created_by", userId)
-    .eq("status", "pending")
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -227,7 +226,11 @@ export async function listMyReceiptCandidates(
     };
   }
 
-  return { candidates: data ?? [], error: null };
+  const candidates = (data ?? []).filter(
+    (candidate) => candidate.status === "pending" || candidate.status === "approved"
+  );
+
+  return { candidates, error: null };
 }
 
 export type DismissReceiptCandidateParams = {
@@ -264,11 +267,11 @@ export async function dismissReceiptCandidate(
 
 export function buildCandidateListQueryFilters(userId: string): {
   createdBy: string;
-  status: "pending";
+  statuses: Array<"pending" | "approved">;
 } {
   return {
     createdBy: userId,
-    status: "pending",
+    statuses: ["pending", "approved"],
   };
 }
 

@@ -22,7 +22,10 @@ export const RECEIPT_CANDIDATE_EXISTS_COPY =
 
 export const RECEIPT_CANDIDATE_DISMISS_ACTION = "Dismiss candidate";
 
-export const RECEIPT_CANDIDATE_LIST_EMPTY_COPY = "No pending receipt candidates yet.";
+export const RECEIPT_CANDIDATE_LIST_EMPTY_COPY = "No receipt candidates yet.";
+
+export const RECEIPT_CANDIDATE_APPROVED_COPY =
+  "Expense created. Receipt audit remains private to you.";
 
 const UUID_PATTERN =
   /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
@@ -155,6 +158,8 @@ export function candidateStatusLabel(status: ReceiptCandidateStatus): string {
   switch (status) {
     case "pending":
       return "Pending review";
+    case "approved":
+      return "Approved";
     case "dismissed":
       return "Dismissed";
     default:

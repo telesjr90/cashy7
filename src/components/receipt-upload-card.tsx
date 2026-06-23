@@ -215,7 +215,7 @@ const ACCEPTED_RECEIPT_TYPES =
   "image/jpeg,image/png,image/webp,application/pdf,.jpg,.jpeg,.png,.webp,.pdf";
 
 export function ReceiptUploadCard() {
-  const { user, household } = useAuth();
+  const { user, household, membership } = useAuth();
   const inputId = useId();
   const helpId = useId();
   const errorId = useId();
@@ -790,16 +790,24 @@ export function ReceiptUploadCard() {
         </CardContent>
       </Card>
 
-      {user ? (
+      {user && household ? (
         <ReceiptCandidateReviewDialog
           candidate={reviewTarget}
+          receiptUpload={
+            reviewTarget
+              ? (receipts.find((receipt) => receipt.id === reviewTarget.receipt_upload_id) ??
+                null)
+              : null
+          }
           receiptFileName={
             reviewTarget ? (receiptFileNames[reviewTarget.receipt_upload_id] ?? null) : null
           }
           receiptUploadedAt={
             reviewTarget ? (receiptUploadedAtById[reviewTarget.receipt_upload_id] ?? null) : null
           }
+          householdId={household.id}
           userId={user.id}
+          personId={membership?.person_id ?? null}
           open={reviewTarget !== null}
           onOpenChange={(open) => {
             if (!open) {
@@ -807,6 +815,10 @@ export function ReceiptUploadCard() {
             }
           }}
           onSaved={loadCandidates}
+          onApproved={async () => {
+            await loadCandidates();
+            await loadReceipts();
+          }}
         />
       ) : null}
 

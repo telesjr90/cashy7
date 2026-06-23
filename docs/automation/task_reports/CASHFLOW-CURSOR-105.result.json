@@ -1,0 +1,42 @@
+{
+  "taskId": "CASHFLOW-CURSOR-105",
+  "result": "PASS",
+  "filesChanged": [
+    "supabase/migrations/20260623000006_028_receipt_candidate_approval.sql",
+    "src/lib/types.ts",
+    "src/lib/receipt-approval.ts",
+    "src/lib/receipt-approval.test.ts",
+    "src/lib/receipt-approval-service.ts",
+    "src/lib/receipt-approval-service.test.ts",
+    "src/lib/receipt-candidates.ts",
+    "src/lib/receipt-candidate-review.ts",
+    "src/lib/receipt-candidate-service.ts",
+    "src/lib/receipt-candidate-service.test.ts",
+    "src/lib/receipt-candidate-review.test.ts",
+    "src/lib/receipt-candidates.test.ts",
+    "src/components/receipt-candidate-review-dialog.tsx",
+    "src/components/receipt-candidate-panel.tsx",
+    "src/components/receipt-upload-card.tsx",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-105.md",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-105.result.json"
+  ],
+  "migrationsCreated": [
+    "supabase/migrations/20260623000006_028_receipt_candidate_approval.sql"
+  ],
+  "functionsCreated": [],
+  "dependenciesAdded": [],
+  "validation": {
+    "typecheck": "PASS",
+    "build": "PASS",
+    "testRun": "PASS"
+  },
+  "browserSmoke": {
+    "required": true,
+    "result": "PASS",
+    "note": "Page-load smoke passed; live approve-create not exercised (no pending candidates on test account)."
+  },
+  "privacy": "PASS",
+  "productRules": "PASS",
+  "readyToCommit": true,
+  "nextTaskId": "CASHFLOW-CURSOR-106"
+}

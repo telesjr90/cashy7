@@ -79,6 +79,9 @@ function makeCandidate(overrides: Partial<ReceiptCandidate> = {}): ReceiptCandid
     field_confidence: {},
     warnings: [],
     source_status: "success",
+    approved_at: null,
+    approved_by: null,
+    linked_manual_expense_id: null,
     created_at: "2026-06-23T12:00:00.000Z",
     updated_at: "2026-06-23T12:00:00.000Z",
     ...overrides,
@@ -259,7 +262,7 @@ describe("receipt candidate service", () => {
     expect(candidates).toHaveLength(1);
     expect(buildCandidateListQueryFilters(USER_ID)).toEqual({
       createdBy: USER_ID,
-      status: "pending",
+      statuses: ["pending", "approved"],
     });
     expect(list).toHaveBeenCalledTimes(1);
   });

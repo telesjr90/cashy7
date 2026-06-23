@@ -16,12 +16,9 @@ export const RECEIPT_CANDIDATE_SAVE_DRAFT_ACTION = "Save draft";
 export const RECEIPT_CANDIDATE_UPDATED_COPY = "Candidate updated.";
 
 export const RECEIPT_CANDIDATE_APPROVAL_NEXT_STEP_COPY =
-  "Approval that creates an expense happens in the next step.";
+  "Approve when ready to create a shared manual expense.";
 
-export const RECEIPT_CANDIDATE_APPROVAL_PLACEHOLDER_LABEL = "Approve and create expense";
-
-export const RECEIPT_CANDIDATE_APPROVAL_PLACEHOLDER_COPY =
-  "Approval creates a shared manual expense in the next task.";
+export const RECEIPT_CANDIDATE_APPROVAL_ACTION_LABEL = "Approve and create expense";
 
 const UUID_PATTERN =
   /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;

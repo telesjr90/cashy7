@@ -857,7 +857,7 @@ export interface Database {
           household_id: string;
           receipt_upload_id: string;
           created_by: string;
-          status: "pending" | "dismissed";
+          status: "pending" | "dismissed" | "approved";
           merchant: string | null;
           transaction_date: string | null;
           total_amount: number | null;
@@ -868,6 +868,9 @@ export interface Database {
           field_confidence: Json;
           warnings: string[];
           source_status: string;
+          approved_at: string | null;
+          approved_by: string | null;
+          linked_manual_expense_id: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -876,7 +879,7 @@ export interface Database {
           household_id: string;
           receipt_upload_id: string;
           created_by: string;
-          status?: "pending" | "dismissed";
+          status?: "pending" | "dismissed" | "approved";
           merchant?: string | null;
           transaction_date?: string | null;
           total_amount?: number | null;
@@ -887,6 +890,9 @@ export interface Database {
           field_confidence?: Json;
           warnings?: string[];
           source_status: string;
+          approved_at?: string | null;
+          approved_by?: string | null;
+          linked_manual_expense_id?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -895,7 +901,7 @@ export interface Database {
           household_id?: string;
           receipt_upload_id?: string;
           created_by?: string;
-          status?: "pending" | "dismissed";
+          status?: "pending" | "dismissed" | "approved";
           merchant?: string | null;
           transaction_date?: string | null;
           total_amount?: number | null;
@@ -906,6 +912,9 @@ export interface Database {
           field_confidence?: Json;
           warnings?: string[];
           source_status?: string;
+          approved_at?: string | null;
+          approved_by?: string | null;
+          linked_manual_expense_id?: string | null;
           created_at?: string;
           updated_at?: string;
         };

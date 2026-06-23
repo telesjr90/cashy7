@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { Link } from "react-router-dom";
+import { buildApprovedExpenseSummaryLabel } from "@/lib/receipt-approval";
 import {
   buildCandidateDisplayRow,
   candidateStatusLabel,
@@ -6,6 +8,7 @@ import {
   formatCandidateMoney,
   parseStoredFieldConfidence,
   parseStoredLineItems,
+  RECEIPT_CANDIDATE_APPROVED_COPY,
   RECEIPT_CANDIDATE_DRAFT_COPY,
   RECEIPT_CANDIDATE_DISMISS_ACTION,
   RECEIPT_CANDIDATE_LIST_EMPTY_COPY,
@@ -135,9 +138,32 @@ function ReceiptCandidateDetailPreview({ candidate }: { candidate: ReceiptCandid
 
       <div className="space-y-1 text-muted-foreground">
         <p>{RECEIPT_CANDIDATE_DRAFT_COPY}</p>
-        <p>{RECEIPT_CANDIDATE_NO_EXPENSE_COPY}</p>
-        <p>{RECEIPT_CANDIDATE_PRIVATE_COPY}</p>
-        <p>{RECEIPT_CANDIDATE_REVIEW_COPY}</p>
+        {candidate.status === "approved" ? (
+          <>
+            <p>{RECEIPT_CANDIDATE_APPROVED_COPY}</p>
+            {candidate.merchant && candidate.total_amount && candidate.transaction_date ? (
+              <p className="font-medium text-foreground">
+                {buildApprovedExpenseSummaryLabel({
+                  description: candidate.merchant,
+                  amount:
+                    typeof candidate.total_amount === "number"
+                      ? candidate.total_amount
+                      : Number(candidate.total_amount),
+                  expenseDate: candidate.transaction_date,
+                })}
+              </p>
+            ) : null}
+            <Link to="/expenses" className="font-medium underline underline-offset-4">
+              View in Expenses
+            </Link>
+          </>
+        ) : (
+          <>
+            <p>{RECEIPT_CANDIDATE_NO_EXPENSE_COPY}</p>
+            <p>{RECEIPT_CANDIDATE_PRIVATE_COPY}</p>
+            <p>{RECEIPT_CANDIDATE_REVIEW_COPY}</p>
+          </>
+        )}
       </div>
     </div>
   );
@@ -177,25 +203,33 @@ function ReceiptCandidateListRow({
           {row.confidenceLabel ? (
             <p className="text-muted-foreground">{row.confidenceLabel}</p>
           ) : null}
-          <p className="text-muted-foreground">{RECEIPT_CANDIDATE_PENDING_REVIEW_COPY}</p>
-          <p className="text-muted-foreground">{RECEIPT_CANDIDATE_NO_EXPENSE_COPY}</p>
+          {candidate.status === "pending" ? (
+            <>
+              <p className="text-muted-foreground">{RECEIPT_CANDIDATE_PENDING_REVIEW_COPY}</p>
+              <p className="text-muted-foreground">{RECEIPT_CANDIDATE_NO_EXPENSE_COPY}</p>
+            </>
+          ) : (
+            <p className="text-muted-foreground">{RECEIPT_CANDIDATE_APPROVED_COPY}</p>
+          )}
         </div>
         <div className="flex items-center gap-1">
           <Button type="button" variant="default" size="sm" onClick={onRequestReview}>
-            {RECEIPT_CANDIDATE_REVIEW_ACTION}
+            {candidate.status === "approved" ? "View approved candidate" : RECEIPT_CANDIDATE_REVIEW_ACTION}
           </Button>
           <Button type="button" variant="outline" size="sm" onClick={onToggleExpanded}>
             {expanded ? "Hide preview" : "View preview"}
           </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            aria-label={`Dismiss ${row.titleLabel}`}
-            onClick={onRequestDismiss}
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
+          {candidate.status === "pending" ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              aria-label={`Dismiss ${row.titleLabel}`}
+              onClick={onRequestDismiss}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          ) : null}
         </div>
       </div>
       {expanded ? <ReceiptCandidateDetailPreview candidate={candidate} /> : null}
@@ -228,9 +262,10 @@ export function ReceiptCandidatePanel({
   return (
     <>
       <div className="space-y-2 border-t pt-4">
-        <h3 className="text-sm font-medium">Your pending receipt candidates</h3>
+        <h3 className="text-sm font-medium">Your receipt candidates</h3>
         <p className="text-sm text-muted-foreground">
-          Draft candidates are private to you until you approve a shared expense in a later step.
+          Draft and approved candidates stay private to you. Approved candidates create a shared
+          manual expense without deducting cash.
         </p>
 
         {listPhase === "loading" ? (
