@@ -69,15 +69,14 @@ import {
 } from "@/lib/savings";
 import {
   buildBillDrilldownRows,
-  buildExpenseDrilldownRows,
   buildMySavingsDrilldownRows,
   filterBillsForDashboardView,
-  filterManualExpensesCountedInDashboardView,
 } from "@/lib/dashboard-drilldowns";
 import {
   buildDashboardBillViewLabel,
   buildUnpaidBillDrilldown,
 } from "@/lib/dashboard-bill-drilldown";
+import { buildManualExpenseDrilldown } from "@/lib/dashboard-expense-drilldown";
 import {
   DashboardDrilldownPanel,
   type DashboardDrilldownKind,
@@ -912,23 +911,42 @@ export function DashboardPage() {
     billCashDeductionContext,
   ]);
 
-  const drilldownBills = filterBillsForDashboardView(bills, periodView);
-  const drilldownExpenses = filterManualExpensesCountedInDashboardView(
+  const manualExpenseDrilldown = useMemo(() => {
+    if (shareKey === null) {
+      return null;
+    }
+
+    return buildManualExpenseDrilldown({
+      expenses: manualExpenses,
+      periodView,
+      selectedYear: year,
+      selectedMonth: month,
+      snapshotDate: cashSnapshot?.snapshot_date ?? null,
+      shareKey,
+      cardTotal: myManualExpenseTotalForView ?? 0,
+      deductedManualExpenseIds: paymentTransactionsLoading
+        ? undefined
+        : deductedManualExpenseIds,
+      people,
+    });
+  }, [
     manualExpenses,
     periodView,
     year,
     month,
-    cashSnapshot?.snapshot_date ?? null,
-    paymentTransactionsLoading ? undefined : deductedManualExpenseIds
-  );
+    cashSnapshot?.snapshot_date,
+    shareKey,
+    myManualExpenseTotalForView,
+    paymentTransactionsLoading,
+    deductedManualExpenseIds,
+    people,
+  ]);
+
+  const drilldownBills = filterBillsForDashboardView(bills, periodView);
   const drilldownBillRows = buildBillDrilldownRows(
     drilldownBills,
     shareKey,
     debtLinkedBillIds
-  );
-  const drilldownExpenseRows = buildExpenseDrilldownRows(
-    drilldownExpenses,
-    shareKey
   );
   const drilldownSavingsRows = buildMySavingsDrilldownRows(
     savingsParticipants,
@@ -1237,14 +1255,69 @@ export function DashboardPage() {
           </CardContent>
         </Card>
 
-        <Card className="mb-6">
+        <Card
+          className={`mb-6 ${
+            shareKey !== null &&
+            cashSnapshot &&
+            !cashSnapshotLoading &&
+            !manualExpensesLoading &&
+            !paymentTransactionsLoading
+              ? "cursor-pointer transition-colors hover:bg-muted/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              : ""
+          }`}
+          role={
+            shareKey !== null &&
+            cashSnapshot &&
+            !cashSnapshotLoading &&
+            !manualExpensesLoading &&
+            !paymentTransactionsLoading
+              ? "button"
+              : undefined
+          }
+          tabIndex={
+            shareKey !== null &&
+            cashSnapshot &&
+            !cashSnapshotLoading &&
+            !manualExpensesLoading &&
+            !paymentTransactionsLoading
+              ? 0
+              : undefined
+          }
+          onClick={() => {
+            if (
+              shareKey !== null &&
+              cashSnapshot &&
+              !cashSnapshotLoading &&
+              !manualExpensesLoading &&
+              !paymentTransactionsLoading
+            ) {
+              openDrilldown("expenses");
+            }
+          }}
+          onKeyDown={(event) => {
+            if (
+              shareKey !== null &&
+              cashSnapshot &&
+              !cashSnapshotLoading &&
+              !manualExpensesLoading &&
+              !paymentTransactionsLoading &&
+              (event.key === "Enter" || event.key === " ")
+            ) {
+              event.preventDefault();
+              openDrilldown("expenses");
+            }
+          }}
+        >
           <CardHeader className="pb-2">
             <div className="flex items-center justify-between gap-2">
               <CardTitle className="text-base">My manual expenses for this view</CardTitle>
               <Button
                 variant="link"
                 className="h-auto p-0 text-sm"
-                onClick={() => openDrilldown("expenses")}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  openDrilldown("expenses");
+                }}
               >
                 View expenses
               </Button>
@@ -1723,7 +1796,8 @@ export function DashboardPage() {
         billRows={drilldownBillRows}
         unpaidBillRows={unpaidBillDrilldown?.rows ?? []}
         unpaidBillReconciliation={unpaidBillDrilldown?.reconciliation ?? null}
-        expenseRows={drilldownExpenseRows}
+        expenseRows={manualExpenseDrilldown?.rows ?? []}
+        expenseReconciliation={manualExpenseDrilldown?.reconciliation ?? null}
         savingsRows={drilldownSavingsRows}
         safeToSpendBreakdown={safeToSpendBreakdown}
         loading={drilldownLoading}

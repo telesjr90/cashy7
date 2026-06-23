@@ -1,0 +1,26 @@
+{
+  "taskId": "CASHFLOW-CURSOR-083",
+  "result": "PASS",
+  "filesChanged": [
+    "src/lib/dashboard-expense-drilldown.ts",
+    "src/lib/dashboard-expense-drilldown.test.ts",
+    "src/components/dashboard-drilldown-panel.tsx",
+    "src/pages/dashboard.tsx",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-083.md",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-083.result.json"
+  ],
+  "migrationsCreated": [],
+  "validation": {
+    "typecheck": "PASS",
+    "build": "PASS",
+    "testRun": "PASS"
+  },
+  "browserSmoke": {
+    "required": true,
+    "result": "PASS"
+  },
+  "privacy": "PASS",
+  "productRules": "PASS",
+  "readyToCommit": true,
+  "nextTaskId": "CASHFLOW-CURSOR-084"
+}
