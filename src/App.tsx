@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { LoginPage } from "@/pages/login";
 import { SignupPage } from "@/pages/signup";
 import { SetupPage } from "@/pages/setup";
+import { AcceptInvitePage } from "@/pages/accept-invite";
 import { DashboardPage } from "@/pages/dashboard";
 import { BillsPage } from "@/pages/bills";
 import { AddBillPage } from "@/pages/add-bill";
@@ -154,6 +155,7 @@ function AppRoutes() {
           </PublicRoute>
         }
       />
+      <Route path="/accept-invite" element={<AcceptInvitePage />} />
       <Route
         path="/"
         element={

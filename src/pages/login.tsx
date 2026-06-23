@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,6 +21,17 @@ export function LoginPage() {
   const [loading, setLoading] = useState(false);
   const { signIn } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const redirectAfterLogin = () => {
+    const from = (location.state as { from?: { pathname?: string; search?: string } } | null)
+      ?.from;
+    if (from?.pathname) {
+      navigate(`${from.pathname}${from.search ?? ""}`);
+      return;
+    }
+    navigate("/");
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -33,7 +44,7 @@ export function LoginPage() {
       setError(error.message);
       setLoading(false);
     } else {
-      navigate("/");
+      redirectAfterLogin();
     }
   };
 
