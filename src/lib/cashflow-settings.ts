@@ -1,5 +1,14 @@
 import { supabase } from "@/lib/supabase";
-import type { CashSnapshot, HouseholdSettings } from "@/lib/types";
+import type {
+  BillInstance,
+  CashSnapshot,
+  DebtPayment,
+  HouseholdSettings,
+  ManualExpense,
+  SavingsContribution,
+} from "@/lib/types";
+import { getManualExpenses } from "@/lib/expenses";
+import { getMySavingsContributions } from "@/lib/savings";
 
 export async function getHouseholdSettings(householdId: string): Promise<{
   settings: HouseholdSettings | null;
@@ -39,6 +48,55 @@ export async function upsertHouseholdCashflowStartDate(
   }
 
   return { settings: data as HouseholdSettings, error: null };
+}
+
+export async function loadCashflowStartImpactPreviewData(
+  householdId: string,
+  userId: string
+): Promise<{
+  data: {
+    billInstances: BillInstance[];
+    manualExpenses: ManualExpense[];
+    debtPayments: DebtPayment[];
+    savingsContributions: SavingsContribution[];
+  } | null;
+  error: string | null;
+}> {
+  const [
+    billInstancesResult,
+    expensesResult,
+    debtPaymentsResult,
+    contributionsResult,
+  ] = await Promise.all([
+    supabase
+      .from("bill_instances")
+      .select("*")
+      .eq("household_id", householdId),
+    getManualExpenses(householdId),
+    supabase.from("debt_payments").select("*").eq("household_id", householdId),
+    getMySavingsContributions(householdId, userId),
+  ]);
+
+  const errors = [
+    billInstancesResult.error?.message,
+    expensesResult.error,
+    debtPaymentsResult.error?.message,
+    contributionsResult.error,
+  ].filter(Boolean);
+
+  if (errors.length > 0) {
+    return { data: null, error: errors[0] ?? "Failed to load impact preview data." };
+  }
+
+  return {
+    data: {
+      billInstances: (billInstancesResult.data as BillInstance[]) ?? [],
+      manualExpenses: expensesResult.expenses,
+      debtPayments: (debtPaymentsResult.data as DebtPayment[]) ?? [],
+      savingsContributions: contributionsResult.contributions,
+    },
+    error: null,
+  };
 }
 
 export async function getMyLatestCashSnapshot(

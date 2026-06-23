@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
 import {
   getHouseholdSettings,
-  upsertHouseholdCashflowStartDate,
   getMyLatestCashSnapshot,
   addMyCashSnapshot,
 } from "@/lib/cashflow-settings";
@@ -67,6 +66,7 @@ import {
 } from "@/components/savings-rollover-panel";
 import { SavingsTargetEditDialog } from "@/components/savings-target-edit-dialog";
 import { PaycheckScheduleSettingsPanel } from "@/components/paycheck-schedule-settings";
+import { CashflowStartDateSettingsCard } from "@/components/cashflow-start-date-settings-card";
 import { getMyPaycheckSchedule } from "@/lib/paycheck-schedule";
 import { buildSavingsGoalDetailView } from "@/lib/savings-detail";
 import { buildSavingsRolloverDisplayView } from "@/lib/savings-rollover";
@@ -732,10 +732,6 @@ export function SettingsPage() {
   const [settings, setSettings] = useState<HouseholdSettings | null>(null);
   const [settingsLoading, setSettingsLoading] = useState(true);
   const [settingsError, setSettingsError] = useState<string | null>(null);
-  const [cashflowStartDateInput, setCashflowStartDateInput] = useState("");
-  const [cashflowSaving, setCashflowSaving] = useState(false);
-  const [cashflowSaveError, setCashflowSaveError] = useState<string | null>(null);
-  const [cashflowSuccess, setCashflowSuccess] = useState<string | null>(null);
 
   const [people, setPeople] = useState<Person[]>([]);
   const [peopleLoading, setPeopleLoading] = useState(true);
@@ -827,9 +823,6 @@ export function SettingsPage() {
       setSettings(null);
     } else {
       setSettings(data);
-      if (data?.cashflow_start_date) {
-        setCashflowStartDateInput(data.cashflow_start_date);
-      }
     }
 
     setSettingsLoading(false);
@@ -1123,35 +1116,6 @@ export function SettingsPage() {
     setGoalCreateSuccess("Savings goal created.");
   };
 
-  const handleSaveCashflowStartDate = async () => {
-    if (!household) return;
-
-    setCashflowSaveError(null);
-    setCashflowSuccess(null);
-
-    if (!cashflowStartDateInput.trim()) {
-      setCashflowSaveError("Please select a cashflow start date.");
-      return;
-    }
-
-    setCashflowSaving(true);
-
-    const { settings: updated, error } = await upsertHouseholdCashflowStartDate(
-      household.id,
-      cashflowStartDateInput
-    );
-
-    setCashflowSaving(false);
-
-    if (error) {
-      setCashflowSaveError(error);
-      return;
-    }
-
-    setSettings(updated);
-    setCashflowSuccess("Cashflow start date saved.");
-  };
-
   const handleSaveBudgetProfile = async () => {
     if (!household || !user) return;
 
@@ -1259,74 +1223,15 @@ export function SettingsPage() {
       </div>
 
       <div className="container mx-auto max-w-2xl space-y-6 px-4 py-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Cashflow start date</CardTitle>
-            <CardDescription>
-              The household date when cashflow tracking begins. Shared for all members.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {settingsLoading ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Loading settings...
-              </div>
-            ) : settingsError ? (
-              <Alert variant="destructive">
-                <AlertDescription>{settingsError}</AlertDescription>
-              </Alert>
-            ) : (
-              <>
-                <div className="text-sm">
-                  {settings?.cashflow_start_date ? (
-                    <p>
-                      Current start date:{" "}
-                      <span className="font-medium">
-                        {formatDisplayDate(settings.cashflow_start_date)}
-                      </span>
-                    </p>
-                  ) : (
-                    <p className="text-muted-foreground">
-                      No cashflow start date set yet.
-                    </p>
-                  )}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="cashflow-start-date">Start date</Label>
-                  <Input
-                    id="cashflow-start-date"
-                    type="date"
-                    value={cashflowStartDateInput}
-                    onChange={(e) => setCashflowStartDateInput(e.target.value)}
-                  />
-                </div>
-
-                {cashflowSaveError && (
-                  <Alert variant="destructive">
-                    <AlertDescription>{cashflowSaveError}</AlertDescription>
-                  </Alert>
-                )}
-                {cashflowSuccess && (
-                  <Alert>
-                    <AlertDescription>{cashflowSuccess}</AlertDescription>
-                  </Alert>
-                )}
-
-                <Button
-                  onClick={handleSaveCashflowStartDate}
-                  disabled={cashflowSaving}
-                >
-                  {cashflowSaving && (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  )}
-                  Save start date
-                </Button>
-              </>
-            )}
-          </CardContent>
-        </Card>
+        <CashflowStartDateSettingsCard
+          householdId={household.id}
+          userId={user.id}
+          membership={membership}
+          settings={settings}
+          settingsLoading={settingsLoading}
+          settingsError={settingsError}
+          onSettingsSaved={setSettings}
+        />
 
         <Card>
           <CardHeader>
