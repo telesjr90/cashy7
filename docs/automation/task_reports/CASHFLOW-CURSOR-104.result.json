@@ -1,0 +1,32 @@
+{
+  "taskId": "CASHFLOW-CURSOR-104",
+  "result": "PASS",
+  "filesChanged": [
+    "src/lib/receipt-candidate-review.ts",
+    "src/lib/receipt-candidate-review.test.ts",
+    "src/lib/receipt-candidate-service.ts",
+    "src/lib/receipt-candidate-service.test.ts",
+    "src/components/receipt-candidate-review-dialog.tsx",
+    "src/components/receipt-candidate-panel.tsx",
+    "src/components/receipt-upload-card.tsx",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-104.md",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-104.result.json"
+  ],
+  "migrationsCreated": [],
+  "functionsCreated": [],
+  "dependenciesAdded": [],
+  "validation": {
+    "typecheck": "PASS",
+    "build": "PASS",
+    "testRun": "PASS"
+  },
+  "browserSmoke": {
+    "required": true,
+    "result": "PASS",
+    "notes": "Core pages and receipt sections pass; live review-dialog save path not exercised because test account had no pending candidates during smoke"
+  },
+  "privacy": "PASS",
+  "productRules": "PASS",
+  "readyToCommit": true,
+  "nextTaskId": "CASHFLOW-CURSOR-105"
+}

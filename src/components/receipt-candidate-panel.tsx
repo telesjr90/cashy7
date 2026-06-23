@@ -16,6 +16,7 @@ import {
   confidencePercentLabel,
   type ReceiptCandidateDisplayRow,
 } from "@/lib/receipt-candidates";
+import { RECEIPT_CANDIDATE_REVIEW_ACTION } from "@/lib/receipt-candidate-review";
 import type { ReceiptCandidate } from "@/lib/types";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
@@ -45,6 +46,7 @@ type ReceiptCandidatePanelProps = {
   onRequestDismiss: (candidate: ReceiptCandidate) => void;
   onCancelDismiss: () => void;
   onConfirmDismiss: () => void;
+  onRequestReview: (candidate: ReceiptCandidate) => void;
 };
 
 function formatStoredMoney(value: number | string | null | undefined): string {
@@ -147,12 +149,14 @@ function ReceiptCandidateListRow({
   expanded,
   onToggleExpanded,
   onRequestDismiss,
+  onRequestReview,
 }: {
   row: ReceiptCandidateDisplayRow;
   candidate: ReceiptCandidate;
   expanded: boolean;
   onToggleExpanded: () => void;
   onRequestDismiss: () => void;
+  onRequestReview: () => void;
 }) {
   return (
     <div className="rounded-md border p-3 text-sm">
@@ -177,6 +181,9 @@ function ReceiptCandidateListRow({
           <p className="text-muted-foreground">{RECEIPT_CANDIDATE_NO_EXPENSE_COPY}</p>
         </div>
         <div className="flex items-center gap-1">
+          <Button type="button" variant="default" size="sm" onClick={onRequestReview}>
+            {RECEIPT_CANDIDATE_REVIEW_ACTION}
+          </Button>
           <Button type="button" variant="outline" size="sm" onClick={onToggleExpanded}>
             {expanded ? "Hide preview" : "View preview"}
           </Button>
@@ -209,6 +216,7 @@ export function ReceiptCandidatePanel({
   onRequestDismiss,
   onCancelDismiss,
   onConfirmDismiss,
+  onRequestReview,
 }: ReceiptCandidatePanelProps) {
   const displayRows = candidates.map((candidate) =>
     buildCandidateDisplayRow({
@@ -251,6 +259,7 @@ export function ReceiptCandidatePanel({
                   expanded={expandedCandidateId === row.id}
                   onToggleExpanded={() => onToggleExpanded(row.id)}
                   onRequestDismiss={() => onRequestDismiss(candidate)}
+                  onRequestReview={() => onRequestReview(candidate)}
                 />
               );
             })}

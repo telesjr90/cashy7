@@ -32,6 +32,7 @@ import {
   ReceiptCandidatePanel,
   useReceiptCandidatePanelState,
 } from "@/components/receipt-candidate-panel";
+import { ReceiptCandidateReviewDialog } from "@/components/receipt-candidate-review-dialog";
 import {
   RECEIPT_EXTRACTION_DRAFT_COPY,
   RECEIPT_EXTRACTION_NOT_CONFIGURED_COPY,
@@ -244,6 +245,7 @@ export function ReceiptUploadCard() {
   const [savingReceiptId, setSavingReceiptId] = useState<string | null>(null);
   const [saveErrors, setSaveErrors] = useState<Record<string, string>>({});
   const [saveSuccesses, setSaveSuccesses] = useState<Record<string, string>>({});
+  const [reviewTarget, setReviewTarget] = useState<ReceiptCandidate | null>(null);
   const {
     expandedCandidateId,
     setExpandedCandidateId,
@@ -490,6 +492,9 @@ export function ReceiptUploadCard() {
   );
   const receiptFileNames = Object.fromEntries(
     receipts.map((receipt) => [receipt.id, receipt.original_file_name])
+  );
+  const receiptUploadedAtById = Object.fromEntries(
+    receipts.map((receipt) => [receipt.id, receipt.created_at])
   );
   const canUpload =
     selectedFile !== null && uploadPhase !== "uploading" && user !== null && household !== null;
@@ -780,9 +785,30 @@ export function ReceiptUploadCard() {
             }}
             onCancelDismiss={() => setDismissTarget(null)}
             onConfirmDismiss={() => void handleConfirmDismissCandidate()}
+            onRequestReview={(candidate) => setReviewTarget(candidate)}
           />
         </CardContent>
       </Card>
+
+      {user ? (
+        <ReceiptCandidateReviewDialog
+          candidate={reviewTarget}
+          receiptFileName={
+            reviewTarget ? (receiptFileNames[reviewTarget.receipt_upload_id] ?? null) : null
+          }
+          receiptUploadedAt={
+            reviewTarget ? (receiptUploadedAtById[reviewTarget.receipt_upload_id] ?? null) : null
+          }
+          userId={user.id}
+          open={reviewTarget !== null}
+          onOpenChange={(open) => {
+            if (!open) {
+              setReviewTarget(null);
+            }
+          }}
+          onSaved={loadCandidates}
+        />
+      ) : null}
 
       <AlertDialog
         open={deleteTarget !== null}

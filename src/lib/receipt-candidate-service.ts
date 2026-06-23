@@ -6,6 +6,12 @@ import {
   isCandidateSavable,
   type ReceiptCandidateSavability,
 } from "@/lib/receipt-candidates";
+import {
+  buildCandidateDraftUpdatePayload,
+  RECEIPT_CANDIDATE_UPDATED_COPY,
+  sanitizeReviewErrorMessage,
+  type CandidateDraftUpdateValues,
+} from "@/lib/receipt-candidate-review";
 import type { ReceiptExtractionResult } from "@/lib/receipt-extraction";
 import { RECEIPT_NO_EXPENSE_CREATED_COPY } from "@/lib/receipt-upload";
 import { supabase } from "@/lib/supabase";
@@ -280,6 +286,55 @@ export function candidateInsertUsesUploaderScope(
 
 export function saveCandidateDoesNotInsertManualExpense(): boolean {
   return true;
+}
+
+export function updateCandidateDoesNotInsertManualExpense(): boolean {
+  return true;
+}
+
+export type UpdateReceiptCandidateDraftParams = {
+  candidate: Pick<ReceiptCandidate, "id" | "created_by" | "status">;
+  userId: string;
+  draft: CandidateDraftUpdateValues;
+};
+
+export type UpdateReceiptCandidateDraftResult =
+  | { ok: true; candidate: ReceiptCandidate; successCopy: string }
+  | { ok: false; error: string };
+
+export async function updateReceiptCandidateDraft(
+  params: UpdateReceiptCandidateDraftParams,
+  client: ReceiptCandidateClient = supabase as unknown as ReceiptCandidateClient
+): Promise<UpdateReceiptCandidateDraftResult> {
+  if (params.candidate.created_by !== params.userId) {
+    return { ok: false, error: "You can only update your own receipt candidates." };
+  }
+  if (params.candidate.status !== "pending") {
+    return { ok: false, error: "Only pending candidates can be edited." };
+  }
+
+  const payload = buildCandidateDraftUpdatePayload(params.draft);
+
+  const { data, error } = await client
+    .from("receipt_candidates")
+    .update(payload)
+    .eq("id", params.candidate.id)
+    .eq("created_by", params.userId)
+    .select("*")
+    .single();
+
+  if (error || !data) {
+    return {
+      ok: false,
+      error: sanitizeReviewErrorMessage(error?.message ?? "Could not update candidate."),
+    };
+  }
+
+  return {
+    ok: true,
+    candidate: data,
+    successCopy: RECEIPT_CANDIDATE_UPDATED_COPY,
+  };
 }
 
 export function isCandidateSavableForSave(extraction: ReceiptExtractionResult): boolean {

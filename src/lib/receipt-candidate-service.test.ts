@@ -8,6 +8,8 @@ import {
   saveCandidateDoesNotInsertManualExpense,
   saveReceiptCandidate,
   sanitizeCandidateErrorMessage,
+  updateCandidateDoesNotInsertManualExpense,
+  updateReceiptCandidateDraft,
   type ReceiptCandidateClient,
 } from "./receipt-candidate-service";
 import { buildCandidateInsertPayload } from "./receipt-candidates";
@@ -293,5 +295,78 @@ describe("receipt candidate service", () => {
 
   it("does not insert manual expense rows", () => {
     expect(saveCandidateDoesNotInsertManualExpense()).toBe(true);
+    expect(updateCandidateDoesNotInsertManualExpense()).toBe(true);
+  });
+
+  it("update candidate draft calls only receipt_candidates for own pending row", async () => {
+    const update = vi.fn(async () => ({
+      data: makeCandidate({ merchant: "Edited Cafe" }),
+      error: null,
+    }));
+    const result = await updateReceiptCandidateDraft(
+      {
+        candidate: makeCandidate(),
+        userId: USER_ID,
+        draft: {
+          merchant: "Edited Cafe",
+          transaction_date: "2026-06-02",
+          total_amount: 12,
+          tax_amount: 1,
+          category: "Food",
+        },
+      },
+      createMockClient({ update })
+    );
+
+    expect(result.ok).toBe(true);
+    expect(update).toHaveBeenCalledTimes(1);
+  });
+
+  it("rejects draft update for another user's candidate", async () => {
+    const update = vi.fn();
+    const result = await updateReceiptCandidateDraft(
+      {
+        candidate: makeCandidate({ created_by: OTHER_USER_ID }),
+        userId: USER_ID,
+        draft: {
+          merchant: "Edited Cafe",
+          transaction_date: "2026-06-02",
+          total_amount: 12,
+          tax_amount: 1,
+          category: "Food",
+        },
+      },
+      createMockClient({ update })
+    );
+
+    expect(result.ok).toBe(false);
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it("returns safe error when draft update fails", async () => {
+    const result = await updateReceiptCandidateDraft(
+      {
+        candidate: makeCandidate(),
+        userId: USER_ID,
+        draft: {
+          merchant: "Edited Cafe",
+          transaction_date: "2026-06-02",
+          total_amount: 12,
+          tax_amount: 1,
+          category: "Food",
+        },
+      },
+      createMockClient({
+        update: async () => ({
+          data: null,
+          error: { message: "failed for id 00000000-0000-4000-8000-000000000001" },
+        }),
+      })
+    );
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error).not.toMatch(/00000000-0000-4000-8000-000000000001/);
+    }
   });
 });
