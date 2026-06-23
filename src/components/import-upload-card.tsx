@@ -82,7 +82,7 @@ function getPreviewRows(result: ImportParseResult, sheetIndex: number): ImportPa
 }
 
 export function ImportUploadCard() {
-  const { user, household, membership } = useAuth();
+  const { user, household, membership, usablePersonId } = useAuth();
   const inputId = useId();
   const helpId = useId();
   const errorId = useId();
@@ -508,7 +508,7 @@ export function ImportUploadCard() {
                               sheetCount={parseResult.sheets.length}
                               householdId={household.id}
                               userId={user.id}
-                              personId={membership?.person_id ?? null}
+                              personId={usablePersonId}
                               membership={membership}
                             />
                           )}

@@ -145,7 +145,7 @@ interface PeriodSummary {
 }
 
 export function DashboardPage() {
-  const { household, user, membership, refreshHousehold } = useAuth();
+  const { household, user, usablePersonId, refreshHousehold } = useAuth();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [bills, setBills] = useState<BillInstance[]>([]);
   const [loading, setLoading] = useState(true);
@@ -1011,8 +1011,8 @@ export function DashboardPage() {
   const periodCardCount = periodView === "full" ? 2 : 1;
 
   const mappedPerson =
-    membership?.person_id != null
-      ? people.find((person) => person.id === membership.person_id) ?? null
+    usablePersonId != null
+      ? people.find((person) => person.id === usablePersonId) ?? null
       : null;
   const shareKey = resolveBillShareKeyForPerson(mappedPerson);
   const myBillTotal = sumMyBillShareTotal(bills, shareKey, periodView);

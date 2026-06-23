@@ -162,7 +162,7 @@ function formatDisplayDate(isoDate: string): string {
 }
 
 export function ExpensesPage() {
-  const { user, household, membership } = useAuth();
+  const { user, household, usablePersonId } = useAuth();
   const [expenses, setExpenses] = useState<ManualExpense[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
   const [paymentTransactions, setPaymentTransactions] = useState<
@@ -235,11 +235,11 @@ export function ExpensesPage() {
   const [notes, setNotes] = useState("");
 
   const mappedPerson = useMemo(() => {
-    if (!membership?.person_id) {
+    if (!usablePersonId) {
       return null;
     }
-    return people.find((person) => person.id === membership.person_id) ?? null;
-  }, [membership?.person_id, people]);
+    return people.find((person) => person.id === usablePersonId) ?? null;
+  }, [usablePersonId, people]);
 
   const previewSplit = useMemo(() => {
     const amount = Number(amountInput);
@@ -666,7 +666,7 @@ export function ExpensesPage() {
     const { expense, error: createError } = await createManualExpense({
       household_id: household.id,
       created_by_user_id: user.id,
-      person_id: membership?.person_id ?? null,
+      person_id: usablePersonId,
       expense_scope: expenseScope,
       description: trimmedDescription,
       category: category.trim() || null,
@@ -830,7 +830,7 @@ export function ExpensesPage() {
     const { expense, error: createError } = await createManualExpense({
       household_id: household.id,
       created_by_user_id: user.id,
-      person_id: membership?.person_id ?? null,
+      person_id: usablePersonId,
       ...validation.payload,
     });
 
@@ -902,7 +902,7 @@ export function ExpensesPage() {
     const { result, error: payError } = await paySourceFromCurrentCash({
       householdId: household.id,
       userId: user.id,
-      personId: membership?.person_id ?? null,
+      personId: usablePersonId,
       sourceType: "manual_expense",
       sourceId: expense.id,
       amount: shareAmount,

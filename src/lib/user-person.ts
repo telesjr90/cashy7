@@ -1,3 +1,8 @@
+import {
+  mapPersonMappingDatabaseError,
+  PERSON_MAPPING_SELECT_ERROR,
+  validatePersonMappingSelection,
+} from "@/lib/person-mapping-conflicts";
 import { supabase } from "@/lib/supabase";
 import type { HouseholdMember, Person } from "@/lib/types";
 
@@ -25,7 +30,7 @@ export async function getHouseholdMembers(householdId: string): Promise<{
   const { data, error } = await supabase
     .from("household_members")
     .select(
-      "id, household_id, user_id, email, display_name, role, status, is_owner, is_active, removed_at, removed_by"
+      "id, household_id, user_id, person_id, email, display_name, role, status, is_owner, is_active, removed_at, removed_by"
     )
     .eq("household_id", householdId);
 
@@ -68,12 +73,21 @@ export async function updateMyPersonMapping(
   personId: string
 ): Promise<{ membership: HouseholdMember | null; error: string | null }> {
   if (!personId.trim()) {
-    return { membership: null, error: "Please select a budget profile." };
+    return { membership: null, error: PERSON_MAPPING_SELECT_ERROR };
   }
 
-  const { people, error: peopleError } = await getHouseholdPeople(householdId);
+  const [{ people, error: peopleError }, { members, error: membersError }] =
+    await Promise.all([
+      getHouseholdPeople(householdId),
+      getHouseholdMembers(householdId),
+    ]);
+
   if (peopleError) {
     return { membership: null, error: peopleError };
+  }
+
+  if (membersError) {
+    return { membership: null, error: membersError };
   }
 
   if (!isPersonInHousehold(personId, people)) {
@@ -83,17 +97,32 @@ export async function updateMyPersonMapping(
     };
   }
 
+  const validation = validatePersonMappingSelection({
+    selectedPersonId: personId,
+    people,
+    members,
+    currentUserId: userId,
+  });
+
+  if (!validation.ok) {
+    return { membership: null, error: validation.error };
+  }
+
   const { data, error } = await supabase
     .from("household_members")
     .update({ person_id: personId })
     .eq("household_id", householdId)
     .eq("user_id", userId)
     .eq("is_active", true)
+    .eq("status", "active")
     .select()
     .maybeSingle();
 
   if (error) {
-    return { membership: null, error: error.message };
+    return {
+      membership: null,
+      error: mapPersonMappingDatabaseError(error.message),
+    };
   }
 
   if (!data) {

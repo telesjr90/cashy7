@@ -234,7 +234,7 @@ const ACCEPTED_RECEIPT_TYPES =
   "image/jpeg,image/png,image/webp,application/pdf,.jpg,.jpeg,.png,.webp,.pdf";
 
 export function ReceiptUploadCard() {
-  const { user, household, membership } = useAuth();
+  const { user, household, usablePersonId } = useAuth();
   const inputId = useId();
   const helpId = useId();
   const errorId = useId();
@@ -907,7 +907,7 @@ export function ReceiptUploadCard() {
           receiptUploadedAtById={receiptUploadedAtById}
           householdId={household.id}
           userId={user.id}
-          personId={membership?.person_id ?? null}
+          personId={usablePersonId}
           open={reviewTarget !== null}
           onOpenChange={(open) => {
             if (!open) {

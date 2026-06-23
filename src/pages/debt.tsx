@@ -187,7 +187,7 @@ function updateScheduleFromBalance(
 }
 
 export function DebtPage() {
-  const { user, household, membership } = useAuth();
+  const { user, household, usablePersonId } = useAuth();
   const [debtAccounts, setDebtAccounts] = useState<DebtAccount[]>([]);
   const [debtPayments, setDebtPayments] = useState<DebtPayment[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
@@ -317,11 +317,11 @@ export function DebtPage() {
   }, [household, user]);
 
   const mappedPerson = useMemo(() => {
-    if (!membership?.person_id) {
+    if (!usablePersonId) {
       return null;
     }
-    return people.find((person) => person.id === membership.person_id) ?? null;
-  }, [membership?.person_id, people]);
+    return people.find((person) => person.id === usablePersonId) ?? null;
+  }, [usablePersonId, people]);
 
   const shareKey = useMemo(
     () => resolveBillShareKeyForPerson(mappedPerson),
@@ -1132,7 +1132,7 @@ export function DebtPage() {
     const { result, error } = await paySourceFromCurrentCash({
       householdId: household.id,
       userId: user.id,
-      personId: membership?.person_id ?? null,
+      personId: usablePersonId,
       sourceType: "debt_payment",
       sourceId: payment.id,
       amount: shareAmount,

@@ -125,7 +125,7 @@ const MONTHS = [
 ];
 
 export function BillsPage() {
-  const { user, household, membership } = useAuth();
+  const { user, household, usablePersonId } = useAuth();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [bills, setBills] = useState<BillInstance[]>([]);
   const [people, setPeople] = useState<Person[]>([]);
@@ -166,11 +166,11 @@ export function BillsPage() {
   const month = currentDate.getMonth() + 1;
 
   const mappedPerson = useMemo(() => {
-    if (!membership?.person_id) {
+    if (!usablePersonId) {
       return null;
     }
-    return people.find((person) => person.id === membership.person_id) ?? null;
-  }, [membership?.person_id, people]);
+    return people.find((person) => person.id === usablePersonId) ?? null;
+  }, [usablePersonId, people]);
 
   const shareKey = useMemo(
     () => resolveBillShareKeyForPerson(mappedPerson),
@@ -342,7 +342,7 @@ export function BillsPage() {
     const { result, error } = await paySourceFromCurrentCash({
       householdId: household.id,
       userId: user.id,
-      personId: membership?.person_id ?? null,
+      personId: usablePersonId,
       sourceType: "bill_instance",
       sourceId: bill.id,
       amount: shareAmount,

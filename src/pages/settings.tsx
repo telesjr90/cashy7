@@ -22,11 +22,7 @@ import {
   getMyCashPaymentTransactions,
   mapCashPaymentDeductionsForDisplay,
 } from "@/lib/payments";
-import {
-  getHouseholdPeople,
-  getMyHouseholdMemberProfile,
-  updateMyPersonMapping,
-} from "@/lib/user-person";
+import { PersonMappingCard } from "@/components/person-mapping-card";
 import {
   addMySavingsContributionWithCashAction,
   createSavingsGoal,
@@ -90,7 +86,6 @@ import type {
   CashSnapshot,
   HouseholdSettings,
   PaycheckSchedule,
-  Person,
   SavingsContribution,
   SavingsContributionPeriod,
   SavingsGoal,
@@ -732,19 +727,11 @@ function SavingsGoalPanel({
 }
 
 export function SettingsPage() {
-  const { user, household, membership, refreshHousehold } = useAuth();
+  const { user, household, membership, usablePersonId, refreshHousehold } = useAuth();
 
   const [settings, setSettings] = useState<HouseholdSettings | null>(null);
   const [settingsLoading, setSettingsLoading] = useState(true);
   const [settingsError, setSettingsError] = useState<string | null>(null);
-
-  const [people, setPeople] = useState<Person[]>([]);
-  const [peopleLoading, setPeopleLoading] = useState(true);
-  const [peopleError, setPeopleError] = useState<string | null>(null);
-  const [selectedPersonId, setSelectedPersonId] = useState("");
-  const [profileSaving, setProfileSaving] = useState(false);
-  const [profileSaveError, setProfileSaveError] = useState<string | null>(null);
-  const [profileSuccess, setProfileSuccess] = useState<string | null>(null);
 
   const [paycheckSchedule, setPaycheckSchedule] = useState<PaycheckSchedule | null>(null);
   const [paycheckScheduleLoading, setPaycheckScheduleLoading] = useState(true);
@@ -832,33 +819,6 @@ export function SettingsPage() {
 
     setSettingsLoading(false);
   }, [household]);
-
-  const loadBudgetProfile = useCallback(async () => {
-    if (!household || !user) return;
-
-    setPeopleLoading(true);
-    setPeopleError(null);
-
-    const [peopleResult, membershipResult] = await Promise.all([
-      getHouseholdPeople(household.id),
-      getMyHouseholdMemberProfile(household.id, user.id),
-    ]);
-
-    if (peopleResult.error) {
-      setPeopleError(peopleResult.error);
-      setPeople([]);
-    } else {
-      setPeople(peopleResult.people);
-    }
-
-    if (membershipResult.error) {
-      setPeopleError((current) => current ?? membershipResult.error);
-    } else {
-      setSelectedPersonId(membershipResult.membership?.person_id ?? "");
-    }
-
-    setPeopleLoading(false);
-  }, [household, user]);
 
   const loadPaycheckSchedule = useCallback(async () => {
     if (!household || !user) return;
@@ -1035,10 +995,6 @@ export function SettingsPage() {
   }, [loadSettings]);
 
   useEffect(() => {
-    loadBudgetProfile();
-  }, [loadBudgetProfile]);
-
-  useEffect(() => {
     loadPaycheckSchedule();
   }, [loadPaycheckSchedule]);
 
@@ -1119,37 +1075,6 @@ export function SettingsPage() {
     setGoalEndDateInput("");
     await loadSavings();
     setGoalCreateSuccess("Savings goal created.");
-  };
-
-  const handleSaveBudgetProfile = async () => {
-    if (!household || !user) return;
-
-    setProfileSaveError(null);
-    setProfileSuccess(null);
-
-    if (!selectedPersonId.trim()) {
-      setProfileSaveError("Please select a budget profile.");
-      return;
-    }
-
-    setProfileSaving(true);
-
-    const { membership, error } = await updateMyPersonMapping(
-      household.id,
-      user.id,
-      selectedPersonId
-    );
-
-    setProfileSaving(false);
-
-    if (error) {
-      setProfileSaveError(error);
-      return;
-    }
-
-    setSelectedPersonId(membership?.person_id ?? selectedPersonId);
-    await refreshHousehold();
-    setProfileSuccess("Budget profile saved.");
   };
 
   const handleSaveCashSnapshot = async () => {
@@ -1256,70 +1181,12 @@ export function SettingsPage() {
           callerUserId={user.id}
         />
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Your budget profile</CardTitle>
-            <CardDescription>
-              This determines which bill share is used for your private calculations.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {peopleLoading ? (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Loading budget profiles...
-              </div>
-            ) : peopleError ? (
-              <Alert variant="destructive">
-                <AlertDescription>{peopleError}</AlertDescription>
-              </Alert>
-            ) : people.length === 0 ? (
-              <p className="text-sm text-muted-foreground">
-                No household budget profiles found yet. Add Teles and Nicole in setup
-                before choosing your profile.
-              </p>
-            ) : (
-              <>
-                <div className="space-y-2">
-                  <Label htmlFor="budget-profile">Profile</Label>
-                  <Select
-                    value={selectedPersonId || undefined}
-                    onValueChange={setSelectedPersonId}
-                  >
-                    <SelectTrigger id="budget-profile" className="w-full">
-                      <SelectValue placeholder="Select your budget profile" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {people.map((person) => (
-                        <SelectItem key={person.id} value={person.id}>
-                          {person.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                {profileSaveError && (
-                  <Alert variant="destructive">
-                    <AlertDescription>{profileSaveError}</AlertDescription>
-                  </Alert>
-                )}
-                {profileSuccess && (
-                  <Alert>
-                    <AlertDescription>{profileSuccess}</AlertDescription>
-                  </Alert>
-                )}
-
-                <Button onClick={handleSaveBudgetProfile} disabled={profileSaving}>
-                  {profileSaving && (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  )}
-                  Save budget profile
-                </Button>
-              </>
-            )}
-          </CardContent>
-        </Card>
+        <PersonMappingCard
+          householdId={household.id}
+          userId={user.id}
+          membership={membership}
+          onProfileSaved={refreshHousehold}
+        />
 
         {user ? (
           <PaycheckScheduleSettingsPanel
@@ -1656,7 +1523,7 @@ export function SettingsPage() {
                     participant={participantsByGoalId.get(goal.id)}
                     contributions={myContributions}
                     cashDeductionSourceIds={savingsCashDeductionSourceIds}
-                    personId={membership?.person_id ?? null}
+                    personId={usablePersonId}
                     householdId={household.id}
                     userId={user.id}
                     cashflowStartDate={cashflowStartDate}

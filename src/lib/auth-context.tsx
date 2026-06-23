@@ -1,5 +1,6 @@
 import React from "react";
 import type { User, Session } from "@supabase/supabase-js";
+import { resolveUsablePersonId } from "@/lib/person-mapping-conflicts";
 import { supabase } from "@/lib/supabase";
 import type { Household, HouseholdMember } from "@/lib/types";
 
@@ -8,6 +9,7 @@ interface AuthContextType {
   session: Session | null;
   household: Household | null;
   membership: HouseholdMember | null;
+  usablePersonId: string | null;
   loading: boolean;
   signUp: (email: string, password: string) => Promise<{ error: Error | null }>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
@@ -22,6 +24,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [session, setSession] = React.useState<Session | null>(null);
   const [household, setHousehold] = React.useState<Household | null>(null);
   const [membership, setMembership] = React.useState<HouseholdMember | null>(null);
+  const [usablePersonId, setUsablePersonId] = React.useState<string | null>(null);
   const [loading, setLoading] = React.useState(true);
 
   const fetchUserHousehold = React.useCallback(async (userId: string) => {
@@ -36,23 +39,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (memberError || !memberData) {
       setHousehold(null);
       setMembership(null);
+      setUsablePersonId(null);
       return;
     }
 
     setMembership(memberData as HouseholdMember);
 
-    const { data: householdData, error: householdError } = await supabase
-      .from("households")
-      .select("*")
-      .eq("id", memberData.household_id)
-      .maybeSingle();
+    const [{ data: householdData, error: householdError }, { data: memberRows }] =
+      await Promise.all([
+        supabase
+          .from("households")
+          .select("*")
+          .eq("id", memberData.household_id)
+          .maybeSingle(),
+        supabase
+          .from("household_members")
+          .select("user_id, person_id, status, is_active")
+          .eq("household_id", memberData.household_id),
+      ]);
 
     if (householdError || !householdData) {
       setHousehold(null);
+      setUsablePersonId(null);
       return;
     }
 
     setHousehold(householdData as Household);
+    setUsablePersonId(resolveUsablePersonId(memberRows ?? [], userId));
   }, []);
 
   React.useEffect(() => {
@@ -68,6 +81,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } else {
           setHousehold(null);
           setMembership(null);
+          setUsablePersonId(null);
         }
         setLoading(false);
       })();
@@ -80,6 +94,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (session?.user) {
           await fetchUserHousehold(session.user.id);
+        } else {
+          setUsablePersonId(null);
         }
         setLoading(false);
       })();
@@ -112,6 +128,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setSession(null);
     setHousehold(null);
     setMembership(null);
+    setUsablePersonId(null);
   };
 
   const refreshHousehold = async () => {
@@ -126,13 +143,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       session,
       household,
       membership,
+      usablePersonId,
       loading,
       signUp,
       signIn,
       signOut,
       refreshHousehold,
     }),
-    [user, session, household, membership, loading]
+    [user, session, household, membership, usablePersonId, loading]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
