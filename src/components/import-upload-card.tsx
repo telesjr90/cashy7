@@ -22,7 +22,9 @@ import {
 } from "@/lib/import-column-mapping";
 import { ImportColumnMappingPanel } from "@/components/import-column-mapping-panel";
 import { ImportValidationPanel } from "@/components/import-validation-panel";
+import { ImportConfirmPanel } from "@/components/import-confirm-panel";
 import { buildImportValidationResult } from "@/lib/import-validation";
+import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -80,6 +82,7 @@ function getPreviewRows(result: ImportParseResult, sheetIndex: number): ImportPa
 }
 
 export function ImportUploadCard() {
+  const { user, household, membership } = useAuth();
   const inputId = useId();
   const helpId = useId();
   const errorId = useId();
@@ -491,7 +494,25 @@ export function ImportUploadCard() {
                       onMappingChange={setColumnMapping}
                     />
                     {validationResult && (
-                      <ImportValidationPanel validation={validationResult} />
+                      <>
+                        <ImportValidationPanel validation={validationResult} />
+                        {validationResult.summary.canContinue &&
+                          household &&
+                          user &&
+                          selectedSheet && (
+                            <ImportConfirmPanel
+                              validation={validationResult}
+                              fileName={parseResult.fileName}
+                              fileKind={parseResult.fileKind}
+                              sheetName={selectedSheet.name}
+                              sheetCount={parseResult.sheets.length}
+                              householdId={household.id}
+                              userId={user.id}
+                              personId={membership?.person_id ?? null}
+                              membership={membership}
+                            />
+                          )}
+                      </>
                     )}
                   </>
                 )}

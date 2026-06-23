@@ -38,7 +38,10 @@ export const IMPORT_VALIDATION_WARNINGS_COPY =
   "Some rows have warnings only. A later step will decide whether warnings can proceed.";
 
 export const IMPORT_VALIDATED_CANDIDATES_COPY =
-  "Validated rows are still candidates only. Nothing is written until you confirm in a later step.";
+  "Validated rows are still candidates only. Nothing is written until you confirm import below.";
+
+export const IMPORT_CONFIRM_WRITES_COPY =
+  "Confirm import below to create records. You can cancel without writing anything.";
 
 export const IMPORT_PARSE_FILE_LABEL = "Parse file";
 

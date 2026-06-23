@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyMappingToRow,
   buildImportSourceColumns,
+  resetImportColumnMapping,
   createEmptyMappedFields,
   type ImportFieldKey,
 } from "./import-column-mapping";
@@ -408,5 +409,22 @@ describe("import validation", () => {
     expect(validated.rowType).toBe("bill");
     expect(validated.status).toBe("error");
     expect(fields.name).toBe("Water");
+  });
+
+  it("validates smoke import CSV without error rows", () => {
+    const text = `bill,debt,expense,savings,recurring,name,amount,due date,period,category
+yes,,,,,Rent,1200,2026-06-15,15_eom,
+,yes,,,,Visa,250,2026-06-20,1_14,
+,,yes,,,Groceries,45.50,2026-06-03,1_14,
+,,,yes,,Emergency fund,100,2026-06-05,1_14,Emergency fund
+`;
+    const parsed = parseCsvText(text, "import-apply.csv");
+    const sheet = parsed.sheets[0]!;
+    const columns = buildImportSourceColumns(sheet);
+    const mapping = resetImportColumnMapping(columns, "suggested");
+    const result = buildImportValidationResult(sheet, mapping, columns);
+
+    expect(result.summary.errorRows).toBe(0);
+    expect(result.summary.canContinue).toBe(true);
   });
 });

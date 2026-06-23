@@ -9,7 +9,6 @@ import {
   type ImportValidationFilter,
 } from "@/lib/import-validation";
 import {
-  IMPORT_NEXT_CONFIRM_WRITES_LABEL,
   IMPORT_NO_RECORDS_CHANGED_COPY,
   IMPORT_VALIDATED_CANDIDATES_COPY,
   IMPORT_VALIDATION_ERRORS_BLOCK_COPY,
@@ -258,10 +257,6 @@ export function ImportValidationPanel({ validation }: ImportValidationPanelProps
         <p>{IMPORT_VALIDATED_CANDIDATES_COPY}</p>
         <p className="text-muted-foreground">{IMPORT_NO_RECORDS_CHANGED_COPY}</p>
       </div>
-
-      <Button type="button" disabled aria-disabled="true">
-        {IMPORT_NEXT_CONFIRM_WRITES_LABEL}
-      </Button>
     </div>
   );
 }

@@ -695,6 +695,70 @@ export interface Database {
           created_at?: string;
         };
       };
+      import_batches: {
+        Row: {
+          id: string;
+          household_id: string;
+          created_by: string;
+          source_file_name: string;
+          source_file_kind: string;
+          status: "applied" | "partial" | "failed";
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          household_id: string;
+          created_by: string;
+          source_file_name: string;
+          source_file_kind: string;
+          status?: "applied" | "partial" | "failed";
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          household_id?: string;
+          created_by?: string;
+          source_file_name?: string;
+          source_file_kind?: string;
+          status?: "applied" | "partial" | "failed";
+          created_at?: string;
+        };
+      };
+      import_batch_records: {
+        Row: {
+          id: string;
+          household_id: string;
+          import_batch_id: string;
+          source_sheet_name: string | null;
+          source_row_number: number | null;
+          row_type: string;
+          target_table: string;
+          target_id: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          household_id: string;
+          import_batch_id: string;
+          source_sheet_name?: string | null;
+          source_row_number?: number | null;
+          row_type: string;
+          target_table: string;
+          target_id: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          household_id?: string;
+          import_batch_id?: string;
+          source_sheet_name?: string | null;
+          source_row_number?: number | null;
+          row_type?: string;
+          target_table?: string;
+          target_id?: string;
+          created_at?: string;
+        };
+      };
     };
     Views: Record<string, never>;
     Functions: {
