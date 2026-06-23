@@ -801,6 +801,56 @@ export interface Database {
           created_at?: string;
         };
       };
+      receipt_uploads: {
+        Row: {
+          id: string;
+          household_id: string;
+          uploaded_by: string;
+          storage_bucket: string;
+          storage_path: string;
+          original_file_name: string;
+          mime_type: string;
+          size_bytes: number;
+          status: "uploaded" | "deleted";
+          approved_for_shared_expense: boolean;
+          approved_at: string | null;
+          approved_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          household_id: string;
+          uploaded_by: string;
+          storage_bucket: string;
+          storage_path: string;
+          original_file_name: string;
+          mime_type: string;
+          size_bytes: number;
+          status?: "uploaded" | "deleted";
+          approved_for_shared_expense?: boolean;
+          approved_at?: string | null;
+          approved_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          household_id?: string;
+          uploaded_by?: string;
+          storage_bucket?: string;
+          storage_path?: string;
+          original_file_name?: string;
+          mime_type?: string;
+          size_bytes?: number;
+          status?: "uploaded" | "deleted";
+          approved_for_shared_expense?: boolean;
+          approved_at?: string | null;
+          approved_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -864,3 +914,6 @@ export type CashPaymentTransaction = Tables<"cash_payment_transactions">;
 export type PaymentSourceType = CashPaymentTransaction["source_type"];
 export type CashAdjustmentTransaction = Tables<"cash_adjustment_transactions">;
 export type CashAdjustmentSourceType = CashAdjustmentTransaction["source_type"];
+export type ReceiptUpload = Tables<"receipt_uploads">;
+export type InsertReceiptUpload = InsertTables<"receipt_uploads">;
+export type ReceiptUploadStatus = ReceiptUpload["status"];

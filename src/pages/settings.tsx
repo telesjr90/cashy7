@@ -69,6 +69,7 @@ import { PaycheckScheduleSettingsPanel } from "@/components/paycheck-schedule-se
 import { CashflowStartDateSettingsCard } from "@/components/cashflow-start-date-settings-card";
 import { ImportUploadCard } from "@/components/import-upload-card";
 import { ImportHistoryPanel } from "@/components/import-history-panel";
+import { ReceiptUploadCard } from "@/components/receipt-upload-card";
 import { getMyPaycheckSchedule } from "@/lib/paycheck-schedule";
 import { buildSavingsGoalDetailView } from "@/lib/savings-detail";
 import { buildSavingsRolloverDisplayView } from "@/lib/savings-rollover";
@@ -1238,6 +1239,8 @@ export function SettingsPage() {
         <ImportUploadCard />
 
         <ImportHistoryPanel />
+
+        <ReceiptUploadCard />
 
         <Card>
           <CardHeader>
