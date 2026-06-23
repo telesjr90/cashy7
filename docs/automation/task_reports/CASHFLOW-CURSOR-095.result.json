@@ -1,0 +1,31 @@
+{
+  "taskId": "CASHFLOW-CURSOR-095",
+  "result": "PASS",
+  "filesChanged": [
+    "package.json",
+    "package-lock.json",
+    "src/lib/import-parser.ts",
+    "src/lib/import-parser.test.ts",
+    "src/lib/import-upload.ts",
+    "src/components/import-upload-card.tsx",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-095.md",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-095.result.json"
+  ],
+  "migrationsCreated": [],
+  "dependenciesAdded": [
+    "xlsx"
+  ],
+  "validation": {
+    "typecheck": "PASS",
+    "build": "PASS",
+    "testRun": "PASS"
+  },
+  "browserSmoke": {
+    "required": true,
+    "result": "PASS"
+  },
+  "privacy": "PASS",
+  "productRules": "PASS",
+  "readyToCommit": true,
+  "nextTaskId": "CASHFLOW-CURSOR-096"
+}

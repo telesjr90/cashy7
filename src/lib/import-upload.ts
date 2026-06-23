@@ -17,7 +17,13 @@ export const IMPORT_NO_RECORDS_CHANGED_COPY = "No app records have been changed.
 export const IMPORT_REVIEW_BEFORE_SAVE_COPY =
   "You will review mapped rows before anything is saved.";
 
-export const IMPORT_NEXT_PARSE_PREVIEW_LABEL = "Next: parse and preview";
+export const IMPORT_NEXT_PARSE_PREVIEW_LABEL = "Next: preview and map columns";
+
+export const IMPORT_PARSED_CANDIDATES_COPY = "Parsed rows are candidates only.";
+
+export const IMPORT_COLUMN_MAPPING_NEXT_COPY = "Column mapping happens next.";
+
+export const IMPORT_PARSE_FILE_LABEL = "Parse file";
 
 export const IMPORT_UPLOAD_HELP_COPY =
   "Choose a spreadsheet to stage locally in your browser. Nothing is uploaded or saved until you confirm in a later step.";
