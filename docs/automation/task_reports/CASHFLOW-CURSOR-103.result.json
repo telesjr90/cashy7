@@ -1,0 +1,35 @@
+{
+  "taskId": "CASHFLOW-CURSOR-103",
+  "result": "PASS",
+  "filesChanged": [
+    "supabase/migrations/20260623000005_027_receipt_candidates.sql",
+    "src/lib/types.ts",
+    "src/lib/receipt-candidates.ts",
+    "src/lib/receipt-candidates.test.ts",
+    "src/lib/receipt-candidate-service.ts",
+    "src/lib/receipt-candidate-service.test.ts",
+    "src/components/receipt-upload-card.tsx",
+    "src/components/receipt-candidate-panel.tsx",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-103.md",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-103.result.json"
+  ],
+  "migrationsCreated": [
+    "supabase/migrations/20260623000005_027_receipt_candidates.sql"
+  ],
+  "functionsCreated": [],
+  "dependenciesAdded": [],
+  "validation": {
+    "typecheck": "PASS",
+    "build": "PASS",
+    "testRun": "PASS"
+  },
+  "browserSmoke": {
+    "required": true,
+    "result": "PASS",
+    "notes": "UI smoke passed; live save-after-extract not exercised due to OpenAI HTTP 429 during smoke"
+  },
+  "privacy": "PASS",
+  "productRules": "PASS",
+  "readyToCommit": true,
+  "nextTaskId": "CASHFLOW-CURSOR-104"
+}

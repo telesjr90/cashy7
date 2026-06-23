@@ -16,6 +16,23 @@ import {
   validateReceiptFile,
 } from "@/lib/receipt-upload";
 import {
+  isCandidateSavable,
+  RECEIPT_CANDIDATE_EXISTS_COPY,
+  RECEIPT_CANDIDATE_NO_EXPENSE_COPY,
+  RECEIPT_CANDIDATE_PRIVATE_COPY,
+  RECEIPT_REPLACE_CANDIDATE_ACTION,
+  RECEIPT_SAVE_CANDIDATE_ACTION,
+} from "@/lib/receipt-candidates";
+import {
+  dismissReceiptCandidate,
+  listMyReceiptCandidates,
+  saveReceiptCandidate,
+} from "@/lib/receipt-candidate-service";
+import {
+  ReceiptCandidatePanel,
+  useReceiptCandidatePanelState,
+} from "@/components/receipt-candidate-panel";
+import {
   RECEIPT_EXTRACTION_DRAFT_COPY,
   RECEIPT_EXTRACTION_NOT_CONFIGURED_COPY,
   RECEIPT_EXTRACTION_REVIEW_COPY,
@@ -28,7 +45,7 @@ import {
   listMyReceiptUploads,
   uploadReceipt,
 } from "@/lib/receipt-upload-service";
-import type { ReceiptUpload } from "@/lib/types";
+import type { ReceiptCandidate, ReceiptUpload } from "@/lib/types";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   AlertDialog,
@@ -73,7 +90,23 @@ function formatMoney(value: number | null): string {
   }).format(value);
 }
 
-function ReceiptExtractionPreview({ result }: { result: ReceiptExtractionResult }) {
+function ReceiptExtractionPreview({
+  result,
+  canSave,
+  saveLabel,
+  savePhase,
+  saveError,
+  saveSuccess,
+  onSave,
+}: {
+  result: ReceiptExtractionResult;
+  canSave: boolean;
+  saveLabel: string;
+  savePhase: "idle" | "saving" | "success" | "error";
+  saveError: string | null;
+  saveSuccess: string | null;
+  onSave: () => void;
+}) {
   return (
     <div className="mt-2 space-y-2 rounded-md border bg-muted/30 p-3 text-sm">
       <div className="flex flex-wrap items-center gap-2">
@@ -141,8 +174,38 @@ function ReceiptExtractionPreview({ result }: { result: ReceiptExtractionResult 
       <div className="space-y-1 text-muted-foreground">
         <p>{RECEIPT_EXTRACTION_DRAFT_COPY}</p>
         <p>{RECEIPT_NO_EXPENSE_CREATED_COPY}</p>
+        <p>{RECEIPT_CANDIDATE_PRIVATE_COPY}</p>
         <p>{RECEIPT_EXTRACTION_REVIEW_COPY}</p>
       </div>
+
+      {canSave ? (
+        <Button type="button" size="sm" disabled={savePhase === "saving"} onClick={onSave}>
+          {savePhase === "saving" ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              Saving…
+            </>
+          ) : (
+            saveLabel
+          )}
+        </Button>
+      ) : null}
+
+      {saveError ? (
+        <Alert variant="destructive">
+          <AlertDescription>{saveError}</AlertDescription>
+        </Alert>
+      ) : null}
+
+      {saveSuccess ? (
+        <Alert>
+          <AlertDescription className="space-y-1">
+            <p>{saveSuccess}</p>
+            <p>{RECEIPT_CANDIDATE_NO_EXPENSE_COPY}</p>
+            <p>{RECEIPT_CANDIDATE_PRIVATE_COPY}</p>
+          </AlertDescription>
+        </Alert>
+      ) : null}
     </div>
   );
 }
@@ -175,6 +238,38 @@ export function ReceiptUploadCard() {
     Record<string, ReceiptExtractionResult>
   >({});
   const [extractionErrors, setExtractionErrors] = useState<Record<string, string>>({});
+  const [candidates, setCandidates] = useState<ReceiptCandidate[]>([]);
+  const [candidateListPhase, setCandidateListPhase] = useState<LoadPhase>("idle");
+  const [candidateListError, setCandidateListError] = useState<string | null>(null);
+  const [savingReceiptId, setSavingReceiptId] = useState<string | null>(null);
+  const [saveErrors, setSaveErrors] = useState<Record<string, string>>({});
+  const [saveSuccesses, setSaveSuccesses] = useState<Record<string, string>>({});
+  const {
+    expandedCandidateId,
+    setExpandedCandidateId,
+    dismissTarget,
+    setDismissTarget,
+    dismissPhase,
+    setDismissPhase,
+    dismissError,
+    setDismissError,
+  } = useReceiptCandidatePanelState();
+
+  const loadCandidates = useCallback(async () => {
+    if (!user) {
+      return;
+    }
+    setCandidateListPhase("loading");
+    setCandidateListError(null);
+    const { candidates: rows, error } = await listMyReceiptCandidates(user.id);
+    if (error) {
+      setCandidateListPhase("error");
+      setCandidateListError(error);
+      return;
+    }
+    setCandidates(rows);
+    setCandidateListPhase("ready");
+  }, [user]);
 
   const loadReceipts = useCallback(async () => {
     if (!user) {
@@ -194,7 +289,8 @@ export function ReceiptUploadCard() {
 
   useEffect(() => {
     void loadReceipts();
-  }, [loadReceipts]);
+    void loadCandidates();
+  }, [loadReceipts, loadCandidates]);
 
   const processFile = useCallback((file: File | null | undefined) => {
     if (!file) {
@@ -294,6 +390,76 @@ export function ReceiptUploadCard() {
     setExtractingReceiptId(null);
   };
 
+  const handleSaveCandidate = async (
+    receipt: ReceiptUpload,
+    result: ReceiptExtractionResult,
+    mode: "create" | "replace"
+  ) => {
+    if (!user || !household) {
+      return;
+    }
+
+    setSavingReceiptId(receipt.id);
+    setSaveErrors((current) => {
+      const next = { ...current };
+      delete next[receipt.id];
+      return next;
+    });
+    setSaveSuccesses((current) => {
+      const next = { ...current };
+      delete next[receipt.id];
+      return next;
+    });
+
+    const outcome = await saveReceiptCandidate({
+      householdId: household.id,
+      userId: user.id,
+      receiptUpload: receipt,
+      extraction: result,
+      mode,
+    });
+
+    if (!outcome.ok) {
+      setSaveErrors((current) => ({
+        ...current,
+        [receipt.id]: outcome.error,
+      }));
+      setSavingReceiptId(null);
+      return;
+    }
+
+    setSaveSuccesses((current) => ({
+      ...current,
+      [receipt.id]: "Pending receipt candidate saved.",
+    }));
+    setSavingReceiptId(null);
+    await loadCandidates();
+  };
+
+  const handleConfirmDismissCandidate = async () => {
+    if (!dismissTarget || !user) {
+      return;
+    }
+
+    setDismissPhase("dismissing");
+    setDismissError(null);
+
+    const result = await dismissReceiptCandidate({
+      candidate: dismissTarget,
+      userId: user.id,
+    });
+
+    if (!result.ok) {
+      setDismissPhase("idle");
+      setDismissError(result.error);
+      return;
+    }
+
+    setDismissTarget(null);
+    setDismissPhase("idle");
+    await loadCandidates();
+  };
+
   const handleConfirmDelete = async () => {
     if (!deleteTarget || !user) {
       return;
@@ -319,6 +485,12 @@ export function ReceiptUploadCard() {
   };
 
   const displayRows = receipts.map(buildReceiptUploadDisplayRow);
+  const pendingCandidateByReceiptId = new Map(
+    candidates.map((candidate) => [candidate.receipt_upload_id, candidate])
+  );
+  const receiptFileNames = Object.fromEntries(
+    receipts.map((receipt) => [receipt.id, receipt.original_file_name])
+  );
   const canUpload =
     selectedFile !== null && uploadPhase !== "uploading" && user !== null && household !== null;
 
@@ -480,7 +652,49 @@ export function ReceiptUploadCard() {
                         <TableCell className="text-sm text-muted-foreground">
                           <div>{row.pendingCopy}</div>
                           {extractionResults[row.id] ? (
-                            <ReceiptExtractionPreview result={extractionResults[row.id]!} />
+                            <ReceiptExtractionPreview
+                              result={extractionResults[row.id]!}
+                              canSave={
+                                isCandidateSavable(extractionResults[row.id]!) &&
+                                savingReceiptId !== row.id
+                              }
+                              saveLabel={
+                                pendingCandidateByReceiptId.has(row.id)
+                                  ? RECEIPT_REPLACE_CANDIDATE_ACTION
+                                  : RECEIPT_SAVE_CANDIDATE_ACTION
+                              }
+                              savePhase={
+                                savingReceiptId === row.id
+                                  ? "saving"
+                                  : saveSuccesses[row.id]
+                                    ? "success"
+                                    : saveErrors[row.id]
+                                      ? "error"
+                                      : "idle"
+                              }
+                              saveError={saveErrors[row.id] ?? null}
+                              saveSuccess={saveSuccesses[row.id] ?? null}
+                              onSave={() => {
+                                const sourceReceipt = receipts.find(
+                                  (receipt) => receipt.id === row.id
+                                );
+                                const extraction = extractionResults[row.id];
+                                if (!sourceReceipt || !extraction) {
+                                  return;
+                                }
+                                void handleSaveCandidate(
+                                  sourceReceipt,
+                                  extraction,
+                                  pendingCandidateByReceiptId.has(row.id) ? "replace" : "create"
+                                );
+                              }}
+                            />
+                          ) : null}
+                          {pendingCandidateByReceiptId.has(row.id) &&
+                          !extractionResults[row.id] ? (
+                            <p className="mt-2 text-sm text-muted-foreground">
+                              {RECEIPT_CANDIDATE_EXISTS_COPY}
+                            </p>
                           ) : null}
                           {extractionErrors[row.id] ? (
                             <div className="mt-2 space-y-2">
@@ -545,6 +759,28 @@ export function ReceiptUploadCard() {
               </Alert>
             ) : null}
           </div>
+
+          <ReceiptCandidatePanel
+            candidates={candidates}
+            receiptFileNames={receiptFileNames}
+            listPhase={candidateListPhase}
+            listError={candidateListError}
+            expandedCandidateId={expandedCandidateId}
+            onToggleExpanded={(candidateId) =>
+              setExpandedCandidateId((current) =>
+                current === candidateId ? null : candidateId
+              )
+            }
+            dismissTarget={dismissTarget}
+            dismissPhase={dismissPhase}
+            dismissError={dismissError}
+            onRequestDismiss={(candidate) => {
+              setDismissError(null);
+              setDismissTarget(candidate);
+            }}
+            onCancelDismiss={() => setDismissTarget(null)}
+            onConfirmDismiss={() => void handleConfirmDismissCandidate()}
+          />
         </CardContent>
       </Card>
 
