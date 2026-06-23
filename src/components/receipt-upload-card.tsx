@@ -4,6 +4,7 @@ import {
   buildReceiptFileMetadata,
   buildReceiptUploadDisplayRow,
   RECEIPT_EXTRACTION_APPROVAL_LATER_COPY,
+  RECEIPT_EXTRACT_ACTION_LABEL,
   RECEIPT_LIST_EMPTY_COPY,
   RECEIPT_NO_EXPENSE_CREATED_COPY,
   RECEIPT_PRIVATE_UNTIL_APPROVAL_COPY,
@@ -14,6 +15,14 @@ import {
   type ReceiptFileMetadata,
   validateReceiptFile,
 } from "@/lib/receipt-upload";
+import {
+  RECEIPT_EXTRACTION_DRAFT_COPY,
+  RECEIPT_EXTRACTION_NOT_CONFIGURED_COPY,
+  RECEIPT_EXTRACTION_REVIEW_COPY,
+  extractionStatusLabel,
+  type ReceiptExtractionResult,
+} from "@/lib/receipt-extraction";
+import { extractReceipt } from "@/lib/receipt-extraction-service";
 import {
   deleteReceiptUpload,
   listMyReceiptUploads,
@@ -49,10 +58,94 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { FileImage, Loader2, Trash2, Upload, X } from "lucide-react";
+import { FileImage, Loader2, ScanLine, Trash2, Upload, X } from "lucide-react";
 
 type LoadPhase = "idle" | "loading" | "ready" | "error";
 type UploadPhase = "idle" | "uploading" | "success" | "error";
+
+function formatMoney(value: number | null): string {
+  if (value === null) {
+    return "—";
+  }
+  return new Intl.NumberFormat(undefined, {
+    style: "currency",
+    currency: "USD",
+  }).format(value);
+}
+
+function ReceiptExtractionPreview({ result }: { result: ReceiptExtractionResult }) {
+  return (
+    <div className="mt-2 space-y-2 rounded-md border bg-muted/30 p-3 text-sm">
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge variant={result.status === "success" ? "default" : "secondary"}>
+          {extractionStatusLabel(result.status)}
+        </Badge>
+        {result.confidence !== null ? (
+          <span className="text-muted-foreground">
+            Confidence {Math.round(result.confidence * 100)}%
+          </span>
+        ) : null}
+      </div>
+
+      {result.status === "not_configured" ? (
+        <p>{RECEIPT_EXTRACTION_NOT_CONFIGURED_COPY}</p>
+      ) : null}
+
+      {result.status === "success" ? (
+        <dl className="grid gap-2 sm:grid-cols-2">
+          <div>
+            <dt className="text-muted-foreground">Merchant</dt>
+            <dd className="font-medium">{result.merchant ?? "—"}</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">Date</dt>
+            <dd>{result.date ?? "—"}</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">Total</dt>
+            <dd>{formatMoney(result.total)}</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">Tax</dt>
+            <dd>{formatMoney(result.tax)}</dd>
+          </div>
+          <div>
+            <dt className="text-muted-foreground">Category</dt>
+            <dd>{result.category ?? "—"}</dd>
+          </div>
+        </dl>
+      ) : null}
+
+      {result.lineItems.length > 0 ? (
+        <div className="space-y-1">
+          <p className="font-medium">Line items</p>
+          <ul className="space-y-1">
+            {result.lineItems.map((item, index) => (
+              <li key={`${item.description}-${index}`}>
+                {item.description}
+                {item.total !== null ? ` · ${formatMoney(item.total)}` : ""}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
+      {result.warnings.length > 0 ? (
+        <ul className="space-y-1 text-muted-foreground">
+          {result.warnings.map((warning) => (
+            <li key={warning}>{warning}</li>
+          ))}
+        </ul>
+      ) : null}
+
+      <div className="space-y-1 text-muted-foreground">
+        <p>{RECEIPT_EXTRACTION_DRAFT_COPY}</p>
+        <p>{RECEIPT_NO_EXPENSE_CREATED_COPY}</p>
+        <p>{RECEIPT_EXTRACTION_REVIEW_COPY}</p>
+      </div>
+    </div>
+  );
+}
 
 const ACCEPTED_RECEIPT_TYPES =
   "image/jpeg,image/png,image/webp,application/pdf,.jpg,.jpeg,.png,.webp,.pdf";
@@ -77,6 +170,11 @@ export function ReceiptUploadCard() {
   const [deleteTarget, setDeleteTarget] = useState<ReceiptUpload | null>(null);
   const [deletePhase, setDeletePhase] = useState<"idle" | "deleting">("idle");
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [extractingReceiptId, setExtractingReceiptId] = useState<string | null>(null);
+  const [extractionResults, setExtractionResults] = useState<
+    Record<string, ReceiptExtractionResult>
+  >({});
+  const [extractionErrors, setExtractionErrors] = useState<Record<string, string>>({});
 
   const loadReceipts = useCallback(async () => {
     if (!user) {
@@ -163,6 +261,37 @@ export function ReceiptUploadCard() {
     setSuccessMessage(RECEIPT_UPLOAD_SUCCESS_COPY);
     handleRemoveSelection();
     await loadReceipts();
+  };
+
+  const handleExtractReceipt = async (receipt: ReceiptUpload) => {
+    setExtractingReceiptId(receipt.id);
+    setExtractionErrors((current) => {
+      const next = { ...current };
+      delete next[receipt.id];
+      return next;
+    });
+
+    const outcome = await extractReceipt({ receiptId: receipt.id });
+
+    if (outcome.ok) {
+      setExtractionResults((current) => ({
+        ...current,
+        [receipt.id]: outcome.result,
+      }));
+    } else {
+      if (outcome.result) {
+        setExtractionResults((current) => ({
+          ...current,
+          [receipt.id]: outcome.result!,
+        }));
+      }
+      setExtractionErrors((current) => ({
+        ...current,
+        [receipt.id]: outcome.error,
+      }));
+    }
+
+    setExtractingReceiptId(null);
   };
 
   const handleConfirmDelete = async () => {
@@ -332,7 +461,7 @@ export function ReceiptUploadCard() {
                     <TableHead>Status</TableHead>
                     <TableHead>Type / size</TableHead>
                     <TableHead>Next step</TableHead>
-                    <TableHead className="w-[80px]" />
+                    <TableHead className="w-[180px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -349,22 +478,58 @@ export function ReceiptUploadCard() {
                           {row.mimeTypeLabel} · {row.sizeLabel}
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
-                          {row.pendingCopy}
+                          <div>{row.pendingCopy}</div>
+                          {extractionResults[row.id] ? (
+                            <ReceiptExtractionPreview result={extractionResults[row.id]!} />
+                          ) : null}
+                          {extractionErrors[row.id] ? (
+                            <div className="mt-2 space-y-2">
+                              <Alert variant="destructive">
+                                <AlertDescription>{extractionErrors[row.id]}</AlertDescription>
+                              </Alert>
+                              <div className="space-y-1 text-sm text-muted-foreground">
+                                <p>{RECEIPT_EXTRACTION_DRAFT_COPY}</p>
+                                <p>{RECEIPT_NO_EXPENSE_CREATED_COPY}</p>
+                                <p>{RECEIPT_EXTRACTION_REVIEW_COPY}</p>
+                              </div>
+                            </div>
+                          ) : null}
                         </TableCell>
                         <TableCell>
                           {source ? (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              aria-label={`Delete ${row.fileName}`}
-                              onClick={() => {
-                                setDeleteError(null);
-                                setDeleteTarget(source);
-                              }}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={extractingReceiptId === source.id}
+                                onClick={() => void handleExtractReceipt(source)}
+                              >
+                                {extractingReceiptId === source.id ? (
+                                  <>
+                                    <Loader2 className="mr-1 h-4 w-4 animate-spin" />
+                                    Extracting…
+                                  </>
+                                ) : (
+                                  <>
+                                    <ScanLine className="mr-1 h-4 w-4" />
+                                    {RECEIPT_EXTRACT_ACTION_LABEL}
+                                  </>
+                                )}
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                aria-label={`Delete ${row.fileName}`}
+                                onClick={() => {
+                                  setDeleteError(null);
+                                  setDeleteTarget(source);
+                                }}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
                           ) : null}
                         </TableCell>
                       </TableRow>

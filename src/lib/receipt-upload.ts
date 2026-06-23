@@ -19,7 +19,7 @@ export type AllowedReceiptMimeType = (typeof ALLOWED_RECEIPT_MIME_TYPES)[number]
 export const RECEIPT_FILE_SELECTED_STATUS = "Selected for upload";
 
 export const RECEIPT_UPLOAD_HELP_COPY =
-  "Upload a receipt image or PDF for private storage. Nothing is extracted and no expense is created yet.";
+  "Upload a receipt image or PDF for private storage. Extraction is draft-only and no expense is created yet.";
 
 export const RECEIPT_UPLOAD_SUCCESS_COPY = "Receipt uploaded.";
 
@@ -35,7 +35,9 @@ export const RECEIPT_PRIVATE_UNTIL_APPROVAL_COPY =
   "Receipt belongs only to you until approval.";
 
 export const RECEIPT_PENDING_EXTRACTION_COPY =
-  "Pending extraction and approval in a later step.";
+  "Ready to extract. Approval happens in a later step.";
+
+export const RECEIPT_EXTRACT_ACTION_LABEL = "Extract receipt";
 
 export const RECEIPT_LIST_EMPTY_COPY = "No receipts uploaded yet.";
 
