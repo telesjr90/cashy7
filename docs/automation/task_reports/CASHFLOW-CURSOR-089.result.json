@@ -1,0 +1,28 @@
+{
+  "taskId": "CASHFLOW-CURSOR-089",
+  "result": "PASS",
+  "filesChanged": [
+    "src/lib/bill-cashflow-start.ts",
+    "src/lib/bill-cashflow-start.test.ts",
+    "src/lib/bill-detail.ts",
+    "src/lib/bill-detail.test.ts",
+    "src/components/bill-detail-panel.tsx",
+    "src/pages/bills.tsx",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-089.md",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-089.result.json"
+  ],
+  "migrationsCreated": [],
+  "validation": {
+    "typecheck": "PASS",
+    "build": "PASS",
+    "testRun": "PASS"
+  },
+  "browserSmoke": {
+    "required": true,
+    "result": "PASS"
+  },
+  "privacy": "PASS",
+  "productRules": "PASS",
+  "readyToCommit": true,
+  "nextTaskId": "CASHFLOW-CURSOR-090"
+}

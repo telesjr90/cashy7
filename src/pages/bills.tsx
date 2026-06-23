@@ -79,6 +79,15 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { formatCurrency } from "@/lib/format";
+import { getHouseholdSettings } from "@/lib/cashflow-settings";
+import {
+  BILL_PRE_START_LABEL,
+  BILLS_PRE_START_HIDDEN_NOTICE,
+  getBillsPageVisibleInstances,
+  isBillInstancePreStart,
+  SHOW_PRE_START_BILLS_LABEL,
+  splitBillInstancesByCashflowStart,
+} from "@/lib/bill-cashflow-start";
 import { canEditRegularBill } from "@/lib/bill-edit";
 import {
   billTemplateActiveStatusLabel,
@@ -149,6 +158,9 @@ export function BillsPage() {
     DEFAULT_BILL_INSTANCE_FILTERS
   );
   const [detailBillId, setDetailBillId] = useState<string | null>(null);
+  const [cashflowStartDate, setCashflowStartDate] = useState<string | null>(null);
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
+  const [showPreStartBills, setShowPreStartBills] = useState(false);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth() + 1;
@@ -265,6 +277,27 @@ export function BillsPage() {
   useEffect(() => {
     void fetchTemplates();
   }, [fetchTemplates]);
+
+  useEffect(() => {
+    if (!household) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void getHouseholdSettings(household.id).then(({ settings }) => {
+      if (cancelled) {
+        return;
+      }
+
+      setCashflowStartDate(settings?.cashflow_start_date ?? null);
+      setSettingsLoaded(true);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [household]);
 
   const togglePaid = async (bill: BillInstance) => {
     const newPaidStatus = !bill.is_paid;
@@ -552,9 +585,22 @@ export function BillsPage() {
     [bills, templateCategoryByBillId, templates]
   );
 
+  const { preStartBills: preStartBillsInMonth } = useMemo(
+    () => splitBillInstancesByCashflowStart(bills, cashflowStartDate),
+    [bills, cashflowStartDate]
+  );
+
+  const hasPreStartBillsInMonth = preStartBillsInMonth.length > 0;
+
+  const billsForFiltering = useMemo(
+    () =>
+      getBillsPageVisibleInstances(bills, cashflowStartDate, showPreStartBills),
+    [bills, cashflowStartDate, showPreStartBills]
+  );
+
   const displayedBills = useMemo(
-    () => filterBillInstances(bills, filters, billFilterContext),
-    [bills, filters, billFilterContext]
+    () => filterBillInstances(billsForFiltering, filters, billFilterContext),
+    [billsForFiltering, filters, billFilterContext]
   );
 
   const detailBill =
@@ -591,12 +637,14 @@ export function BillsPage() {
       ),
       debtPaymentId: debtPaymentIdByBillId.get(detailBill.id) ?? null,
       variableBillContext,
+      cashflowStartDate,
     });
   }, [
     detailBill,
     templates,
     templateCategoryByBillId,
     debtLinkedBillIds,
+    cashflowStartDate,
     archivedDebtBillIds,
     debtPaymentIdByBillId,
     paymentByBillId,
@@ -931,12 +979,23 @@ export function BillsPage() {
             <div>
               <CardTitle>Bills for {MONTHS[month - 1]} {year}</CardTitle>
               <CardDescription>
-                {bills.length} bill{bills.length !== 1 ? "s" : ""} total.{" "}
+                {bills.length} bill{bills.length !== 1 ? "s" : ""} total.
+                {settingsLoaded &&
+                  cashflowStartDate &&
+                  hasPreStartBillsInMonth &&
+                  !showPreStartBills && (
+                    <>
+                      {" "}
+                      {billsForFiltering.length} in active list (
+                      {preStartBillsInMonth.length} before cashflow start).
+                    </>
+                  )}{" "}
                 {PAYMENT_UX_EXPLANATION}
-                {filtersActive && bills.length > 0 && (
+                {filtersActive && billsForFiltering.length > 0 && (
                   <>
                     {" "}
-                    Showing {displayedBills.length} of {bills.length} bills.
+                    Showing {displayedBills.length} of {billsForFiltering.length}{" "}
+                    bills.
                   </>
                 )}
               </CardDescription>
@@ -962,6 +1021,31 @@ export function BillsPage() {
             )}
           </CardHeader>
           <CardContent>
+            {settingsLoaded &&
+              cashflowStartDate &&
+              hasPreStartBillsInMonth && (
+                <Alert className="mb-4">
+                  <AlertDescription className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <span>{BILLS_PRE_START_HIDDEN_NOTICE}</span>
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id="show-pre-start-bills"
+                        checked={showPreStartBills}
+                        onCheckedChange={(checked) =>
+                          setShowPreStartBills(checked === true)
+                        }
+                      />
+                      <Label
+                        htmlFor="show-pre-start-bills"
+                        className="text-sm font-normal"
+                      >
+                        {SHOW_PRE_START_BILLS_LABEL}
+                      </Label>
+                    </div>
+                  </AlertDescription>
+                </Alert>
+              )}
+
             {!loading && bills.length > 0 && (
               <div className="mb-4 space-y-3">
                 <div className="flex flex-wrap items-end gap-2">
@@ -1186,10 +1270,30 @@ export function BillsPage() {
               </div>
             ) : displayedBills.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-12 text-center">
-                <p className="text-muted-foreground">No bills match your filters.</p>
-                <Button variant="link" className="mt-2" onClick={resetFilters}>
-                  Clear filters
-                </Button>
+                <p className="text-muted-foreground">
+                  {filtersActive
+                    ? "No bills match your filters."
+                    : hasPreStartBillsInMonth && !showPreStartBills
+                      ? "All bills in this month are before the cashflow start date."
+                      : "No bills match your filters."}
+                </p>
+                {filtersActive ? (
+                  <Button variant="link" className="mt-2" onClick={resetFilters}>
+                    Clear filters
+                  </Button>
+                ) : hasPreStartBillsInMonth && !showPreStartBills ? (
+                  <Button
+                    variant="link"
+                    className="mt-2"
+                    onClick={() => setShowPreStartBills(true)}
+                  >
+                    {SHOW_PRE_START_BILLS_LABEL}
+                  </Button>
+                ) : (
+                  <Button variant="link" className="mt-2" onClick={resetFilters}>
+                    Clear filters
+                  </Button>
+                )}
               </div>
             ) : (
               <Table>
@@ -1222,9 +1326,18 @@ export function BillsPage() {
                       bill,
                       variableBillContext
                     );
+                    const isPreStartBill = isBillInstancePreStart(
+                      bill,
+                      cashflowStartDate
+                    );
 
                     return (
-                    <TableRow key={bill.id}>
+                    <TableRow
+                      key={bill.id}
+                      className={
+                        isPreStartBill ? "bg-muted/30" : undefined
+                      }
+                    >
                       <TableCell>
                         <Checkbox
                           checked={bill.is_paid}
@@ -1251,6 +1364,11 @@ export function BillsPage() {
                             className="mt-1 border-amber-500 text-amber-700 dark:text-amber-300"
                           >
                             Confirm amount
+                          </Badge>
+                        )}
+                        {isPreStartBill && (
+                          <Badge variant="secondary" className="mt-1">
+                            {BILL_PRE_START_LABEL}
                           </Badge>
                         )}
                         {needsConfirmation && (

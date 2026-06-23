@@ -99,6 +99,7 @@ function buildDetail(
     variableBillContext:
       options?.variableBillContext ?? makeVariableContext(template),
     referenceDate: options?.referenceDate,
+    cashflowStartDate: options?.cashflowStartDate,
   });
 }
 
@@ -342,5 +343,34 @@ describe("buildBillInstanceDetailView", () => {
     expect(detail.paymentAudit.paymentAmountLabel).toBeNull();
     expect(detail.paymentAudit.paymentSourceLabel).toBeNull();
     expect(detail.templateStatusLabel).toBeNull();
+  });
+
+  it("includes a before-cashflow-start label when applicable", () => {
+    const bill = makeBill({
+      year: 2026,
+      month: 6,
+      period_bucket: "1_14",
+    });
+    const detail = buildDetail(bill, {
+      cashflowStartDate: "2026-06-15",
+    });
+
+    expect(detail.isBeforeCashflowStart).toBe(true);
+    expect(detail.beforeCashflowStartLabel).toBe("Before cashflow start");
+    expect(billDetailViewContainsRawUuid(detail)).toBe(false);
+  });
+
+  it("does not label bills on or after the cashflow start date", () => {
+    const bill = makeBill({
+      year: 2026,
+      month: 6,
+      period_bucket: "15_eom",
+    });
+    const detail = buildDetail(bill, {
+      cashflowStartDate: "2026-06-15",
+    });
+
+    expect(detail.isBeforeCashflowStart).toBe(false);
+    expect(detail.beforeCashflowStartLabel).toBeNull();
   });
 });

@@ -45,6 +45,11 @@ export function BillDetailPanel({
             <SheetHeader>
               <SheetTitle>{detail.title}</SheetTitle>
               <SheetDescription>{detail.subtitle}</SheetDescription>
+              {detail.beforeCashflowStartLabel && (
+                <Badge variant="outline" className="w-fit">
+                  {detail.beforeCashflowStartLabel}
+                </Badge>
+              )}
             </SheetHeader>
 
             <div className="space-y-6 px-4 pb-6">
@@ -63,6 +68,13 @@ export function BillDetailPanel({
                     />
                   )}
                   <DetailRow label="Source" value={detail.sourceLabel} />
+                  {detail.beforeCashflowStartLabel && (
+                    <DetailRow
+                      label="Cashflow start"
+                      value={detail.beforeCashflowStartLabel}
+                      align="left"
+                    />
+                  )}
                   {detail.userNotes && (
                     <div className="space-y-1">
                       <dt className="text-muted-foreground">Notes</dt>

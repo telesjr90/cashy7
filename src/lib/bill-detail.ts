@@ -27,6 +27,7 @@ import {
   VARIABLE_AMOUNT_CONFIRMATION_MESSAGE,
   type VariableBillContext,
 } from "@/lib/variable-bills";
+import { getBillInstancePreStartLabel } from "@/lib/bill-cashflow-start";
 import { format, parseISO } from "date-fns";
 
 export const BILL_DETAIL_RECURRING_EDIT_SCOPE_MESSAGE =
@@ -123,6 +124,8 @@ export interface BillInstanceDetailView {
   paymentAudit: BillInstanceDetailPaymentAudit;
   actionGuards: BillInstanceDetailActionGuard[];
   informationalGuards: string[];
+  isBeforeCashflowStart: boolean;
+  beforeCashflowStartLabel: string | null;
 }
 
 export type BuildBillInstanceDetailViewInput = {
@@ -136,6 +139,7 @@ export type BuildBillInstanceDetailViewInput = {
   isDebtAccountArchived?: boolean;
   variableBillContext: VariableBillContext;
   referenceDate?: Date;
+  cashflowStartDate?: string | null;
 };
 
 function formatDisplayDate(isoDate: string): string {
@@ -418,6 +422,10 @@ export function buildBillInstanceDetailView(
   const templateStatus = template
     ? getBillTemplateActiveStatus(template, input.referenceDate)
     : null;
+  const beforeCashflowStartLabel = getBillInstancePreStartLabel(
+    bill,
+    input.cashflowStartDate
+  );
 
   return {
     title: bill.name,
@@ -487,6 +495,8 @@ export function buildBillInstanceDetailView(
       needsRecurringBranching,
       needsAmountConfirmation,
     }),
+    isBeforeCashflowStart: beforeCashflowStartLabel != null,
+    beforeCashflowStartLabel,
   };
 }
 
@@ -528,6 +538,7 @@ export function collectBillDetailUserFacingStrings(
     detail.generatedNoteLabel,
     detail.recurringEditExplanation,
     detail.variableContextExplanation,
+    detail.beforeCashflowStartLabel,
     detail.paymentAudit.paidAtLabel,
     detail.paymentAudit.paymentMethodLabel,
     detail.paymentAudit.paymentAmountLabel,
