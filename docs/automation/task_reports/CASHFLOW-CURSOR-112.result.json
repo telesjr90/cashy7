@@ -1,0 +1,32 @@
+{
+  "taskId": "CASHFLOW-CURSOR-112",
+  "result": "PASS",
+  "filesChanged": [
+    "scripts/lib/two-user-privacy-test-support.mjs",
+    "scripts/seed-two-user-privacy-test-users.mjs",
+    "scripts/cleanup-two-user-privacy-test-users.mjs",
+    "scripts/smoke-two-user-privacy.mjs",
+    ".gitignore",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-112.md",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-112.result.json"
+  ],
+  "migrationsCreated": [],
+  "functionsCreated": [],
+  "dependenciesAdded": [],
+  "validation": {
+    "typecheck": "PASS",
+    "build": "PASS",
+    "testRun": "PASS"
+  },
+  "browserSmoke": {
+    "required": true,
+    "result": "PASS",
+    "ownerAccount": "CREATED_OR_REUSED",
+    "memberAccount": "CREATED_OR_REUSED",
+    "twoContextSmoke": "PASS"
+  },
+  "privacy": "PASS",
+  "productRules": "PASS",
+  "readyToCommit": true,
+  "nextTaskId": "CASHFLOW-CURSOR-113"
+}
