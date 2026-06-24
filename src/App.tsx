@@ -10,6 +10,7 @@ import { AddBillPage } from "@/pages/add-bill";
 import { DebtPage } from "@/pages/debt";
 import { SettingsPage } from "@/pages/settings";
 import { ExpensesPage } from "@/pages/expenses";
+import { CalendarPage } from "@/pages/calendar";
 import { ModeToggle } from "@/components/mode-toggle";
 import { Button } from "@/components/ui/button";
 import {
@@ -20,6 +21,7 @@ import {
   CreditCard,
   Settings,
   Receipt,
+  CalendarDays,
 } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 
@@ -74,6 +76,15 @@ function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
                 >
                   <Receipt className="mr-2 h-4 w-4" />
                   Expenses
+                </Button>
+              </Link>
+              <Link to="/calendar">
+                <Button
+                  variant={location.pathname === "/calendar" ? "secondary" : "ghost"}
+                  size="sm"
+                >
+                  <CalendarDays className="mr-2 h-4 w-4" />
+                  Calendar
                 </Button>
               </Link>
               <Link to="/settings">
@@ -201,6 +212,14 @@ function AppRoutes() {
         element={
           <AuthenticatedLayout>
             <ExpensesPage />
+          </AuthenticatedLayout>
+        }
+      />
+      <Route
+        path="/calendar"
+        element={
+          <AuthenticatedLayout>
+            <CalendarPage />
           </AuthenticatedLayout>
         }
       />

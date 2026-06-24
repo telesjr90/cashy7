@@ -1,0 +1,38 @@
+{
+  "taskId": "CASHFLOW-CURSOR-119",
+  "result": "PASS",
+  "filesChanged": [
+    "src/lib/cashflow-calendar.ts",
+    "src/lib/cashflow-calendar.test.ts",
+    "src/components/cashflow-calendar.tsx",
+    "src/pages/calendar.tsx",
+    "src/App.tsx",
+    "scripts/smoke-calendar-view.mjs",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-119.md",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-119.result.json"
+  ],
+  "migrationsCreated": [],
+  "functionsCreated": [
+    "buildCashflowCalendar",
+    "buildCalendarGridDays",
+    "buildMonthDateRange",
+    "chunkCalendarGridWeeks",
+    "resolvePeriodBucketForDate",
+    "calendarEventLabelsArePrivacySafe",
+    "formatCalendarEventTypeLabel"
+  ],
+  "dependenciesAdded": [],
+  "validation": {
+    "typecheck": "PASS",
+    "build": "PASS",
+    "testRun": "PASS"
+  },
+  "browserSmoke": {
+    "required": true,
+    "result": "PASS"
+  },
+  "privacy": "PASS",
+  "productRules": "PASS",
+  "readyToCommit": true,
+  "nextTaskId": "CASHFLOW-CURSOR-120"
+}
