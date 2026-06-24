@@ -68,9 +68,6 @@ const PAYCHECK_SCHEDULE_TYPES: PaycheckScheduleType[] = [
   "semi_monthly_15_last_business_day",
 ];
 
-export const PAYCHECK_LAST_BUSINESS_DAY_LIMITATION_LABEL =
-  "Last business day uses weekend-aware logic only (not holiday-aware).";
-
 export const FORECAST_INCOME_NOT_CONFIGURED_LABEL =
   "Paycheck income is not configured. Add your schedule in Settings to include expected paychecks.";
 
@@ -85,7 +82,7 @@ export const PAYCHECK_SCHEDULE_TYPE_LABELS: Record<PaycheckScheduleType, string>
   semi_monthly_15_30:
     "15th and 30th of each month (previous business day if weekend or B.C. holiday)",
   semi_monthly_15_last_business_day:
-    "15th and last business day of each month (weekend-aware)",
+    "15th and last business day of each month (previous business day if weekend or B.C. holiday)",
 };
 
 function parseDateOnly(value: string | null | undefined): string | null {
@@ -95,13 +92,6 @@ function parseDateOnly(value: string | null | undefined): string | null {
 
   const match = value.match(/^(\d{4}-\d{2}-\d{2})/);
   return match ? match[1] : null;
-}
-
-function formatIsoDate(date: Date): string {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
 }
 
 function lastDayOfMonth(year: number, month: number): number {
@@ -155,18 +145,34 @@ export function getFixedFifteenthAndThirtiethPayDates(
   return [...new Set(adjusted)].sort(compareDates);
 }
 
-export function getWeekendAwareLastBusinessDay(year: number, month: number): string {
+/**
+ * Final business day of a calendar month (Mon–Fri, excluding B.C. statutory holidays).
+ * Starts at the calendar month end and moves backward — never forward.
+ */
+export function getLastBusinessDayOfMonth(year: number, month: number): string {
   const lastDay = lastDayOfMonth(year, month);
-  const date = new Date(year, month - 1, lastDay);
-  const weekday = date.getDay();
+  const monthEnd = buildFixedPayDate(year, month, lastDay);
+  const holidays = getBcStatutoryHolidaySet({
+    startYear: year - 1,
+    endYear: year,
+  });
+  return adjustToPreviousBusinessDay(monthEnd, holidays);
+}
 
-  if (weekday === 0) {
-    date.setDate(date.getDate() - 2);
-  } else if (weekday === 6) {
-    date.setDate(date.getDate() - 1);
-  }
+/**
+ * Pay dates on the adjusted 15th anchor and the last business day of each month.
+ */
+export function getFifteenthAndLastBusinessDayPayDates(
+  year: number,
+  month: number
+): string[] {
+  const firstAnchor = buildFixedPayDate(year, month, 15);
+  const adjustedFirst = adjustAnchorPayDate(firstAnchor);
+  const lastBusiness = getLastBusinessDayOfMonth(year, month);
+  const dates =
+    adjustedFirst === lastBusiness ? [adjustedFirst] : [adjustedFirst, lastBusiness];
 
-  return formatIsoDate(date);
+  return [...new Set(dates)].sort(compareDates);
 }
 
 export function getYearMonthKeysInDateRange(range: ForecastDateRange): Array<{
@@ -419,9 +425,7 @@ export function computePayDatesForMonth(
   }
 
   if (normalized.scheduleType === "semi_monthly_15_last_business_day") {
-    const first = buildFixedPayDate(year, month, normalized.firstPayDay ?? 15);
-    const lastBusiness = getWeekendAwareLastBusinessDay(year, month);
-    return first === lastBusiness ? [first] : [first, lastBusiness];
+    return getFifteenthAndLastBusinessDayPayDates(year, month);
   }
 
   return [];

@@ -4,7 +4,6 @@ import { formatCurrency } from "@/lib/format";
 import {
   defaultPaycheckScheduleSettings,
   mapPaycheckScheduleRow,
-  PAYCHECK_LAST_BUSINESS_DAY_LIMITATION_LABEL,
   PAYCHECK_SCHEDULE_PRIVACY_COPY,
   PAYCHECK_SCHEDULE_TYPE_LABELS,
   PAYCHECK_SETTINGS_AMOUNT_PRIVACY_COPY,
@@ -190,12 +189,6 @@ export function PaycheckScheduleSettingsPanel({
                 </SelectContent>
               </Select>
             </div>
-
-            {settings.scheduleType === "semi_monthly_15_last_business_day" ? (
-              <p className="text-xs text-muted-foreground">
-                {PAYCHECK_LAST_BUSINESS_DAY_LIMITATION_LABEL}
-              </p>
-            ) : null}
 
             <div className="space-y-2">
               <Label htmlFor="paycheck-amount">Amount per paycheck (CA$)</Label>

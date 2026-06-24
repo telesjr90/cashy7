@@ -1,7 +1,8 @@
 /**
- * CASHFLOW-CURSOR-113/114 — Paycheck settings browser smoke.
+ * CASHFLOW-CURSOR-113/114/115 — Paycheck settings browser smoke.
  *
  * C114: selects and saves the 15th/30th schedule; verifies forecast privacy copy.
+ * C115: selects and saves the 15th/last business day schedule.
  *
  * Env: TEST_EMAIL, TEST_PASSWORD (or CASHFLOW_OWNER_* from C112 seed)
  * Optional: CASHFLOW_E2E_BASE_URL (default http://127.0.0.1:5212)
@@ -99,7 +100,7 @@ async function main() {
 
     await page.locator("#paycheck-schedule-type").click();
     await page.getByRole("option", {
-      name: /15th and 30th of each month/i,
+      name: /15th and last business day of each month/i,
     }).click();
     await page.locator("#paycheck-amount").fill("-5");
     await page.getByRole("button", { name: "Save paycheck schedule" }).click();
@@ -119,7 +120,6 @@ async function main() {
       timeout: 15000,
     });
     await page.getByText(/Income CA\$/i).first().waitFor({ timeout: 15000 });
-    const dashboardText = await page.locator("body").innerText();
     const formattedCad = new Intl.NumberFormat("en-CA", {
       style: "currency",
       currency: "CAD",
@@ -128,11 +128,42 @@ async function main() {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2,
     }).format(Number(uniqueAmount))}`;
+    const doubledAmount = (Number(uniqueAmount) * 2).toFixed(2);
+    const formattedDoubledApp = `CA$${new Intl.NumberFormat("en-CA", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(Number(uniqueAmount) * 2)}`;
+
+    await page.waitForFunction(
+      ({ amount, cad, app, doubled, doubledApp }) => {
+        const text = document.body.innerText;
+        return (
+          text.includes(amount) ||
+          text.includes(cad) ||
+          text.includes(cad.replace(/\u00a0/g, " ")) ||
+          text.includes(app) ||
+          text.includes(doubled) ||
+          text.includes(doubledApp)
+        );
+      },
+      {
+        amount: uniqueAmount,
+        cad: formattedCad,
+        app: formattedApp,
+        doubled: doubledAmount,
+        doubledApp: formattedDoubledApp,
+      },
+      { timeout: 20000 }
+    );
+
+    const dashboardText = await page.locator("body").innerText();
     assert(
       dashboardText.includes(uniqueAmount) ||
         dashboardText.includes(formattedCad) ||
         dashboardText.includes(formattedCad.replace(/\u00a0/g, " ")) ||
-        dashboardText.includes(formattedApp),
+        dashboardText.includes(formattedApp) ||
+        dashboardText.includes(doubledAmount) ||
+        dashboardText.includes(formattedDoubledApp),
       "Dashboard should reflect saved paycheck amount for current user"
     );
     assert(!dashboardText.includes("2127.08"), "Dashboard leaked hardcoded Teles amount");
@@ -155,14 +186,14 @@ async function main() {
       `Browser console errors: ${consoleErrors.join(" | ")}`
     );
 
-    console.log("CASHFLOW-CURSOR-114 browser smoke: PASS");
+    console.log("CASHFLOW-CURSOR-115 browser smoke: PASS");
   } finally {
     await browser.close();
   }
 }
 
 main().catch((error) => {
-  console.error("CASHFLOW-CURSOR-114 browser smoke: FAIL");
+  console.error("CASHFLOW-CURSOR-115 browser smoke: FAIL");
   console.error(error.message);
   process.exit(1);
 });

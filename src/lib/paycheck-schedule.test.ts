@@ -13,8 +13,9 @@ import {
   formatDashboardPaycheckIncomeAmount,
   getBcStatutoryHolidayDates,
   getFixedFifteenthAndThirtiethPayDates,
+  getFifteenthAndLastBusinessDayPayDates,
+  getLastBusinessDayOfMonth,
   getPaycheckDatesForSchedule,
-  getWeekendAwareLastBusinessDay,
   isBusinessDay,
   isKnownPaycheckScheduleType,
   isPaycheckScheduleConfigured,
@@ -249,26 +250,149 @@ describe("fixed pay day schedules", () => {
 });
 
 describe("last business day schedule", () => {
-  it("produces 15th and last business day dates", () => {
-    const settings = normalizePaycheckScheduleSettings({
-      amount: 1990,
-      scheduleType: "semi_monthly_15_last_business_day",
-      firstPayDay: 15,
-      secondPayDay: null,
-      useLastBusinessDay: true,
-      isActive: true,
-      effectiveFrom: null,
-    });
+  const settings = normalizePaycheckScheduleSettings({
+    amount: 1990,
+    scheduleType: "semi_monthly_15_last_business_day",
+    firstPayDay: 15,
+    secondPayDay: null,
+    useLastBusinessDay: true,
+    isActive: true,
+    effectiveFrom: null,
+  });
 
+  it("returns the 15th when it is a normal business day", () => {
+    expect(getFifteenthAndLastBusinessDayPayDates(2026, 6)).toEqual([
+      "2026-06-15",
+      "2026-06-30",
+    ]);
     expect(computePayDatesForMonth(settings, 2026, 6)).toEqual([
       "2026-06-15",
       "2026-06-30",
     ]);
   });
 
-  it("skips weekend last business day to Friday", () => {
-    expect(getWeekendAwareLastBusinessDay(2026, 8)).toBe("2026-08-31");
-    expect(getWeekendAwareLastBusinessDay(2026, 5)).toBe("2026-05-29");
+  it("adjusts a Saturday 15th anchor to the previous Friday", () => {
+    expect(getFifteenthAndLastBusinessDayPayDates(2026, 8)).toEqual([
+      "2026-08-14",
+      "2026-08-31",
+    ]);
+  });
+
+  it("adjusts a Sunday 15th anchor to the previous Friday", () => {
+    expect(getFifteenthAndLastBusinessDayPayDates(2026, 3)).toEqual([
+      "2026-03-13",
+      "2026-03-31",
+    ]);
+  });
+
+  it("adjusts a B.C. holiday 15th anchor to the previous business day", () => {
+    expect(getFifteenthAndLastBusinessDayPayDates(2022, 4)).toEqual([
+      "2022-04-14",
+      "2022-04-29",
+    ]);
+  });
+
+  it("adjusts month-end Saturday to the previous Friday", () => {
+    expect(getLastBusinessDayOfMonth(2026, 5)).toBe("2026-05-29");
+    expect(getLastBusinessDayOfMonth(2026, 8)).toBe("2026-08-31");
+  });
+
+  it("adjusts month-end Sunday to the previous Friday", () => {
+    expect(getLastBusinessDayOfMonth(2023, 4)).toBe("2023-04-28");
+  });
+
+  it("adjusts month-end B.C. statutory holiday to the previous business day", () => {
+    expect(getLastBusinessDayOfMonth(2026, 9)).toBe("2026-09-29");
+    expect(getFifteenthAndLastBusinessDayPayDates(2026, 9)).toEqual([
+      "2026-09-15",
+      "2026-09-29",
+    ]);
+  });
+
+  it("uses September 29 2026 when September 30 is National Day for Truth and Reconciliation", () => {
+    expect(getLastBusinessDayOfMonth(2026, 9)).toBe("2026-09-29");
+    expect(computePayDatesForMonth(settings, 2026, 9)).toEqual([
+      "2026-09-15",
+      "2026-09-29",
+    ]);
+  });
+
+  it("avoids Christmas when it affects month-end business-day search in December 2027", () => {
+    expect(getLastBusinessDayOfMonth(2027, 12)).toBe("2027-12-31");
+    expect(getFifteenthAndLastBusinessDayPayDates(2027, 12)).toEqual([
+      "2027-12-15",
+      "2027-12-31",
+    ]);
+  });
+
+  it("includes only the last-business-day paycheck when the window starts after the adjusted 15th", () => {
+    expect(
+      getPaycheckDatesForSchedule(settings, { start: "2026-06-16", end: "2026-06-30" })
+    ).toEqual(["2026-06-30"]);
+    expect(
+      getPaycheckDatesForSchedule(settings, { start: "2026-09-16", end: "2026-09-30" })
+    ).toEqual(["2026-09-29"]);
+  });
+
+  it("includes only the adjusted 15th when the window ends before month end", () => {
+    expect(
+      getPaycheckDatesForSchedule(settings, { start: "2026-01-01", end: "2026-01-20" })
+    ).toEqual(["2026-01-15"]);
+    expect(
+      getPaycheckDatesForSchedule(settings, { start: "2026-09-01", end: "2026-09-20" })
+    ).toEqual(["2026-09-15"]);
+  });
+
+  it("returns no dates for disabled schedule", () => {
+    const disabled = normalizePaycheckScheduleSettings({
+      amount: 0,
+      scheduleType: "disabled",
+      firstPayDay: null,
+      secondPayDay: null,
+      useLastBusinessDay: false,
+      isActive: false,
+      effectiveFrom: null,
+    });
+
+    expect(
+      getPaycheckDatesForSchedule(disabled, { start: "2026-01-01", end: "2026-01-31" })
+    ).toEqual([]);
+  });
+
+  it("returns no dates for missing schedule", () => {
+    expect(
+      getPaycheckDatesForSchedule(null, { start: "2026-01-01", end: "2026-01-31" })
+    ).toEqual([]);
+  });
+
+  it("uses signed-in user amount only in forecast income events", () => {
+    const events = buildPaycheckForecastIncomeEvents({
+      settings,
+      range: { start: "2026-09-01", end: "2026-09-30" },
+      signedInUserId: OTHER_USER_ID,
+      snapshotDate: "2026-08-31",
+    });
+
+    expect(events).toHaveLength(2);
+    expect(events.map((event) => event.date)).toEqual(["2026-09-15", "2026-09-29"]);
+    expect(events.every((event) => event.amount === 1990)).toBe(true);
+    expect(events.every((event) => event.userId === OTHER_USER_ID)).toBe(true);
+
+    const mixedEvents = [
+      ...events,
+      {
+        id: "other",
+        userId: USER_ID,
+        date: "2026-09-15",
+        amount: 9999,
+        label: "Expected paycheck",
+        sourceLabel: PAYCHECK_SCHEDULE_TYPE_LABELS.semi_monthly_15_last_business_day,
+      },
+    ];
+
+    const ownOnly = filterOwnPaycheckIncomeEvents(mixedEvents, OTHER_USER_ID);
+    expect(ownOnly).toHaveLength(2);
+    expect(ownOnly.some((event) => event.amount === 9999)).toBe(false);
   });
 });
 
