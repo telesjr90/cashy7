@@ -1,28 +1,42 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
+  buildInviteProfileOptions,
+  buildPeopleNameLookup,
+  buildPendingInvitationDisplays,
   canOwnerInviteMembers,
   canSendHouseholdInvite,
   HOUSEHOLD_INVITE_DESCRIPTION,
   HOUSEHOLD_INVITE_EMAIL_LABEL,
+  HOUSEHOLD_INVITE_NO_PROFILES_COPY,
   HOUSEHOLD_INVITE_PENDING_TITLE,
   HOUSEHOLD_INVITE_PRIVACY_COPY,
+  HOUSEHOLD_INVITE_PROFILE_LABEL,
+  HOUSEHOLD_INVITE_PROFILE_NONE_OPTION_LABEL,
+  HOUSEHOLD_INVITE_PROFILE_PLACEHOLDER,
   HOUSEHOLD_INVITE_READ_ONLY_COPY,
   HOUSEHOLD_INVITE_SEND_LABEL,
   HOUSEHOLD_INVITE_SUCCESS_COPY,
   HOUSEHOLD_INVITE_TITLE,
   HOUSEHOLD_MAX_USERS_COPY,
-  buildPendingInvitationDisplays,
+  validateAssignedProfileSelection,
   validateInviteEmail,
 } from "@/lib/household-invitations";
 import {
   listHouseholdInvitations,
   sendHouseholdInvite,
 } from "@/lib/household-invitation-service";
-import { getHouseholdMembers } from "@/lib/user-person";
-import type { HouseholdInvitation, HouseholdMember } from "@/lib/types";
+import { getHouseholdMembers, getHouseholdPeople } from "@/lib/user-person";
+import type { HouseholdInvitation, HouseholdMember, Person } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Card,
   CardContent,
@@ -32,6 +46,8 @@ import {
 } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Loader as Loader2 } from "lucide-react";
+
+const NO_PROFILE_VALUE = "__none__";
 
 interface HouseholdInviteCardProps {
   householdId: string;
@@ -45,10 +61,10 @@ export function HouseholdInviteCard({
   ownerEmail,
 }: HouseholdInviteCardProps) {
   const [emailInput, setEmailInput] = useState("");
+  const [selectedPersonId, setSelectedPersonId] = useState<string>(NO_PROFILE_VALUE);
   const [invitations, setInvitations] = useState<HouseholdInvitation[]>([]);
-  const [members, setMembers] = useState<
-    Array<Pick<HouseholdMember, "email" | "status" | "is_active">>
-  >([]);
+  const [members, setMembers] = useState<HouseholdMember[]>([]);
+  const [people, setPeople] = useState<Person[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [validationError, setValidationError] = useState<string | null>(null);
@@ -67,19 +83,26 @@ export function HouseholdInviteCard({
     setLoading(true);
     setLoadError(null);
 
-    const [invitationsResult, membersResult] = await Promise.all([
+    const [invitationsResult, membersResult, peopleResult] = await Promise.all([
       listHouseholdInvitations(householdId),
       getHouseholdMembers(householdId),
+      getHouseholdPeople(householdId),
     ]);
 
-    const errors = [invitationsResult.error, membersResult.error].filter(Boolean);
+    const errors = [
+      invitationsResult.error,
+      membersResult.error,
+      peopleResult.error,
+    ].filter(Boolean);
     if (errors.length > 0) {
       setLoadError(errors[0] ?? "Could not load household invite status.");
       setInvitations([]);
       setMembers([]);
+      setPeople([]);
     } else {
       setInvitations(invitationsResult.invitations);
       setMembers(membersResult.members);
+      setPeople(peopleResult.people);
     }
 
     setLoading(false);
@@ -89,9 +112,21 @@ export function HouseholdInviteCard({
     void loadInviteState();
   }, [loadInviteState]);
 
+  const peopleById = useMemo(() => buildPeopleNameLookup(people), [people]);
+
   const pendingDisplays = useMemo(
-    () => buildPendingInvitationDisplays(invitations),
-    [invitations]
+    () => buildPendingInvitationDisplays(invitations, peopleById),
+    [invitations, peopleById]
+  );
+
+  const profileOptions = useMemo(
+    () =>
+      buildInviteProfileOptions({
+        people,
+        activeMembers: members,
+        pendingInvitations: invitations,
+      }),
+    [people, members, invitations]
   );
 
   const handleSendInvite = async () => {
@@ -118,8 +153,26 @@ export function HouseholdInviteCard({
       return;
     }
 
+    const assignedPersonId =
+      selectedPersonId === NO_PROFILE_VALUE ? null : selectedPersonId;
+
+    const profileValidation = validateAssignedProfileSelection({
+      assignedPersonId,
+      people,
+      activeMembers: members,
+      pendingInvitations: invitations,
+    });
+
+    if (!profileValidation.ok) {
+      setValidationError(profileValidation.error);
+      return;
+    }
+
     setSending(true);
-    const result = await sendHouseholdInvite(emailInput);
+    const result = await sendHouseholdInvite(
+      emailInput,
+      profileValidation.assignedPersonId
+    );
     setSending(false);
 
     if (!result.ok) {
@@ -128,6 +181,7 @@ export function HouseholdInviteCard({
     }
 
     setEmailInput("");
+    setSelectedPersonId(NO_PROFILE_VALUE);
     setSuccess(result.message || HOUSEHOLD_INVITE_SUCCESS_COPY);
     await loadInviteState();
   };
@@ -172,6 +226,11 @@ export function HouseholdInviteCard({
                       <span className="text-muted-foreground">
                         {invite.statusLabel} · Sent {invite.sentAtLabel}
                       </span>
+                      {invite.assignedProfileLabel && (
+                        <span className="w-full text-xs text-muted-foreground">
+                          Assigned profile: {invite.assignedProfileLabel}
+                        </span>
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -188,6 +247,49 @@ export function HouseholdInviteCard({
                 value={emailInput}
                 onChange={(event) => setEmailInput(event.target.value)}
               />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="household-invite-profile">
+                {HOUSEHOLD_INVITE_PROFILE_LABEL}
+              </Label>
+              {profileOptions.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  {HOUSEHOLD_INVITE_NO_PROFILES_COPY}
+                </p>
+              ) : (
+                <Select
+                  value={selectedPersonId}
+                  onValueChange={setSelectedPersonId}
+                >
+                  <SelectTrigger
+                    id="household-invite-profile"
+                    className="w-full"
+                    data-testid="household-invite-profile-trigger"
+                  >
+                    <SelectValue
+                      placeholder={HOUSEHOLD_INVITE_PROFILE_PLACEHOLDER}
+                    />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NO_PROFILE_VALUE}>
+                      {HOUSEHOLD_INVITE_PROFILE_NONE_OPTION_LABEL}
+                    </SelectItem>
+                    {profileOptions.map((option) => (
+                      <SelectItem
+                        key={option.personId}
+                        value={option.personId}
+                        disabled={!option.available}
+                      >
+                        {option.name}
+                        {!option.available && option.unavailableReason
+                          ? ` — ${option.unavailableReason}`
+                          : ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
 
             {validationError && (

@@ -19,7 +19,7 @@ export type HouseholdInvitationClient = {
   functions: {
     invoke: (
       name: string,
-      options: { body: { email: string } }
+      options: { body: { email: string; assignedPersonId?: string } }
     ) => Promise<{
       data: unknown;
       error: { message: string } | null;
@@ -59,9 +59,10 @@ function normalizeFunctionResponse(data: unknown): InviteFunctionResponse {
 
 export async function sendHouseholdInvite(
   email: string,
+  assignedPersonId?: string | null,
   client: HouseholdInvitationClient = supabase as unknown as HouseholdInvitationClient
 ): Promise<InviteHouseholdMemberOutcome> {
-  const payload = buildInviteInvokePayload(email);
+  const payload = buildInviteInvokePayload(email, assignedPersonId);
   if (!payload.email) {
     return {
       ok: false,
@@ -110,7 +111,7 @@ export async function listHouseholdInvitations(
   const { data, error } = await client
     .from("household_invitations")
     .select(
-      "id, household_id, email, role, status, invited_by, invited_user_id, expires_at, accepted_at, created_at, updated_at"
+      "id, household_id, email, role, status, invited_by, invited_user_id, assigned_person_id, expires_at, accepted_at, created_at, updated_at"
     )
     .eq("household_id", householdId)
     .order("created_at", { ascending: false });

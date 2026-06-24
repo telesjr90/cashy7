@@ -1,0 +1,69 @@
+{
+  "taskId": "CASHFLOW-OWNER-001",
+  "result": "PARTIAL",
+  "filesChanged": [
+    "src/lib/types.ts",
+    "src/lib/household-invitations.ts",
+    "src/lib/household-invitation-service.ts",
+    "src/lib/household-invite-acceptance.ts",
+    "src/components/household-invite-card.tsx",
+    "src/pages/settings.tsx",
+    "supabase/functions/invite-household-member/index.ts",
+    "supabase/functions/accept-household-invite/index.ts",
+    "src/lib/household-invitations.test.ts",
+    "src/lib/household-invite-acceptance.test.ts",
+    "src/lib/household-member-management.test.ts",
+    "src/lib/household-invitation-service.test.ts",
+    "src/lib/owner-view-mode.ts",
+    "src/lib/owner-view-mode.test.ts",
+    "src/lib/owner-admin-overview.ts",
+    "src/lib/owner-admin-overview.test.ts",
+    "src/lib/household-invite-profile-assignment.test.ts",
+    "src/components/owner-view-toggle.tsx",
+    "src/components/household-admin-overview-card.tsx",
+    "scripts/smoke-owner-admin-view.mjs",
+    "docs/automation/task_reports/CASHFLOW-OWNER-001.md",
+    "docs/automation/task_reports/CASHFLOW-OWNER-001.result.json"
+  ],
+  "migrationsCreated": [
+    "supabase/migrations/20260626000001_034_owner_admin_view_and_invite_profile_assignment.sql"
+  ],
+  "migrationApplied": false,
+  "migrationApplicationStatus": "added_locally_not_applied",
+  "functionsCreated": [],
+  "dependenciesAdded": [],
+  "validation": {
+    "typecheck": "PASS",
+    "build": "PASS",
+    "testRun": "PASS",
+    "rlsAudit": "PASS",
+    "functionAudit": "PASS"
+  },
+  "inviteProfileAssignment": {
+    "implemented": true,
+    "assignedPersonIdStored": true,
+    "acceptUsesAssignedProfile": true,
+    "pendingProfileReservation": true
+  },
+  "ownerAdminView": {
+    "implemented": true,
+    "defaultMode": "personal",
+    "adminReadOnly": true,
+    "nonOwnerDenied": true,
+    "crossHouseholdDenied": true
+  },
+  "browserSmoke": {
+    "required": true,
+    "result": "NOT_RUN",
+    "reason": "No seeded E2E credentials and migration 034 not applied; smoke script delivered and ready to run."
+  },
+  "receiptFileBytesUploaderOnly": true,
+  "privacy": "PASS_WITH_OWNER_ADMIN_EXCEPTION",
+  "productRules": "PASS",
+  "readyToCommit": false,
+  "remaining": [
+    "Apply migration 034 via Supabase SQL Editor or MCP apply_migration (do not db push).",
+    "Run scripts/smoke-owner-admin-view.mjs against a dev server after migration is applied."
+  ],
+  "nextTaskId": "CASHFLOW-CURSOR-129"
+}

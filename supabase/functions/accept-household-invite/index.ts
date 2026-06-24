@@ -21,6 +21,7 @@ type AcceptErrorCode =
   | "already_member"
   | "self_invite"
   | "forbidden"
+  | "profile_unavailable"
   | "server_error";
 
 type AcceptResponseBody = {
@@ -73,6 +74,8 @@ function safeMessageForCode(code: AcceptErrorCode): string {
       return "You cannot accept an invite you sent to yourself.";
     case "forbidden":
       return "You cannot accept this invite.";
+    case "profile_unavailable":
+      return "The profile reserved for this invite is no longer available. Ask the household owner to send a new invite.";
   }
   return "Could not accept this invite. Please try again.";
 }
@@ -118,6 +121,60 @@ async function findUnclaimedPersonId(
 
   const unclaimed = people.find((person) => !claimed.has(person.id));
   return unclaimed?.id ?? null;
+}
+
+// Confirms an owner-assigned profile is still usable at accept time:
+// belongs to the household, not used by an active member, and not reserved by
+// a different pending invite. Returns false if anything makes it unavailable.
+async function isAssignedPersonStillAvailable(
+  adminClient: ReturnType<typeof createClient>,
+  householdId: string,
+  assignedPersonId: string,
+  currentInvitationId: string
+): Promise<boolean> {
+  const { data: person, error: personError } = await adminClient
+    .from("people")
+    .select("id")
+    .eq("id", assignedPersonId)
+    .eq("household_id", householdId)
+    .maybeSingle();
+
+  if (personError || !person) {
+    return false;
+  }
+
+  const { data: activeMembers, error: membersError } = await adminClient
+    .from("household_members")
+    .select("person_id")
+    .eq("household_id", householdId)
+    .eq("status", "active")
+    .eq("is_active", true);
+
+  if (membersError) {
+    return false;
+  }
+
+  const usedByActiveMember = (activeMembers ?? []).some(
+    (member) => member.person_id === assignedPersonId
+  );
+  if (usedByActiveMember) {
+    return false;
+  }
+
+  const { data: otherPending, error: pendingError } = await adminClient
+    .from("household_invitations")
+    .select("id")
+    .eq("household_id", householdId)
+    .eq("status", "invited")
+    .eq("assigned_person_id", assignedPersonId)
+    .neq("id", currentInvitationId)
+    .maybeSingle();
+
+  if (pendingError) {
+    return false;
+  }
+
+  return !otherPending;
 }
 
 Deno.serve(async (req) => {
@@ -227,7 +284,7 @@ Deno.serve(async (req) => {
   const { data: invitation, error: invitationError } = await adminClient
     .from("household_invitations")
     .select(
-      "id, household_id, email, role, status, invited_by, invited_user_id, expires_at, accepted_at"
+      "id, household_id, email, role, status, invited_by, invited_user_id, assigned_person_id, expires_at, accepted_at"
     )
     .eq("id", invitationId)
     .maybeSingle();
@@ -414,7 +471,35 @@ Deno.serve(async (req) => {
     );
   }
 
-  const personId = await findUnclaimedPersonId(adminClient, householdId);
+  const assignedPersonId =
+    typeof invitation.assigned_person_id === "string" &&
+    invitation.assigned_person_id.length > 0
+      ? invitation.assigned_person_id
+      : null;
+
+  let personId: string | null;
+  if (assignedPersonId) {
+    const stillAvailable = await isAssignedPersonStillAvailable(
+      adminClient,
+      householdId,
+      assignedPersonId,
+      invitationId
+    );
+    if (!stillAvailable) {
+      // Fail safely with clear copy — do not auto-pick a different profile.
+      return jsonResponse(
+        {
+          ok: false,
+          code: "profile_unavailable",
+          message: safeMessageForCode("profile_unavailable"),
+        },
+        409
+      );
+    }
+    personId = assignedPersonId;
+  } else {
+    personId = await findUnclaimedPersonId(adminClient, householdId);
+  }
 
   const { error: memberInsertError } = await adminClient
     .from("household_members")

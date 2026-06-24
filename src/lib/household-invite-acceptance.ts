@@ -33,6 +33,7 @@ export type AcceptInviteErrorCode =
   | "already_member"
   | "self_invite"
   | "forbidden"
+  | "profile_unavailable"
   | "function_unavailable"
   | "unknown";
 
@@ -156,6 +157,8 @@ export function acceptInviteErrorLabel(code: AcceptInviteErrorCode): string {
       return "You cannot accept an invite you sent to yourself.";
     case "forbidden":
       return "You cannot accept this invite.";
+    case "profile_unavailable":
+      return "The profile reserved for this invite is no longer available. Ask the household owner to send a new invite.";
     case "function_unavailable":
       return "Invite acceptance is unavailable right now. Try again later.";
     default:
@@ -178,6 +181,7 @@ export function mapAcceptFunctionCode(
     case "already_member":
     case "self_invite":
     case "forbidden":
+    case "profile_unavailable":
       return code;
     default:
       return "unknown";

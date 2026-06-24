@@ -17,6 +17,8 @@ type InviteErrorCode =
   | "duplicate_invite"
   | "already_member"
   | "household_full"
+  | "invalid_profile"
+  | "profile_unavailable"
   | "provider_error"
   | "server_error";
 
@@ -48,6 +50,12 @@ function isValidEmail(value: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
 }
 
+function isValidUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value
+  );
+}
+
 function safeMessageForCode(code: InviteErrorCode): string {
   switch (code) {
     case "unauthorized":
@@ -64,6 +72,10 @@ function safeMessageForCode(code: InviteErrorCode): string {
       return "This email already belongs to an active household member.";
     case "household_full":
       return "This household already has two active members.";
+    case "invalid_profile":
+      return "Select a profile that belongs to this household.";
+    case "profile_unavailable":
+      return "That profile is no longer available.";
     case "provider_error":
       return "Could not send the invite right now. Try again later.";
   }
@@ -91,12 +103,24 @@ Deno.serve(async (req) => {
   }
 
   let rawEmail = "";
+  let rawAssignedPersonId = "";
   try {
     const body = await req.json();
     rawEmail = typeof body?.email === "string" ? body.email : "";
+    rawAssignedPersonId =
+      typeof body?.assignedPersonId === "string"
+        ? body.assignedPersonId.trim()
+        : "";
   } catch {
     return jsonResponse(
       { ok: false, code: "invalid_email", message: safeMessageForCode("invalid_email") },
+      400
+    );
+  }
+
+  if (rawAssignedPersonId && !isValidUuid(rawAssignedPersonId)) {
+    return jsonResponse(
+      { ok: false, code: "invalid_profile", message: safeMessageForCode("invalid_profile") },
       400
     );
   }
@@ -173,7 +197,7 @@ Deno.serve(async (req) => {
 
   const { data: activeMembers, error: membersError } = await adminClient
     .from("household_members")
-    .select("id, user_id, email")
+    .select("id, user_id, email, person_id")
     .eq("household_id", householdId)
     .eq("status", "active")
     .eq("is_active", true);
@@ -243,6 +267,74 @@ Deno.serve(async (req) => {
     );
   }
 
+  let assignedPersonId: string | null = null;
+  if (rawAssignedPersonId) {
+    const { data: assignedPerson, error: personError } = await adminClient
+      .from("people")
+      .select("id")
+      .eq("id", rawAssignedPersonId)
+      .eq("household_id", householdId)
+      .maybeSingle();
+
+    if (personError) {
+      return jsonResponse(
+        { ok: false, code: "server_error", message: safeMessageForCode("server_error") },
+        500
+      );
+    }
+
+    if (!assignedPerson) {
+      return jsonResponse(
+        { ok: false, code: "invalid_profile", message: safeMessageForCode("invalid_profile") },
+        400
+      );
+    }
+
+    // Reserved by an active member?
+    const reservedByActiveMember = members.some(
+      (member) => member.person_id === rawAssignedPersonId
+    );
+    if (reservedByActiveMember) {
+      return jsonResponse(
+        {
+          ok: false,
+          code: "profile_unavailable",
+          message: safeMessageForCode("profile_unavailable"),
+        },
+        409
+      );
+    }
+
+    // Reserved by another pending invite?
+    const { data: pendingForProfile, error: pendingProfileError } = await adminClient
+      .from("household_invitations")
+      .select("id")
+      .eq("household_id", householdId)
+      .eq("status", "invited")
+      .eq("assigned_person_id", rawAssignedPersonId)
+      .maybeSingle();
+
+    if (pendingProfileError) {
+      return jsonResponse(
+        { ok: false, code: "server_error", message: safeMessageForCode("server_error") },
+        500
+      );
+    }
+
+    if (pendingForProfile) {
+      return jsonResponse(
+        {
+          ok: false,
+          code: "profile_unavailable",
+          message: safeMessageForCode("profile_unavailable"),
+        },
+        409
+      );
+    }
+
+    assignedPersonId = rawAssignedPersonId;
+  }
+
   const { data: invitation, error: insertError } = await adminClient
     .from("household_invitations")
     .insert({
@@ -251,6 +343,7 @@ Deno.serve(async (req) => {
       role: "member",
       status: "invited",
       invited_by: user.id,
+      assigned_person_id: assignedPersonId,
     })
     .select("id")
     .single();

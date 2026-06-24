@@ -881,6 +881,7 @@ export interface Database {
           status: "invited" | "accepted" | "cancelled" | "expired";
           invited_by: string;
           invited_user_id: string | null;
+          assigned_person_id: string | null;
           expires_at: string | null;
           accepted_at: string | null;
           created_at: string;
@@ -894,6 +895,7 @@ export interface Database {
           status?: "invited" | "accepted" | "cancelled" | "expired";
           invited_by: string;
           invited_user_id?: string | null;
+          assigned_person_id?: string | null;
           expires_at?: string | null;
           accepted_at?: string | null;
           created_at?: string;
@@ -907,6 +909,7 @@ export interface Database {
           status?: "invited" | "accepted" | "cancelled" | "expired";
           invited_by?: string;
           invited_user_id?: string | null;
+          assigned_person_id?: string | null;
           expires_at?: string | null;
           accepted_at?: string | null;
           created_at?: string;

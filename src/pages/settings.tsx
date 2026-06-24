@@ -68,6 +68,12 @@ import { ImportHistoryPanel } from "@/components/import-history-panel";
 import { ReceiptUploadCard } from "@/components/receipt-upload-card";
 import { HouseholdInviteCard } from "@/components/household-invite-card";
 import { HouseholdMemberManagementCard } from "@/components/household-member-management-card";
+import { OwnerViewToggle } from "@/components/owner-view-toggle";
+import { HouseholdAdminOverviewCard } from "@/components/household-admin-overview-card";
+import {
+  OWNER_PERSONAL_PRIVACY_COPY,
+  useOwnerViewMode,
+} from "@/lib/owner-view-mode";
 import { getMyPaycheckSchedule } from "@/lib/paycheck-schedule";
 import { buildSavingsGoalDetailView } from "@/lib/savings-detail";
 import { buildSavingsRolloverDisplayView } from "@/lib/savings-rollover";
@@ -728,6 +734,7 @@ function SavingsGoalPanel({
 
 export function SettingsPage() {
   const { user, household, membership, usablePersonId, refreshHousehold } = useAuth();
+  const ownerView = useOwnerViewMode(membership);
 
   const [settings, setSettings] = useState<HouseholdSettings | null>(null);
   const [settingsLoading, setSettingsLoading] = useState(true);
@@ -1139,7 +1146,7 @@ export function SettingsPage() {
   return (
     <div className="min-h-screen bg-background">
       <div className="border-b">
-        <div className="container mx-auto px-4 py-4">
+        <div className="container mx-auto flex flex-wrap items-center justify-between gap-3 px-4 py-4">
           <div className="flex items-center gap-2">
             <Settings className="h-6 w-6" />
             <div>
@@ -1149,10 +1156,31 @@ export function SettingsPage() {
               </p>
             </div>
           </div>
+          <OwnerViewToggle
+            canUseAdmin={ownerView.canUseAdmin}
+            mode={ownerView.mode}
+            onModeChange={ownerView.setMode}
+          />
         </div>
       </div>
 
       <div className="container mx-auto min-w-0 max-w-2xl space-y-6 px-4 py-6">
+        {ownerView.canUseAdmin && !ownerView.isAdmin && (
+          <p
+            className="text-sm text-muted-foreground"
+            data-testid="owner-personal-privacy-copy"
+          >
+            {OWNER_PERSONAL_PRIVACY_COPY}
+          </p>
+        )}
+
+        {ownerView.isAdmin && (
+          <HouseholdAdminOverviewCard
+            householdId={household.id}
+            active={ownerView.isAdmin}
+          />
+        )}
+
         <CashflowStartDateSettingsCard
           householdId={household.id}
           userId={user.id}
