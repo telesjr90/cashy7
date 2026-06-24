@@ -43,7 +43,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ChevronLeft, ChevronRight, Printer } from "lucide-react";
+import {
+  buildMonthlyReportCsv,
+  buildMonthlyReportCsvFilename,
+} from "@/lib/monthly-report-export";
+import { downloadCsvFile } from "@/lib/csv-export";
+import { ChevronLeft, ChevronRight, Download, Printer } from "lucide-react";
 import { isEligibleBillTemplate } from "@/lib/bill-templates";
 
 const MONTHS = [
@@ -87,6 +92,8 @@ export function MonthlyReportPage() {
   const [deductedManualExpenseIds, setDeductedManualExpenseIds] = useState<Set<string>>(
     new Set()
   );
+  const [exportMessage, setExportMessage] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth() + 1;
@@ -325,6 +332,49 @@ export function MonthlyReportPage() {
     window.print();
   };
 
+  const handleExportCsv = () => {
+    setExportMessage(null);
+    setExportError(null);
+
+    if (loading) {
+      setExportError("Report is still loading. Try again in a moment.");
+      return;
+    }
+
+    if (error) {
+      setExportError("Report data failed to load. Refresh and try again.");
+      return;
+    }
+
+    if (!report) {
+      setExportError("Report is not ready yet.");
+      return;
+    }
+
+    if (report.loadingBlockedMessage) {
+      setExportError(report.loadingBlockedMessage);
+      return;
+    }
+
+    try {
+      const rows = buildMonthlyReportCsv(report);
+      if (!rows.trim()) {
+        setExportError(`No export data available for ${report.header.monthLabel}.`);
+        return;
+      }
+
+      const filename = buildMonthlyReportCsvFilename(year, month);
+      downloadCsvFile(filename, rows);
+      setExportMessage(`Exported ${filename}`);
+    } catch (exportFailure) {
+      setExportError(
+        exportFailure instanceof Error
+          ? exportFailure.message
+          : "CSV export failed. Try again."
+      );
+    }
+  };
+
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="no-print mb-6">
@@ -386,9 +436,19 @@ export function MonthlyReportPage() {
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="ghost" onClick={goToCurrentMonth}>
             Today
+          </Button>
+          <Button
+            variant="outline"
+            onClick={handleExportCsv}
+            disabled={loading}
+            className="no-print"
+            data-testid="monthly-report-export-csv-button"
+          >
+            <Download className="mr-2 h-4 w-4" />
+            Export CSV
           </Button>
           <Button
             onClick={handlePrint}
@@ -400,6 +460,15 @@ export function MonthlyReportPage() {
           </Button>
         </div>
       </div>
+
+      {(exportMessage || exportError) && (
+        <div className="no-print mb-4 text-sm" data-testid="monthly-report-export-status">
+          {exportMessage ? (
+            <p className="text-muted-foreground">{exportMessage}</p>
+          ) : null}
+          {exportError ? <p className="text-destructive">{exportError}</p> : null}
+        </div>
+      )}
 
       <MonthlyPrintableReport report={report} loading={loading} error={error} />
     </div>
