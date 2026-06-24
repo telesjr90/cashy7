@@ -2,6 +2,8 @@
   "taskId": "CASHFLOW-CURSOR-114",
   "result": "PASS",
   "filesChanged": [
+    "src/lib/bc-statutory-holidays.ts",
+    "src/lib/bc-statutory-holidays.test.ts",
     "src/lib/paycheck-schedule.ts",
     "src/lib/paycheck-schedule.test.ts",
     "scripts/smoke-paycheck-settings.mjs",
@@ -10,6 +12,13 @@
   ],
   "migrationsCreated": [],
   "functionsCreated": [
+    "getBcStatutoryHolidayDatesForYear",
+    "getBcStatutoryHolidayDates",
+    "getBcStatutoryHolidaySet",
+    "isBcStatutoryHoliday",
+    "isWeekendDate",
+    "isBusinessDay",
+    "adjustToPreviousBusinessDay",
     "getFixedFifteenthAndThirtiethPayDates",
     "getPaycheckDatesForSchedule"
   ],

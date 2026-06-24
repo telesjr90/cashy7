@@ -1,58 +1,73 @@
-# CASHFLOW-CURSOR-114 — Teles pay schedule: 15th and 30th
+# CASHFLOW-CURSOR-114 — Teles pay schedule: 15th and 30th (business-day adjusted)
 
 ## Result
 
 **PASS**
 
-Hardened the reusable `semi_monthly_15_30` (`15th and 30th of each month`) paycheck schedule with dedicated pay-date helpers, comprehensive unit tests, and browser smoke verification. No schema migration; no user-name-based runtime logic.
+Hardened the reusable `semi_monthly_15_30` paycheck schedule so pay dates are **anchored to the 15th and 30th** (30th clamped to month end), then moved **backward to the previous business day** when an anchor falls on a weekend or B.C. statutory holiday. Introduced a minimal shared B.C. holiday helper required for accurate Teles-style pay dates. No schema migration; no user-name-based runtime logic.
 
 ## Files changed
 
 | File | Change |
 |------|--------|
-| `src/lib/paycheck-schedule.ts` | Added `getFixedFifteenthAndThirtiethPayDates`, `getPaycheckDatesForSchedule`; wired 15/30 month logic through the dedicated helper |
-| `src/lib/paycheck-schedule.test.ts` | Added C114 pay-date rule tests (Jan/Apr, Feb clamp, window filtering, disabled/missing schedule, forecast amount privacy) |
-| `scripts/smoke-paycheck-settings.mjs` | Updated smoke labels for C114 (select/save 15th/30th schedule) |
+| `src/lib/bc-statutory-holidays.ts` | **New** — MVP B.C. statutory holiday calendar, `isWeekendDate`, `isBusinessDay`, `adjustToPreviousBusinessDay` |
+| `src/lib/bc-statutory-holidays.test.ts` | **New** — holiday table and business-day adjustment tests |
+| `src/lib/paycheck-schedule.ts` | Business-day adjustment in `getFixedFifteenthAndThirtiethPayDates`; re-exports shared helpers; updated schedule label |
+| `src/lib/paycheck-schedule.test.ts` | Updated pay-date expectations and added weekend/holiday/forecast adjustment tests |
+| `scripts/smoke-paycheck-settings.mjs` | Regex schedule selection, dashboard `CA$` amount assertion, wait for income row |
 | `docs/automation/task_reports/CASHFLOW-CURSOR-114.md` | Task report |
 | `docs/automation/task_reports/CASHFLOW-CURSOR-114.result.json` | Machine-readable report |
 
 ## Schema/RLS decision
 
-- **No migration.** Existing C087 migration `20260622000001_021_paycheck_schedules.sql` already defines `semi_monthly_15_30` in the schedule type check constraint.
-- **RLS unchanged.** Paycheck schedules remain own-user-only (`user_id = auth.uid()`).
+- **No migration.** Existing `semi_monthly_15_30` enum value in `paycheck_schedules` remains sufficient.
+- **RLS unchanged.** Paycheck schedules stay own-user-only.
 
 ## What was implemented
 
-1. **Schedule type:** `semi_monthly_15_30` with UI label “15th and 30th of each month” (Settings dropdown from C113).
-2. **Pay-date helpers:**
-   - `getFixedFifteenthAndThirtiethPayDates(year, month)` — pure 15th + clamped 30th dates.
-   - `getPaycheckDatesForSchedule(settings, range)` — range-filtered dates; returns `[]` for null/disabled/missing schedule.
-   - Existing `computePayDatesForMonth`, `computePayDatesInRange`, and `buildPaycheckForecastIncomeEvents` already consume the hardened logic.
-3. **Forecast integration:** `safe-to-spend-forecast.ts` already builds income via `buildPaycheckForecastIncomeEvents` using the signed-in user's private schedule only (no change required).
-4. **Settings UI:** Already includes the 15th/30th option and required privacy copy from C113 (no change required).
-5. **Dashboard:** Already reads only the signed-in user's schedule via `getMyPaycheckSchedule` (no change required).
+### Schedule anchoring and adjustment
 
-## 15th/30th pay-date behavior
+1. **Anchor dates:** 15th and 30th of each month (30th clamped to last calendar day when the month is shorter).
+2. **Actual pay date:** Previous business day when an anchor is a weekend or B.C. statutory holiday.
+3. **Business day:** Monday–Friday, excluding configured B.C. statutory holidays.
+4. **Never moves forward.** Dates sorted and deduplicated after adjustment.
 
-| Month | Pay dates |
-|-------|-----------|
-| January 2026 | 2026-01-15, 2026-01-30 |
-| April 2026 | 2026-04-15, 2026-04-30 |
-| February 2026 (non-leap) | 2026-02-15, 2026-02-28 (30 clamped) |
-| February 2028 (leap) | 2028-02-15, 2028-02-29 (30 clamped) |
+### Shared helpers (C114 minimum; C116 can expand)
 
-- Window starting after the 15th includes only the 30th/last-day date.
-- Window ending before the 30th includes only the 15th.
-- No weekend adjustment (C115/C116 scope).
-- Dates are stable `YYYY-MM-DD` strings built from local calendar year/month/day (no UTC off-by-one).
+| Helper | Purpose |
+|--------|---------|
+| `getBcStatutoryHolidayDatesForYear` | MVP holiday list per year |
+| `getBcStatutoryHolidayDates` | Holidays across forecast year range |
+| `isWeekendDate` | Saturday/Sunday detection |
+| `isBusinessDay` | Weekday and not B.C. holiday |
+| `adjustToPreviousBusinessDay` | Walk backward to valid business day |
+| `getFixedFifteenthAndThirtiethPayDates` | Anchor → clamp → adjust → dedupe |
+
+Holiday table includes: New Year's Day, Family Day, Good Friday, Victoria Day, Canada Day, BC Day, Labour Day, National Day for Truth and Reconciliation (2021+), Thanksgiving, Remembrance Day, Christmas Day.
+
+### Holiday scope note
+
+Holiday support was introduced **only as the minimum shared helper needed** because weekends and B.C. statutory holidays affect real 15th/30th anchor pay dates. **C115** still owns Nicole's last-business-day pay schedule. **C116** still owns broader B.C. statutory holiday hardening/coverage, including verifying the holiday table and applying it to Nicole's last-business-day logic if not already complete.
+
+## 15th/30th pay-date behavior (examples)
+
+| Case | Anchor | Actual pay date |
+|------|--------|-----------------|
+| January 2026 | Jan 15, Jan 30 (weekdays) | Jan 15, Jan 30 |
+| August 2026 | Aug 15 (Sat), Aug 30 (Sun) | Aug 14, Aug 28 |
+| March 2026 | Mar 15 (Sun) | Mar 13 (Fri) |
+| September 2026 | Sep 30 (holiday) | Sep 29 |
+| April 2022 | Apr 15 (Good Friday) | Apr 14 (Thu) |
+| February 2026 | Feb 15 (Sun), Feb 28 (Sat) | Feb 13, Feb 27 |
+| July 1 anchor | Canada Day | Previous business day (e.g. Jun 30) |
 
 ## Forecast/privacy behavior
 
-- Forecast income events use the signed-in user's private `paycheck_schedules.amount` only.
-- Disabled or missing schedule → no pay dates, no income events.
-- `filterOwnPaycheckIncomeEvents` excludes other-user events even if accidentally passed in.
+- Forecast income events use **adjusted** pay dates, not raw 15th/30th anchors.
+- Amount per event comes from the signed-in user's private schedule only.
+- Disabled/missing schedule → no dates, no income events.
+- Other-user schedule remains ignored.
 - No hardcoded Teles/Nicole paycheck amount fallbacks.
-- Privacy copy remains visible in Settings.
 
 ## Validation results
 
@@ -60,32 +75,31 @@ Hardened the reusable `semi_monthly_15_30` (`15th and 30th of each month`) paych
 |---------|--------|
 | `npm run typecheck` | PASS |
 | `npm run build` | PASS |
-| `npm run test:run` | PASS (1169 tests) |
+| `npm run test:run` | PASS (1187 tests) |
 
 ## Browser smoke result
 
 **PASS** — `scripts/smoke-paycheck-settings.mjs` against `http://127.0.0.1:5212` with `test@example.com`:
 
-- Settings and paycheck card load with required privacy copy
-- User selects and saves “15th and 30th of each month”
+- Settings and paycheck card load with privacy copy
+- User selects/saves 15th/30th schedule (business-day-adjusted label)
 - Invalid negative amount blocked
-- Dashboard loads and reflects saved paycheck amount (not hardcoded 2127.08 / 1990.11)
-- Bills, Expenses, Debt, Settings receipt/import sections load
+- Dashboard shows saved amount as `CA$2,345.67`
+- Bills, Expenses, Debt, receipt/import sections load
 - No console errors
 
 ## Privacy guarantees preserved
 
-- Paycheck amount/schedule stored in own-user-only `paycheck_schedules` table
-- Dashboard shows other household member income as “Private”
-- No runtime reads of another user's paycheck schedule for forecast or dashboard
+- Own-user-only `paycheck_schedules` RLS unchanged
+- Dashboard hides other household member paycheck amounts as “Private”
 - No user-name/profile/email-based schedule routing
 
 ## Remaining known limitations
 
-- Last-business-day schedule (Nicole pattern) is present but not holiday-aware — C115/C116 scope
-- Pay-date display in UI deferred to C117
-- `people.paycheck_amount` legacy columns still exist in schema but are unused by app runtime
+- Nicole `semi_monthly_15_last_business_day` schedule remains weekend-aware only (not holiday-aware) — **C115/C116**
+- Holiday table is MVP; C116 should audit coverage for future years and edge cases
+- Pay-date display UI deferred to C117
 
 ## Exact next recommended small task
 
-**CASHFLOW-CURSOR-115** — Nicole pay schedule: 15th and last business day (weekend-aware, not holiday-aware).
+**CASHFLOW-CURSOR-115** — Nicole pay schedule: 15th and last business day (weekend-aware; holiday integration in C116).

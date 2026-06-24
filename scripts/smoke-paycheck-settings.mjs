@@ -98,7 +98,9 @@ async function main() {
     );
 
     await page.locator("#paycheck-schedule-type").click();
-    await page.getByRole("option", { name: "15th and 30th of each month" }).click();
+    await page.getByRole("option", {
+      name: /15th and 30th of each month/i,
+    }).click();
     await page.locator("#paycheck-amount").fill("-5");
     await page.getByRole("button", { name: "Save paycheck schedule" }).click();
     await page.getByText("Paycheck amount must be zero or greater.", {
@@ -116,15 +118,21 @@ async function main() {
     await page.getByText("Household Cashflow Dashboard", { exact: false }).first().waitFor({
       timeout: 15000,
     });
+    await page.getByText(/Income CA\$/i).first().waitFor({ timeout: 15000 });
     const dashboardText = await page.locator("body").innerText();
     const formattedCad = new Intl.NumberFormat("en-CA", {
       style: "currency",
       currency: "CAD",
     }).format(Number(uniqueAmount));
+    const formattedApp = `CA$${new Intl.NumberFormat("en-CA", {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(Number(uniqueAmount))}`;
     assert(
       dashboardText.includes(uniqueAmount) ||
         dashboardText.includes(formattedCad) ||
-        dashboardText.includes(formattedCad.replace(/\u00a0/g, " ")),
+        dashboardText.includes(formattedCad.replace(/\u00a0/g, " ")) ||
+        dashboardText.includes(formattedApp),
       "Dashboard should reflect saved paycheck amount for current user"
     );
     assert(!dashboardText.includes("2127.08"), "Dashboard leaked hardcoded Teles amount");

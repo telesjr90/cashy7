@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  adjustToPreviousBusinessDay,
   buildDashboardPaycheckIncomeByPerson,
   buildFixedPayDate,
   buildPaycheckForecastIncomeEvents,
@@ -10,11 +11,14 @@ import {
   computePayDatesInRange,
   filterOwnPaycheckIncomeEvents,
   formatDashboardPaycheckIncomeAmount,
+  getBcStatutoryHolidayDates,
   getFixedFifteenthAndThirtiethPayDates,
   getPaycheckDatesForSchedule,
   getWeekendAwareLastBusinessDay,
+  isBusinessDay,
   isKnownPaycheckScheduleType,
   isPaycheckScheduleConfigured,
+  isWeekendDate,
   normalizePaycheckScheduleSettings,
   paycheckScheduleDisplayLabelsArePrivacySafe,
   PAYCHECK_DASHBOARD_INCOME_NOT_CONFIGURED_LABEL,
@@ -136,20 +140,20 @@ describe("fixed pay day schedules", () => {
     ]);
   });
 
-  it("clamps day 30 to February month end in non-leap years", () => {
+  it("clamps day 30 to February month end in non-leap years before business-day adjustment", () => {
     expect(clampFixedPayDay(2026, 2, 30)).toBe(28);
     expect(buildFixedPayDate(2026, 2, 30)).toBe("2026-02-28");
     expect(getFixedFifteenthAndThirtiethPayDates(2026, 2)).toEqual([
-      "2026-02-15",
-      "2026-02-28",
+      "2026-02-13",
+      "2026-02-27",
     ]);
     expect(computePayDatesForMonth(settings, 2026, 2)).toEqual([
-      "2026-02-15",
-      "2026-02-28",
+      "2026-02-13",
+      "2026-02-27",
     ]);
   });
 
-  it("clamps day 30 to February 29 in leap years", () => {
+  it("clamps day 30 to February 29 in leap years then adjusts if needed", () => {
     expect(clampFixedPayDay(2028, 2, 30)).toBe(29);
     expect(buildFixedPayDate(2028, 2, 30)).toBe("2028-02-29");
     expect(getFixedFifteenthAndThirtiethPayDates(2028, 2)).toEqual([
@@ -162,13 +166,48 @@ describe("fixed pay day schedules", () => {
     ]);
   });
 
-  it("includes only the 30th/last-day date when the window starts after the 15th", () => {
+  it("adjusts a Saturday 15th anchor to the previous Friday", () => {
+    expect(getFixedFifteenthAndThirtiethPayDates(2026, 8)).toEqual([
+      "2026-08-14",
+      "2026-08-28",
+    ]);
+  });
+
+  it("adjusts a Sunday 15th anchor to the previous Friday", () => {
+    expect(getFixedFifteenthAndThirtiethPayDates(2026, 3)).toEqual([
+      "2026-03-13",
+      "2026-03-30",
+    ]);
+  });
+
+  it("adjusts a holiday 30th anchor to the previous business day", () => {
+    expect(getFixedFifteenthAndThirtiethPayDates(2026, 9)).toEqual([
+      "2026-09-15",
+      "2026-09-29",
+    ]);
+  });
+
+  it("adjusts a Friday holiday 15th anchor to Thursday", () => {
+    expect(getFixedFifteenthAndThirtiethPayDates(2022, 4)).toEqual([
+      "2022-04-14",
+      "2022-04-29",
+    ]);
+  });
+
+  it("includes B.C. statutory holidays needed by forecast windows", () => {
+    const holidays = getBcStatutoryHolidayDates({ startYear: 2026, endYear: 2027 });
+    expect(holidays).toContain("2026-09-30");
+    expect(holidays).toContain("2026-07-01");
+    expect(holidays).toContain("2027-07-01");
+  });
+
+  it("includes only the adjusted 30th/last-day date when the window starts after the 15th", () => {
     expect(
       getPaycheckDatesForSchedule(settings, { start: "2026-06-16", end: "2026-06-30" })
     ).toEqual(["2026-06-30"]);
     expect(
       getPaycheckDatesForSchedule(settings, { start: "2026-02-16", end: "2026-02-28" })
-    ).toEqual(["2026-02-28"]);
+    ).toEqual(["2026-02-27"]);
   });
 
   it("includes only the 15th when the window ends before the 30th", () => {
@@ -257,6 +296,20 @@ describe("paycheck forecast income events", () => {
         snapshotDate: "2026-06-20",
       })
     ).toEqual([]);
+  });
+
+  it("uses adjusted pay dates in forecast income events, not raw anchors", () => {
+    const events = buildPaycheckForecastIncomeEvents({
+      settings: activeSettings,
+      range: { start: "2026-09-01", end: "2026-09-30" },
+      signedInUserId: USER_ID,
+      snapshotDate: "2026-08-31",
+    });
+
+    expect(events).toHaveLength(2);
+    expect(events.map((event) => event.date)).toEqual(["2026-09-15", "2026-09-29"]);
+    expect(events.every((event) => event.amount === 2127.08)).toBe(true);
+    expect(events.some((event) => event.date === "2026-09-30")).toBe(false);
   });
 
   it("includes only pay dates inside the selected window after snapshot", () => {
@@ -459,6 +512,14 @@ describe("dashboard paycheck income display", () => {
         }),
       }).is_active
     ).toBe(false);
+  });
+});
+
+describe("shared business-day helpers re-export", () => {
+  it("exposes weekend and business-day helpers from paycheck schedule module", () => {
+    expect(isWeekendDate("2026-08-15")).toBe(true);
+    expect(isBusinessDay("2026-07-01")).toBe(false);
+    expect(adjustToPreviousBusinessDay("2026-07-01")).toBe("2026-06-30");
   });
 });
 

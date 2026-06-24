@@ -1,8 +1,20 @@
 import type { BillShareKey } from "@/lib/bill-share";
+import {
+  adjustToPreviousBusinessDay,
+  getBcStatutoryHolidaySet,
+} from "@/lib/bc-statutory-holidays";
 import { supabase } from "@/lib/supabase";
 import type { PeriodView } from "@/lib/periods";
 import type { ForecastDateRange } from "@/lib/safe-to-spend-forecast";
 import type { PaycheckSchedule } from "@/lib/types";
+
+export {
+  adjustToPreviousBusinessDay,
+  getBcStatutoryHolidayDates,
+  getBcStatutoryHolidayDatesForYear,
+  isBusinessDay,
+  isWeekendDate,
+} from "@/lib/bc-statutory-holidays";
 
 export type PaycheckScheduleType =
   | "disabled"
@@ -70,7 +82,8 @@ const UUID_PATTERN =
 
 export const PAYCHECK_SCHEDULE_TYPE_LABELS: Record<PaycheckScheduleType, string> = {
   disabled: "No paycheck schedule",
-  semi_monthly_15_30: "15th and 30th of each month",
+  semi_monthly_15_30:
+    "15th and 30th of each month (previous business day if weekend or B.C. holiday)",
   semi_monthly_15_last_business_day:
     "15th and last business day of each month (weekend-aware)",
 };
@@ -115,14 +128,31 @@ export function buildFixedPayDate(year: number, month: number, day: number): str
   return `${year}-${monthStr}-${dayStr}`;
 }
 
-/** Calendar 15th and 30th pay dates; day 30 clamps to the month's last calendar day. */
+function adjustAnchorPayDate(anchorDate: string): string {
+  const anchorYear = Number(anchorDate.slice(0, 4));
+  const holidays = getBcStatutoryHolidaySet({
+    startYear: anchorYear - 1,
+    endYear: anchorYear,
+  });
+  return adjustToPreviousBusinessDay(anchorDate, holidays);
+}
+
+/**
+ * Pay dates anchored to the 15th and 30th (30th clamped to month end), then moved to
+ * the previous business day when an anchor falls on a weekend or B.C. statutory holiday.
+ */
 export function getFixedFifteenthAndThirtiethPayDates(
   year: number,
   month: number
 ): string[] {
-  const first = buildFixedPayDate(year, month, 15);
-  const second = buildFixedPayDate(year, month, 30);
-  return first === second ? [first] : [first, second];
+  const firstAnchor = buildFixedPayDate(year, month, 15);
+  const secondAnchor = buildFixedPayDate(year, month, 30);
+  const adjusted = [
+    adjustAnchorPayDate(firstAnchor),
+    ...(firstAnchor === secondAnchor ? [] : [adjustAnchorPayDate(secondAnchor)]),
+  ];
+
+  return [...new Set(adjusted)].sort(compareDates);
 }
 
 export function getWeekendAwareLastBusinessDay(year: number, month: number): string {
