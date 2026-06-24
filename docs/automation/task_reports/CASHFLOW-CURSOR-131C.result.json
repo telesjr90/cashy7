@@ -1,0 +1,46 @@
+{
+  "taskId": "CASHFLOW-CURSOR-131C",
+  "result": "PASS",
+  "filesChanged": [
+    "src/lib/report-chart-data.ts",
+    "src/lib/report-chart-data.test.ts",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-131C.md",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-131C.result.json"
+  ],
+  "migrationsCreated": [],
+  "functionsCreated": [
+    "buildExpensesByCategoryChartData",
+    "buildExpensesByMonthChartData",
+    "buildExpensesByPayPeriodChartData",
+    "buildExpenseCategoryByMonthChartData",
+    "buildExpenseCategoryByPayPeriodChartData"
+  ],
+  "dependenciesAdded": [],
+  "validation": {
+    "typecheck": "PASS",
+    "build": "PASS",
+    "testRun": "PASS",
+    "rlsAudit": "PASS",
+    "functionAudit": "PASS"
+  },
+  "reportChartData": {
+    "expensesByCategory": true,
+    "expensesByMonth": true,
+    "expensesByPayPeriod": true,
+    "stackedCategoryByMonth": true,
+    "stackedCategoryByPayPeriod": true,
+    "includeEmptyPeriods": true,
+    "topNOtherGrouping": true,
+    "cashflowStartDateFiltering": true,
+    "noRawUuidsInLabels": true,
+    "pureHelpersOnly": true
+  },
+  "browserSmoke": {
+    "required": false,
+    "result": "NOT_REQUIRED"
+  },
+  "privacy": "PASS",
+  "productRules": "PASS",
+  "readyToCommit": true,
+  "nextTaskId": "CASHFLOW-CURSOR-131D"
+}
