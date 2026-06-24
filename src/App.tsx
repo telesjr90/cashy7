@@ -11,6 +11,7 @@ import { DebtPage } from "@/pages/debt";
 import { SettingsPage } from "@/pages/settings";
 import { ExpensesPage } from "@/pages/expenses";
 import { CalendarPage } from "@/pages/calendar";
+import { MonthlyReportPage } from "@/pages/monthly-report";
 import { ModeToggle } from "@/components/mode-toggle";
 import { Button } from "@/components/ui/button";
 import {
@@ -22,6 +23,7 @@ import {
   Settings,
   Receipt,
   CalendarDays,
+  Printer,
 } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 
@@ -43,7 +45,7 @@ function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <header className="no-print sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container mx-auto flex h-14 items-center justify-between px-4">
           <div className="flex items-center gap-6">
             <Link to="/" className="flex items-center gap-2 font-semibold">
@@ -85,6 +87,15 @@ function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
                 >
                   <CalendarDays className="mr-2 h-4 w-4" />
                   Calendar
+                </Button>
+              </Link>
+              <Link to="/reports/monthly">
+                <Button
+                  variant={location.pathname === "/reports/monthly" ? "secondary" : "ghost"}
+                  size="sm"
+                >
+                  <Printer className="mr-2 h-4 w-4" />
+                  Reports
                 </Button>
               </Link>
               <Link to="/settings">
@@ -220,6 +231,14 @@ function AppRoutes() {
         element={
           <AuthenticatedLayout>
             <CalendarPage />
+          </AuthenticatedLayout>
+        }
+      />
+      <Route
+        path="/reports/monthly"
+        element={
+          <AuthenticatedLayout>
+            <MonthlyReportPage />
           </AuthenticatedLayout>
         }
       />

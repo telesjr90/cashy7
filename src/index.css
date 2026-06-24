@@ -150,3 +150,42 @@
     @apply bg-background text-foreground;
   }
 }
+
+@media print {
+  @page {
+    margin: 0.75in;
+  }
+
+  body {
+    background: #fff !important;
+    color: #111 !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  .print-report,
+  .print-section {
+    background: #fff !important;
+    color: #111 !important;
+  }
+
+  .print-section {
+    break-inside: avoid-page;
+    page-break-inside: avoid;
+  }
+
+  .print-report table {
+    width: 100%;
+    font-size: 11pt;
+  }
+
+  .print-report h1 {
+    font-size: 20pt;
+  }
+
+  .print-report h2 {
+    font-size: 14pt;
+  }
+}
