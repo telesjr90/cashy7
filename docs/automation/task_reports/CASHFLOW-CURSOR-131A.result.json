@@ -1,0 +1,53 @@
+{
+  "taskId": "CASHFLOW-CURSOR-131A",
+  "result": "PASS",
+  "filesChanged": [
+    "src/components/dashboard-summary-card.tsx",
+    "src/lib/dashboard-total-available.ts",
+    "src/lib/dashboard-total-available.test.ts",
+    "src/pages/dashboard.tsx",
+    "scripts/smoke-dashboard-cards.mjs",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-131A.md",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-131A.result.json"
+  ],
+  "migrationsCreated": [],
+  "functionsCreated": [
+    "sumAllSavingsContributions (src/lib/dashboard-total-available.ts)",
+    "calculateTotalAmountAvailable (src/lib/dashboard-total-available.ts)"
+  ],
+  "dependenciesAdded": [],
+  "validation": {
+    "typecheck": "PASS",
+    "build": "PASS",
+    "testRun": "PASS",
+    "rlsAudit": "PASS",
+    "functionAudit": "PASS"
+  },
+  "dashboardCards": {
+    "collapsedTitleAndAmountOnly": true,
+    "detailsHiddenByDefault": true,
+    "detailsExpandable": true,
+    "availableAfterSavingsPrioritized": true,
+    "totalAvailablePrioritized": true,
+    "totalAvailableIncludesSavings": true,
+    "personalViewPrivacyPreserved": true,
+    "ownerAdminBehaviorPreserved": true,
+    "memberAdminDenied": true
+  },
+  "browserSmoke": {
+    "required": true,
+    "result": "PASS",
+    "viewports": ["desktop-1280x800", "mobile-390x844"],
+    "script": "scripts/smoke-dashboard-cards.mjs"
+  },
+  "privacy": "PASS_WITH_OWNER_ADMIN_EXCEPTION",
+  "productRules": "PASS",
+  "readyToCommit": true,
+  "nextTaskId": "CASHFLOW-CURSOR-131B",
+  "notes": {
+    "formulaChange": "New display-only formula: totalAmountAvailable = cashSnapshot.amount + sum(savingsContributions). No existing formulas changed.",
+    "termRenames": "Safe to spend after savings → Available to spend after savings (display label only).",
+    "componentTests": "Collapsed/expand interaction tests require jsdom (not configured). Covered by Playwright smoke instead.",
+    "existingTestIdsSafe": "All existing data-testid attributes preserved for backward compatibility with existing smoke scripts."
+  }
+}

@@ -62,6 +62,7 @@ import {
   User,
   Calendar,
 } from "lucide-react";
+import { DashboardSummaryCard } from "@/components/dashboard-summary-card";
 import { format, parseISO } from "date-fns";
 import { formatCurrency, formatDeductionAmount } from "@/lib/format";
 import {
@@ -105,6 +106,10 @@ import {
   type DashboardPaycheckIncomeByPerson,
   type PaycheckScheduleSettings,
 } from "@/lib/paycheck-schedule";
+import {
+  calculateTotalAmountAvailable,
+  sumAllSavingsContributions,
+} from "@/lib/dashboard-total-available";
 import type { CashSnapshot } from "@/lib/types";
 import { syncBillPaidStatusWithDebt } from "@/lib/sync-bill-paid-status";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -1086,6 +1091,17 @@ export function DashboardPage() {
       : null;
   const hasSavingsParticipants = savingsParticipants.length > 0;
 
+  // "Total amount available" = current cash on hand + total accumulated savings balance.
+  // Savings contributions have been deducted from cash via Pay & deduct; summing them
+  // back gives the user's total visible financial position.
+  const totalSavingsBalance = sumAllSavingsContributions(savingsContributions);
+  const totalAmountAvailable = calculateTotalAmountAvailable(
+    cashSnapshot !== null ? Number(cashSnapshot.amount) : null,
+    totalSavingsBalance
+  );
+  const totalAmountAvailableLoading =
+    cashSnapshotLoading || savingsContributionsLoading;
+
   const paymentByBillId = useMemo(() => {
     const map = new Map<string, CashPaymentTransaction>();
     for (const transaction of paymentTransactions) {
@@ -1438,603 +1454,560 @@ export function DashboardPage() {
           </p>
         )}
 
-        <Card className="mb-6" data-testid="dashboard-current-amount-card">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Your current available amount</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {cashSnapshotError && (
-              <Alert variant="destructive" className="mb-3">
-                <AlertDescription>
-                  Could not load your current available amount. ({cashSnapshotError})
-                </AlertDescription>
-              </Alert>
-            )}
-            {cashSnapshotLoading ? (
-              <Skeleton className="h-8 w-48" />
-            ) : cashSnapshot ? (
+        {/* ── Priority card 1: Available to spend after savings ── */}
+        <DashboardSummaryCard
+          title="Available to spend after savings"
+          priority="high"
+          data-testid="dashboard-card-available-after-savings"
+          toggleTestId="dashboard-card-toggle-available-after-savings"
+          detailsTestId="dashboard-card-details-available-after-savings"
+          amountNode={
+            cashSnapshotLoading ||
+            loading ||
+            savingsParticipantsLoading ||
+            savingsContributionsLoading ||
+            manualExpensesLoading ||
+            paymentTransactionsLoading ? (
+              <Skeleton className="h-7 w-44" />
+            ) : !cashSnapshot || shareKey === null ? (
+              <span className="text-sm text-muted-foreground">—</span>
+            ) : (
+              <span className="text-xl font-semibold tabular-nums sm:text-2xl">
+                {formatCurrency(safeToSpendAfterSavings ?? 0)}
+              </span>
+            )
+          }
+        >
+          {savingsParticipantsError && (
+            <Alert variant="destructive" className="mb-3">
+              <AlertDescription>
+                Could not load your savings targets. ({savingsParticipantsError})
+              </AlertDescription>
+            </Alert>
+          )}
+          {savingsContributionsError && (
+            <Alert variant="destructive" className="mb-3">
+              <AlertDescription>
+                Could not load your savings contributions. ({savingsContributionsError})
+              </AlertDescription>
+            </Alert>
+          )}
+          {!cashSnapshot && shareKey === null ? (
+            <p className="text-sm text-muted-foreground">
+              Record your current amount and choose your budget profile in{" "}
+              <Link to="/settings" className="font-medium underline underline-offset-4">
+                Settings
+              </Link>{" "}
+              to see available to spend after savings.
+            </p>
+          ) : !cashSnapshot ? (
+            <p className="text-sm text-muted-foreground">
+              Record your current amount in{" "}
+              <Link to="/settings" className="font-medium underline underline-offset-4">
+                Settings
+              </Link>{" "}
+              to see available to spend after savings.
+            </p>
+          ) : shareKey === null ? (
+            <p className="text-sm text-muted-foreground">
+              Choose your budget profile in{" "}
+              <Link to="/settings" className="font-medium underline underline-offset-4">
+                Settings
+              </Link>{" "}
+              to see available to spend after savings.
+            </p>
+          ) : cashSnapshotLoading ||
+            loading ||
+            savingsParticipantsLoading ||
+            savingsContributionsLoading ||
+            manualExpensesLoading ||
+            paymentTransactionsLoading ? (
+            <Skeleton className="h-8 w-48" />
+          ) : (
+            <div className="space-y-4">
               <div className="space-y-1">
-                <p className="text-xl font-semibold tabular-nums break-words sm:text-2xl">
-                  {formatCurrency(Number(cashSnapshot.amount))}
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  Snapshot date: {cashSnapshot.snapshot_date}
-                </p>
-                {cashSnapshot.notes && (
-                  <p className="text-sm text-muted-foreground">{cashSnapshot.notes}</p>
+                <p className="text-sm text-muted-foreground">{safeToSpendViewLabel}</p>
+                {!hasSavingsParticipants && (
+                  <p className="text-sm text-muted-foreground">
+                    <Link to="/settings" className="font-medium underline underline-offset-4">
+                      Set a savings target in Settings
+                    </Link>{" "}
+                    to include savings goals.
+                  </p>
                 )}
-              </div>
-            ) : !cashSnapshotError ? (
-              <div className="space-y-2">
-                <p className="text-sm text-muted-foreground">
-                  No current amount recorded yet.
-                </p>
-                <Link to="/settings">
-                  <Button variant="link" className="h-auto p-0">
-                    Record it in Settings
-                  </Button>
-                </Link>
-              </div>
-            ) : null}
-          </CardContent>
-        </Card>
-
-        <Card className="mb-6">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Recent cash activity</CardTitle>
-            <CardDescription>Recent changes to your current amount.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {recentCashActivityError && (
-              <Alert variant="destructive" className="mb-3">
-                <AlertDescription>
-                  Could not load recent cash activity. ({recentCashActivityError})
-                </AlertDescription>
-              </Alert>
-            )}
-            {recentCashActivityLoading ? (
-              <Skeleton className="h-24 w-full" />
-            ) : recentCashActivityRows.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No cash activity yet.</p>
-            ) : (
-              <ul className="space-y-2 text-sm">
-                {recentCashActivityRows.map((activity) => (
-                  <li
-                    key={activity.id}
-                    className="rounded-md bg-muted/40 px-3 py-2"
-                  >
-                    <div className="flex flex-wrap items-baseline justify-between gap-2">
-                      <span className="font-medium">{activity.amountLabel}</span>
-                      <span className="text-muted-foreground">
-                        {formatActivityDate(activity.date)}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-muted-foreground">
-                      {activity.typeLabel} · {activity.sourceLabel} · {activity.description}
-                    </p>
-                    {activity.notes && (
-                      <p className="mt-1 text-muted-foreground">{activity.notes}</p>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="mb-6" data-testid="dashboard-bill-total-card">
-          <CardHeader className="pb-2">
-            <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
-              <CardTitle className="min-w-0 text-base">My bill total for this view</CardTitle>
-              <Button
-                variant="link"
-                className="h-auto min-h-10 shrink-0 p-0 text-sm"
-                onClick={() => openDrilldown("bills")}
-              >
-                View bills
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {shareKey === null ? (
-              <p className="text-sm text-muted-foreground">
-                Choose your budget profile in{" "}
-                <Link to="/settings" className="font-medium underline underline-offset-4">
-                  Settings
-                </Link>{" "}
-                to see your bill total.
-              </p>
-            ) : loading ? (
-              <Skeleton className="h-8 w-48" />
-            ) : (
-              <div className="space-y-1">
-                <p className="text-xl font-semibold tabular-nums break-words sm:text-2xl">
-                  {formatCurrency(myBillTotal ?? 0)}
-                </p>
-                <p className="text-sm text-muted-foreground">{myBillTotalViewLabel}</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card
-          data-testid="dashboard-unpaid-bills-card"
-          className={`mb-6 ${shareKey !== null && !loading ? "cursor-pointer transition-colors hover:bg-muted/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" : ""}`}
-          role={shareKey !== null && !loading ? "button" : undefined}
-          tabIndex={shareKey !== null && !loading ? 0 : undefined}
-          onClick={() => {
-            if (shareKey !== null && !loading) {
-              openDrilldown("unpaid-bills");
-            }
-          }}
-          onKeyDown={(event) => {
-            if (
-              shareKey !== null &&
-              !loading &&
-              (event.key === "Enter" || event.key === " ")
-            ) {
-              event.preventDefault();
-              openDrilldown("unpaid-bills");
-            }
-          }}
-        >
-          <CardHeader className="pb-2">
-            <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
-              <CardTitle className="min-w-0 text-base">My unpaid bills for this view</CardTitle>
-              <Button
-                variant="link"
-                className="h-auto min-h-10 shrink-0 p-0 text-sm"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  openDrilldown("unpaid-bills");
-                }}
-              >
-                View unpaid bills
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {shareKey === null ? (
-              <p className="text-sm text-muted-foreground">
-                Choose your budget profile in{" "}
-                <Link to="/settings" className="font-medium underline underline-offset-4">
-                  Settings
-                </Link>{" "}
-                to see your unpaid bill total.
-              </p>
-            ) : loading ? (
-              <Skeleton className="h-8 w-48" />
-            ) : (
-              <div className="space-y-1">
-                <p className="text-xl font-semibold tabular-nums break-words sm:text-2xl">
-                  {formatDeductionAmount(myUnpaidBillTotal ?? 0)}
-                </p>
-                <p className="text-sm text-muted-foreground">{myBillTotalViewLabel}</p>
                 <p className="text-xs text-muted-foreground">
-                  Only bills not marked paid are included.
+                  Based on safe to spend before savings minus your remaining savings
+                  obligation for this view.
                 </p>
               </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card
-          data-testid="dashboard-manual-expenses-card"
-          className={`mb-6 ${
-            shareKey !== null &&
-            cashSnapshot &&
-            !cashSnapshotLoading &&
-            !manualExpensesLoading &&
-            !paymentTransactionsLoading
-              ? "cursor-pointer transition-colors hover:bg-muted/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              : ""
-          }`}
-          role={
-            shareKey !== null &&
-            cashSnapshot &&
-            !cashSnapshotLoading &&
-            !manualExpensesLoading &&
-            !paymentTransactionsLoading
-              ? "button"
-              : undefined
-          }
-          tabIndex={
-            shareKey !== null &&
-            cashSnapshot &&
-            !cashSnapshotLoading &&
-            !manualExpensesLoading &&
-            !paymentTransactionsLoading
-              ? 0
-              : undefined
-          }
-          onClick={() => {
-            if (
-              shareKey !== null &&
-              cashSnapshot &&
-              !cashSnapshotLoading &&
-              !manualExpensesLoading &&
-              !paymentTransactionsLoading
-            ) {
-              openDrilldown("expenses");
-            }
-          }}
-          onKeyDown={(event) => {
-            if (
-              shareKey !== null &&
-              cashSnapshot &&
-              !cashSnapshotLoading &&
-              !manualExpensesLoading &&
-              !paymentTransactionsLoading &&
-              (event.key === "Enter" || event.key === " ")
-            ) {
-              event.preventDefault();
-              openDrilldown("expenses");
-            }
-          }}
-        >
-          <CardHeader className="pb-2">
-            <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
-              <CardTitle className="min-w-0 text-base">My manual expenses for this view</CardTitle>
-              <Button
-                variant="link"
-                className="h-auto min-h-10 shrink-0 p-0 text-sm"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  openDrilldown("expenses");
-                }}
-              >
-                View expenses
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {manualExpensesError && (
-              <Alert variant="destructive" className="mb-3">
-                <AlertDescription>
-                  Could not load manual expenses. ({manualExpensesError})
-                </AlertDescription>
-              </Alert>
-            )}
-            {shareKey === null ? (
-              <p className="text-sm text-muted-foreground">
-                Choose your budget profile in{" "}
-                <Link to="/settings" className="font-medium underline underline-offset-4">
-                  Settings
-                </Link>{" "}
-                to see your manual expense total.
-              </p>
-            ) : !cashSnapshot ? (
-              <p className="text-sm text-muted-foreground">
-                Record your current amount in{" "}
-                <Link to="/settings" className="font-medium underline underline-offset-4">
-                  Settings
-                </Link>{" "}
-                to calculate expense-adjusted safe-to-spend.
-              </p>
-            ) : paymentTransactionsError ? (
-              <Alert variant="destructive" className="mb-3">
-                <AlertDescription>
-                  Could not load your payment history. ({paymentTransactionsError})
-                </AlertDescription>
-              </Alert>
-            ) : cashSnapshotLoading || manualExpensesLoading || paymentTransactionsLoading ? (
-              <Skeleton className="h-8 w-48" />
-            ) : (
-              <div className="space-y-1">
-                <p className="text-xl font-semibold tabular-nums break-words sm:text-2xl">
-                  {formatDeductionAmount(myManualExpenseTotalForView ?? 0)}
-                </p>
-                <p className="text-sm text-muted-foreground">{myBillTotalViewLabel}</p>
-                <p className="text-xs text-muted-foreground">
-                  Only your share of manual expenses after your latest current-amount snapshot
-                  is counted. Expenses paid through the app are not counted again.
-                  Marked-paid-only expenses may still count until your current amount snapshot
-                  reflects them.
-                </p>
+              <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+                <p className="mb-2 font-medium">How this was calculated</p>
+                <dl className="space-y-1.5">
+                  <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+                    <dt className="min-w-0 text-muted-foreground">Safe to spend before savings</dt>
+                    <dd className="shrink-0 font-medium tabular-nums">
+                      {formatCurrency(safeToSpendBeforeSavings ?? 0)}
+                    </dd>
+                  </div>
+                  <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+                    <dt className="min-w-0 text-muted-foreground">Your savings target in this view</dt>
+                    <dd className="shrink-0 font-medium tabular-nums">
+                      {formatCurrency(mySavingsTargetForView)}
+                    </dd>
+                  </div>
+                  <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+                    <dt className="min-w-0 text-muted-foreground">Your contributions counted in this view</dt>
+                    <dd className="shrink-0 font-medium tabular-nums">
+                      {formatCurrency(myContributionsForView)}
+                    </dd>
+                  </div>
+                  <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+                    <dt className="min-w-0 text-muted-foreground">Remaining savings obligation in this view</dt>
+                    <dd className="shrink-0 font-medium tabular-nums">
+                      {formatDeductionAmount(remainingSavingsObligationForView)}
+                    </dd>
+                  </div>
+                  <div className="flex flex-col gap-0.5 border-t pt-1.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+                    <dt className="min-w-0 font-medium">Available to spend after savings</dt>
+                    <dd className="shrink-0 font-semibold tabular-nums">
+                      {formatCurrency(safeToSpendAfterSavings ?? 0)}
+                    </dd>
+                  </div>
+                </dl>
               </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <DashboardWarnings
-          warnings={dashboardWarnings}
-          onOpenDrilldown={openDrilldown}
-        />
-
-        <Card className="mb-6" data-testid="dashboard-safe-to-spend-before-card">
-          <CardHeader className="pb-2">
-            <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
-              <CardTitle className="min-w-0 text-base">Safe to spend before savings</CardTitle>
-              <Button
-                variant="link"
-                className="h-auto min-h-10 shrink-0 p-0 text-sm"
-                onClick={() => openDrilldown("safe-to-spend-before")}
-              >
-                Why this amount?
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {manualExpensesError && (
-              <Alert variant="destructive" className="mb-3">
-                <AlertDescription>
-                  Could not load manual expenses. ({manualExpensesError})
-                </AlertDescription>
-              </Alert>
-            )}
-            {!cashSnapshot && shareKey === null ? (
-              <p className="text-sm text-muted-foreground">
-                Record your current amount and choose your budget profile in{" "}
-                <Link to="/settings" className="font-medium underline underline-offset-4">
-                  Settings
-                </Link>{" "}
-                to see safe-to-spend.
-              </p>
-            ) : !cashSnapshot ? (
-              <p className="text-sm text-muted-foreground">
-                Record your current amount in{" "}
-                <Link to="/settings" className="font-medium underline underline-offset-4">
-                  Settings
-                </Link>{" "}
-                to see safe-to-spend.
-              </p>
-            ) : shareKey === null ? (
-              <p className="text-sm text-muted-foreground">
-                Choose your budget profile in{" "}
-                <Link to="/settings" className="font-medium underline underline-offset-4">
-                  Settings
-                </Link>{" "}
-                to see safe-to-spend.
-              </p>
-            ) : paymentTransactionsError ? (
-              <Alert variant="destructive" className="mb-3">
-                <AlertDescription>
-                  Could not load your payment history. ({paymentTransactionsError})
-                </AlertDescription>
-              </Alert>
-            ) : cashSnapshotLoading || loading || manualExpensesLoading || paymentTransactionsLoading ? (
-              <Skeleton className="h-8 w-48" />
-            ) : (
-              <div className="space-y-4">
-                <div className="space-y-1">
-                  <p className="text-xl font-semibold tabular-nums break-words sm:text-2xl">
-                    {formatCurrency(safeToSpendBeforeSavings ?? 0)}
-                  </p>
-                  <p className="text-sm text-muted-foreground">{safeToSpendViewLabel}</p>
-                </div>
-                <div className="rounded-lg border bg-muted/30 p-3 text-sm">
-                  <p className="mb-2 font-medium">How this was calculated</p>
-                  <dl className="space-y-1.5">
-                    <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
-                      <dt className="min-w-0 text-muted-foreground">Current available amount</dt>
-                      <dd className="shrink-0 font-medium tabular-nums">
-                        {formatCurrency(Number(cashSnapshot.amount))}
-                      </dd>
-                    </div>
-                    <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
-                      <dt className="min-w-0 text-muted-foreground">Your unpaid bills in this view</dt>
-                      <dd className="shrink-0 font-medium tabular-nums">
-                        {formatDeductionAmount(myUnpaidBillTotal ?? 0)}
-                      </dd>
-                    </div>
-                    <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
-                      <dt className="min-w-0 text-muted-foreground">Your manual expenses in this view</dt>
-                      <dd className="shrink-0 font-medium tabular-nums">
-                        {formatDeductionAmount(myManualExpenseTotalForView ?? 0)}
-                      </dd>
-                    </div>
-                    <div className="flex flex-col gap-0.5 border-t pt-1.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
-                      <dt className="min-w-0 font-medium">Safe to spend before savings</dt>
-                      <dd className="shrink-0 font-semibold tabular-nums">
-                        {formatCurrency(safeToSpendBeforeSavings ?? 0)}
-                      </dd>
-                    </div>
-                  </dl>
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Only expenses after your latest current-amount snapshot are counted, to avoid
-                    double-counting. Expenses paid through the app are not counted again.
-                    Marked-paid-only expenses may still count until your current amount snapshot
-                    reflects them.
-                  </p>
-                </div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card
-          data-testid="dashboard-safe-to-spend-after-card"
-          className={`mb-6 ${
-            cashSnapshot &&
-            shareKey !== null &&
-            !cashSnapshotLoading &&
-            !loading &&
-            !savingsParticipantsLoading &&
-            !savingsContributionsLoading &&
-            !manualExpensesLoading &&
-            !paymentTransactionsLoading
-              ? "cursor-pointer transition-colors hover:bg-muted/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              : ""
-          }`}
-          role={
-            cashSnapshot &&
-            shareKey !== null &&
-            !cashSnapshotLoading &&
-            !loading &&
-            !savingsParticipantsLoading &&
-            !savingsContributionsLoading &&
-            !manualExpensesLoading &&
-            !paymentTransactionsLoading
-              ? "button"
-              : undefined
-          }
-          tabIndex={
-            cashSnapshot &&
-            shareKey !== null &&
-            !cashSnapshotLoading &&
-            !loading &&
-            !savingsParticipantsLoading &&
-            !savingsContributionsLoading &&
-            !manualExpensesLoading &&
-            !paymentTransactionsLoading
-              ? 0
-              : undefined
-          }
-          onClick={() => {
-            if (
-              cashSnapshot &&
-              shareKey !== null &&
-              !cashSnapshotLoading &&
-              !loading &&
-              !savingsParticipantsLoading &&
-              !savingsContributionsLoading &&
-              !manualExpensesLoading &&
-              !paymentTransactionsLoading
-            ) {
-              openDrilldown("savings");
-            }
-          }}
-          onKeyDown={(event) => {
-            if (
-              cashSnapshot &&
-              shareKey !== null &&
-              !cashSnapshotLoading &&
-              !loading &&
-              !savingsParticipantsLoading &&
-              !savingsContributionsLoading &&
-              !manualExpensesLoading &&
-              !paymentTransactionsLoading &&
-              (event.key === "Enter" || event.key === " ")
-            ) {
-              event.preventDefault();
-              openDrilldown("savings");
-            }
-          }}
-        >
-          <CardHeader className="pb-2">
-            <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
-              <CardTitle className="min-w-0 text-base">Safe to spend after savings</CardTitle>
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <div className="flex flex-wrap gap-3">
                 <Button
                   variant="link"
-                  className="h-auto min-h-10 shrink-0 p-0 text-sm"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    openDrilldown("savings");
-                  }}
+                  className="h-auto p-0 text-sm"
+                  onClick={() => openDrilldown("savings")}
                 >
                   View savings
                 </Button>
                 <Button
                   variant="link"
-                  className="h-auto min-h-10 shrink-0 p-0 text-sm"
+                  className="h-auto p-0 text-sm"
                   onClick={() => openDrilldown("safe-to-spend-after")}
                 >
                   Why this amount?
                 </Button>
               </div>
             </div>
-          </CardHeader>
-          <CardContent>
-            {savingsParticipantsError && (
-              <Alert variant="destructive" className="mb-3">
-                <AlertDescription>
-                  Could not load your savings targets. ({savingsParticipantsError})
-                </AlertDescription>
-              </Alert>
-            )}
-            {savingsContributionsError && (
-              <Alert variant="destructive" className="mb-3">
-                <AlertDescription>
-                  Could not load your savings contributions. ({savingsContributionsError})
-                </AlertDescription>
-              </Alert>
-            )}
-            {!cashSnapshot && shareKey === null ? (
-              <p className="text-sm text-muted-foreground">
-                Record your current amount and choose your budget profile in{" "}
-                <Link to="/settings" className="font-medium underline underline-offset-4">
-                  Settings
-                </Link>{" "}
-                to see safe-to-spend after savings.
-              </p>
-            ) : !cashSnapshot ? (
-              <p className="text-sm text-muted-foreground">
-                Record your current amount in{" "}
-                <Link to="/settings" className="font-medium underline underline-offset-4">
-                  Settings
-                </Link>{" "}
-                to see safe-to-spend after savings.
-              </p>
-            ) : shareKey === null ? (
-              <p className="text-sm text-muted-foreground">
-                Choose your budget profile in{" "}
-                <Link to="/settings" className="font-medium underline underline-offset-4">
-                  Settings
-                </Link>{" "}
-                to see safe-to-spend after savings.
-              </p>
-            ) : cashSnapshotLoading || loading || savingsParticipantsLoading || savingsContributionsLoading || manualExpensesLoading || paymentTransactionsLoading ? (
-              <Skeleton className="h-8 w-48" />
+          )}
+        </DashboardSummaryCard>
+
+        {/* ── Priority card 2: Total amount available (cash + savings) ── */}
+        <DashboardSummaryCard
+          title="Total amount available"
+          priority="high"
+          data-testid="dashboard-card-total-available"
+          toggleTestId="dashboard-card-toggle-total-available"
+          detailsTestId="dashboard-card-details-total-available"
+          amountNode={
+            totalAmountAvailableLoading ? (
+              <Skeleton className="h-7 w-44" />
+            ) : totalAmountAvailable !== null ? (
+              <span className="text-xl font-semibold tabular-nums sm:text-2xl">
+                {formatCurrency(totalAmountAvailable)}
+              </span>
             ) : (
-              <div className="space-y-4">
-                <div className="space-y-1">
-                  <p className="text-xl font-semibold tabular-nums break-words sm:text-2xl">
-                    {formatCurrency(safeToSpendAfterSavings ?? 0)}
-                  </p>
-                  <p className="text-sm text-muted-foreground">{safeToSpendViewLabel}</p>
-                  {!hasSavingsParticipants && (
-                    <p className="text-sm text-muted-foreground">
-                      <Link to="/settings" className="font-medium underline underline-offset-4">
-                        Set a savings target in Settings
-                      </Link>{" "}
-                      to include savings goals.
-                    </p>
-                  )}
-                  <p className="text-xs text-muted-foreground">
-                    Based on safe-to-spend before savings minus your remaining savings obligation
-                    for this view.
-                  </p>
-                </div>
-                <div className="rounded-lg border bg-muted/30 p-3 text-sm">
-                  <p className="mb-2 font-medium">How this was calculated</p>
-                  <dl className="space-y-1.5">
-                    <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
-                      <dt className="min-w-0 text-muted-foreground">Safe to spend before savings</dt>
-                      <dd className="shrink-0 font-medium tabular-nums">
-                        {formatCurrency(safeToSpendBeforeSavings ?? 0)}
-                      </dd>
-                    </div>
-                    <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
-                      <dt className="min-w-0 text-muted-foreground">Your savings target in this view</dt>
-                      <dd className="shrink-0 font-medium tabular-nums">
-                        {formatCurrency(mySavingsTargetForView)}
-                      </dd>
-                    </div>
-                    <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
-                      <dt className="min-w-0 text-muted-foreground">Your contributions counted in this view</dt>
-                      <dd className="shrink-0 font-medium tabular-nums">
-                        {formatCurrency(myContributionsForView)}
-                      </dd>
-                    </div>
-                    <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
-                      <dt className="min-w-0 text-muted-foreground">Remaining savings obligation in this view</dt>
-                      <dd className="shrink-0 font-medium tabular-nums">
-                        {formatDeductionAmount(remainingSavingsObligationForView)}
-                      </dd>
-                    </div>
-                    <div className="flex flex-col gap-0.5 border-t pt-1.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
-                      <dt className="min-w-0 font-medium">Safe to spend after savings</dt>
-                      <dd className="shrink-0 font-semibold tabular-nums">
-                        {formatCurrency(safeToSpendAfterSavings ?? 0)}
-                      </dd>
-                    </div>
-                  </dl>
-                </div>
+              <span className="text-sm text-muted-foreground">—</span>
+            )
+          }
+        >
+          {!cashSnapshot ? (
+            <p className="text-sm text-muted-foreground">
+              Record your current amount in{" "}
+              <Link to="/settings" className="font-medium underline underline-offset-4">
+                Settings
+              </Link>{" "}
+              to see your total amount available.
+            </p>
+          ) : totalAmountAvailableLoading ? (
+            <Skeleton className="h-8 w-48" />
+          ) : (
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground">
+                Includes current available amount and savings balance.
+              </p>
+              <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+                <dl className="space-y-1.5">
+                  <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+                    <dt className="min-w-0 text-muted-foreground">Current available amount</dt>
+                    <dd className="shrink-0 font-medium tabular-nums">
+                      {formatCurrency(Number(cashSnapshot.amount))}
+                    </dd>
+                  </div>
+                  <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+                    <dt className="min-w-0 text-muted-foreground">Total savings balance</dt>
+                    <dd className="shrink-0 font-medium tabular-nums">
+                      {formatCurrency(totalSavingsBalance)}
+                    </dd>
+                  </div>
+                  <div className="flex flex-col gap-0.5 border-t pt-1.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+                    <dt className="min-w-0 font-medium">Total amount available</dt>
+                    <dd className="shrink-0 font-semibold tabular-nums">
+                      {formatCurrency(totalAmountAvailable ?? 0)}
+                    </dd>
+                  </div>
+                </dl>
               </div>
-            )}
-          </CardContent>
-        </Card>
+            </div>
+          )}
+        </DashboardSummaryCard>
+
+        {/* ── Secondary card: Current available amount ── */}
+        <DashboardSummaryCard
+          title="Your current available amount"
+          data-testid="dashboard-current-amount-card"
+          amountNode={
+            cashSnapshotError ? (
+              <span className="text-sm text-destructive">Load error</span>
+            ) : cashSnapshotLoading ? (
+              <Skeleton className="h-7 w-44" />
+            ) : cashSnapshot ? (
+              <span className="text-xl font-semibold tabular-nums sm:text-2xl">
+                {formatCurrency(Number(cashSnapshot.amount))}
+              </span>
+            ) : (
+              <span className="text-sm text-muted-foreground">Not recorded</span>
+            )
+          }
+        >
+          {cashSnapshotError ? (
+            <Alert variant="destructive">
+              <AlertDescription>
+                Could not load your current available amount. ({cashSnapshotError})
+              </AlertDescription>
+            </Alert>
+          ) : cashSnapshotLoading ? (
+            <Skeleton className="h-16 w-full" />
+          ) : cashSnapshot ? (
+            <div className="space-y-1 text-sm">
+              <p className="text-muted-foreground">
+                Snapshot date: {cashSnapshot.snapshot_date}
+              </p>
+              {cashSnapshot.notes && (
+                <p className="text-muted-foreground">{cashSnapshot.notes}</p>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">No current amount recorded yet.</p>
+              <Link to="/settings">
+                <Button variant="link" className="h-auto p-0">
+                  Record it in Settings
+                </Button>
+              </Link>
+            </div>
+          )}
+        </DashboardSummaryCard>
+
+        {/* ── Secondary card: Safe to spend before savings ── */}
+        <DashboardSummaryCard
+          title="Safe to spend before savings"
+          data-testid="dashboard-safe-to-spend-before-card"
+          amountNode={
+            cashSnapshotLoading || loading || manualExpensesLoading || paymentTransactionsLoading ? (
+              <Skeleton className="h-7 w-44" />
+            ) : !cashSnapshot || shareKey === null ? (
+              <span className="text-sm text-muted-foreground">—</span>
+            ) : (
+              <span className="text-xl font-semibold tabular-nums sm:text-2xl">
+                {formatCurrency(safeToSpendBeforeSavings ?? 0)}
+              </span>
+            )
+          }
+        >
+          {manualExpensesError && (
+            <Alert variant="destructive" className="mb-3">
+              <AlertDescription>
+                Could not load manual expenses. ({manualExpensesError})
+              </AlertDescription>
+            </Alert>
+          )}
+          {!cashSnapshot && shareKey === null ? (
+            <p className="text-sm text-muted-foreground">
+              Record your current amount and choose your budget profile in{" "}
+              <Link to="/settings" className="font-medium underline underline-offset-4">
+                Settings
+              </Link>{" "}
+              to see safe to spend.
+            </p>
+          ) : !cashSnapshot ? (
+            <p className="text-sm text-muted-foreground">
+              Record your current amount in{" "}
+              <Link to="/settings" className="font-medium underline underline-offset-4">
+                Settings
+              </Link>{" "}
+              to see safe to spend.
+            </p>
+          ) : shareKey === null ? (
+            <p className="text-sm text-muted-foreground">
+              Choose your budget profile in{" "}
+              <Link to="/settings" className="font-medium underline underline-offset-4">
+                Settings
+              </Link>{" "}
+              to see safe to spend.
+            </p>
+          ) : paymentTransactionsError ? (
+            <Alert variant="destructive" className="mb-3">
+              <AlertDescription>
+                Could not load your payment history. ({paymentTransactionsError})
+              </AlertDescription>
+            </Alert>
+          ) : cashSnapshotLoading || loading || manualExpensesLoading || paymentTransactionsLoading ? (
+            <Skeleton className="h-8 w-48" />
+          ) : (
+            <div className="space-y-4">
+              <p className="text-sm text-muted-foreground">{safeToSpendViewLabel}</p>
+              <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+                <p className="mb-2 font-medium">How this was calculated</p>
+                <dl className="space-y-1.5">
+                  <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+                    <dt className="min-w-0 text-muted-foreground">Current available amount</dt>
+                    <dd className="shrink-0 font-medium tabular-nums">
+                      {formatCurrency(Number(cashSnapshot.amount))}
+                    </dd>
+                  </div>
+                  <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+                    <dt className="min-w-0 text-muted-foreground">Your unpaid bills in this view</dt>
+                    <dd className="shrink-0 font-medium tabular-nums">
+                      {formatDeductionAmount(myUnpaidBillTotal ?? 0)}
+                    </dd>
+                  </div>
+                  <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+                    <dt className="min-w-0 text-muted-foreground">Your manual expenses in this view</dt>
+                    <dd className="shrink-0 font-medium tabular-nums">
+                      {formatDeductionAmount(myManualExpenseTotalForView ?? 0)}
+                    </dd>
+                  </div>
+                  <div className="flex flex-col gap-0.5 border-t pt-1.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+                    <dt className="min-w-0 font-medium">Safe to spend before savings</dt>
+                    <dd className="shrink-0 font-semibold tabular-nums">
+                      {formatCurrency(safeToSpendBeforeSavings ?? 0)}
+                    </dd>
+                  </div>
+                </dl>
+                <p className="mt-2 text-xs text-muted-foreground">
+                  Only expenses after your latest current-amount snapshot are counted, to avoid
+                  double-counting. Expenses paid through the app are not counted again.
+                </p>
+              </div>
+              <Button
+                variant="link"
+                className="h-auto p-0 text-sm"
+                onClick={() => openDrilldown("safe-to-spend-before")}
+              >
+                Why this amount?
+              </Button>
+            </div>
+          )}
+        </DashboardSummaryCard>
+
+        {/* ── Secondary card: Unpaid bills ── */}
+        <DashboardSummaryCard
+          title="My unpaid bills for this view"
+          data-testid="dashboard-unpaid-bills-card"
+          amountNode={
+            shareKey === null ? (
+              <span className="text-sm text-muted-foreground">—</span>
+            ) : loading ? (
+              <Skeleton className="h-7 w-44" />
+            ) : (
+              <span className="text-xl font-semibold tabular-nums sm:text-2xl">
+                {formatDeductionAmount(myUnpaidBillTotal ?? 0)}
+              </span>
+            )
+          }
+        >
+          {shareKey === null ? (
+            <p className="text-sm text-muted-foreground">
+              Choose your budget profile in{" "}
+              <Link to="/settings" className="font-medium underline underline-offset-4">
+                Settings
+              </Link>{" "}
+              to see your unpaid bill total.
+            </p>
+          ) : loading ? (
+            <Skeleton className="h-8 w-48" />
+          ) : (
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">{myBillTotalViewLabel}</p>
+              <p className="text-xs text-muted-foreground">
+                Only bills not marked paid are included.
+              </p>
+              <Button
+                variant="link"
+                className="h-auto p-0 text-sm"
+                onClick={() => openDrilldown("unpaid-bills")}
+              >
+                View unpaid bills
+              </Button>
+            </div>
+          )}
+        </DashboardSummaryCard>
+
+        {/* ── Secondary card: Manual expenses ── */}
+        <DashboardSummaryCard
+          title="My manual expenses for this view"
+          data-testid="dashboard-manual-expenses-card"
+          amountNode={
+            shareKey === null || !cashSnapshot ? (
+              <span className="text-sm text-muted-foreground">—</span>
+            ) : cashSnapshotLoading || manualExpensesLoading || paymentTransactionsLoading ? (
+              <Skeleton className="h-7 w-44" />
+            ) : (
+              <span className="text-xl font-semibold tabular-nums sm:text-2xl">
+                {formatDeductionAmount(myManualExpenseTotalForView ?? 0)}
+              </span>
+            )
+          }
+        >
+          {manualExpensesError && (
+            <Alert variant="destructive" className="mb-3">
+              <AlertDescription>
+                Could not load manual expenses. ({manualExpensesError})
+              </AlertDescription>
+            </Alert>
+          )}
+          {shareKey === null ? (
+            <p className="text-sm text-muted-foreground">
+              Choose your budget profile in{" "}
+              <Link to="/settings" className="font-medium underline underline-offset-4">
+                Settings
+              </Link>{" "}
+              to see your manual expense total.
+            </p>
+          ) : !cashSnapshot ? (
+            <p className="text-sm text-muted-foreground">
+              Record your current amount in{" "}
+              <Link to="/settings" className="font-medium underline underline-offset-4">
+                Settings
+              </Link>{" "}
+              to calculate expense-adjusted safe to spend.
+            </p>
+          ) : paymentTransactionsError ? (
+            <Alert variant="destructive" className="mb-3">
+              <AlertDescription>
+                Could not load your payment history. ({paymentTransactionsError})
+              </AlertDescription>
+            </Alert>
+          ) : cashSnapshotLoading || manualExpensesLoading || paymentTransactionsLoading ? (
+            <Skeleton className="h-8 w-48" />
+          ) : (
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">{myBillTotalViewLabel}</p>
+              <p className="text-xs text-muted-foreground">
+                Only your share of manual expenses after your latest current-amount snapshot
+                is counted. Expenses paid through the app are not counted again.
+              </p>
+              <Button
+                variant="link"
+                className="h-auto p-0 text-sm"
+                onClick={() => openDrilldown("expenses")}
+              >
+                View expenses
+              </Button>
+            </div>
+          )}
+        </DashboardSummaryCard>
+
+        {/* ── Secondary card: Bill total ── */}
+        <DashboardSummaryCard
+          title="My bill total for this view"
+          data-testid="dashboard-bill-total-card"
+          amountNode={
+            shareKey === null ? (
+              <span className="text-sm text-muted-foreground">—</span>
+            ) : loading ? (
+              <Skeleton className="h-7 w-44" />
+            ) : (
+              <span className="text-xl font-semibold tabular-nums sm:text-2xl">
+                {formatCurrency(myBillTotal ?? 0)}
+              </span>
+            )
+          }
+        >
+          {shareKey === null ? (
+            <p className="text-sm text-muted-foreground">
+              Choose your budget profile in{" "}
+              <Link to="/settings" className="font-medium underline underline-offset-4">
+                Settings
+              </Link>{" "}
+              to see your bill total.
+            </p>
+          ) : loading ? (
+            <Skeleton className="h-8 w-48" />
+          ) : (
+            <div className="space-y-2">
+              <p className="text-sm text-muted-foreground">{myBillTotalViewLabel}</p>
+              <Button
+                variant="link"
+                className="h-auto p-0 text-sm"
+                onClick={() => openDrilldown("bills")}
+              >
+                View bills
+              </Button>
+            </div>
+          )}
+        </DashboardSummaryCard>
+
+        {/* ── Secondary card: Recent cash activity ── */}
+        <DashboardSummaryCard
+          title="Recent cash activity"
+          amountNode={
+            recentCashActivityLoading ? (
+              <Skeleton className="h-5 w-32" />
+            ) : recentCashActivityRows.length === 0 ? (
+              <span className="text-sm text-muted-foreground">No activity yet</span>
+            ) : (
+              <span className="text-sm text-muted-foreground">
+                {recentCashActivityRows.length} recent transaction
+                {recentCashActivityRows.length !== 1 ? "s" : ""}
+              </span>
+            )
+          }
+        >
+          {recentCashActivityError && (
+            <Alert variant="destructive" className="mb-3">
+              <AlertDescription>
+                Could not load recent cash activity. ({recentCashActivityError})
+              </AlertDescription>
+            </Alert>
+          )}
+          {recentCashActivityLoading ? (
+            <Skeleton className="h-24 w-full" />
+          ) : recentCashActivityRows.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No cash activity yet.</p>
+          ) : (
+            <ul className="space-y-2 text-sm">
+              {recentCashActivityRows.map((activity) => (
+                <li
+                  key={activity.id}
+                  className="rounded-md bg-muted/40 px-3 py-2"
+                >
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <span className="font-medium">{activity.amountLabel}</span>
+                    <span className="text-muted-foreground">
+                      {formatActivityDate(activity.date)}
+                    </span>
+                  </div>
+                  <p className="mt-1 text-muted-foreground">
+                    {activity.typeLabel} · {activity.sourceLabel} · {activity.description}
+                  </p>
+                  {activity.notes && (
+                    <p className="mt-1 text-muted-foreground">{activity.notes}</p>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </DashboardSummaryCard>
+
+        <DashboardWarnings
+          warnings={dashboardWarnings}
+          onOpenDrilldown={openDrilldown}
+        />
 
         <DashboardSafeToSpendForecast
           forecastInput={safeToSpendForecastInput}
