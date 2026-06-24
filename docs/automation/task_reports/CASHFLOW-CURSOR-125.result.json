@@ -1,0 +1,47 @@
+{
+  "taskId": "CASHFLOW-CURSOR-125",
+  "result": "PASS",
+  "filesChanged": [
+    "src/components/ui/dialog.tsx",
+    "src/components/ui/sheet.tsx",
+    "src/components/ui/alert-dialog.tsx",
+    "src/index.css",
+    "src/lib/mobile-form-layout.ts",
+    "src/lib/mobile-form-layout.test.ts",
+    "src/components/bill-edit-panel.tsx",
+    "src/components/bill-template-panel.tsx",
+    "src/components/bill-detail-panel.tsx",
+    "src/components/debt-payment-detail-panel.tsx",
+    "src/components/debt-schedule-replacement-dialog.tsx",
+    "src/components/savings-goal-edit-dialog.tsx",
+    "src/components/savings-target-edit-dialog.tsx",
+    "src/components/savings-detail-panel.tsx",
+    "src/components/import-column-mapping-panel.tsx",
+    "src/components/paycheck-schedule-settings.tsx",
+    "src/components/household-invite-card.tsx",
+    "src/components/household-member-management-card.tsx",
+    "src/pages/settings.tsx",
+    "src/pages/monthly-report.tsx",
+    "scripts/smoke-mobile-forms-dialogs.mjs",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-125.md",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-125.result.json"
+  ],
+  "migrationsCreated": [],
+  "functionsCreated": [
+    "src/lib/mobile-form-layout.ts"
+  ],
+  "dependenciesAdded": [],
+  "validation": {
+    "typecheck": "PASS",
+    "build": "PASS",
+    "testRun": "PASS"
+  },
+  "browserSmoke": {
+    "required": true,
+    "result": "PASS"
+  },
+  "privacy": "PASS",
+  "productRules": "PASS",
+  "readyToCommit": true,
+  "nextTaskId": "CASHFLOW-CURSOR-126"
+}

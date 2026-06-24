@@ -1,5 +1,6 @@
 import { Link } from "react-router-dom";
 import type { BillInstanceDetailView } from "@/lib/bill-detail";
+import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import {
   Sheet,
@@ -25,9 +26,11 @@ function DetailRow({
   align?: "left" | "right";
 }) {
   return (
-    <div className="flex justify-between gap-4">
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className={align === "right" ? "text-right" : undefined}>{value}</dd>
+    <div className="flex min-w-0 justify-between gap-4">
+      <dt className="shrink-0 text-muted-foreground">{label}</dt>
+      <dd className={cn("min-w-0 break-words", align === "right" ? "text-right" : undefined)}>
+        {value}
+      </dd>
     </div>
   );
 }

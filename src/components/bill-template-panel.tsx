@@ -13,6 +13,7 @@ import {
   type BillTemplateFormValues,
   validateBillTemplateForm,
 } from "@/lib/bill-templates";
+import { MOBILE_FORM_GRID_TWO_COL } from "@/lib/mobile-form-layout";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -154,7 +155,7 @@ export function BillTemplatePanel({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto max-w-lg">
+      <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle>{isEdit ? "Edit bill template" : "New bill template"}</DialogTitle>
           <DialogDescription>
@@ -225,7 +226,7 @@ export function BillTemplatePanel({
 
           {!form.isVariable && (
             <>
-              <div className="grid gap-4 md:grid-cols-2">
+              <div className={MOBILE_FORM_GRID_TWO_COL}>
                 <div className="space-y-2">
                   <Label htmlFor="template-teles">Teles amount (CA$)</Label>
                   <Input
@@ -277,7 +278,7 @@ export function BillTemplatePanel({
             </>
           )}
 
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className={MOBILE_FORM_GRID_TWO_COL}>
             <div className="space-y-2">
               <Label htmlFor="template-due-day">Due day</Label>
               <Input
@@ -316,7 +317,7 @@ export function BillTemplatePanel({
             </div>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className={MOBILE_FORM_GRID_TWO_COL}>
             <div className="space-y-2">
               <Label htmlFor="template-active-from">Active from</Label>
               <Input

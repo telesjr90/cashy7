@@ -168,7 +168,7 @@ export function HouseholdInviteCard({
                       key={`${invite.email}-${invite.sentAtLabel}`}
                       className="flex flex-wrap items-baseline justify-between gap-2 rounded-md bg-muted/40 px-3 py-2"
                     >
-                      <span className="font-medium">{invite.email}</span>
+                      <span className="min-w-0 break-all font-medium">{invite.email}</span>
                       <span className="text-muted-foreground">
                         {invite.statusLabel} · Sent {invite.sentAtLabel}
                       </span>

@@ -148,7 +148,7 @@ export function PaycheckScheduleSettingsPanel({
   }, [settings, amountInput, initialSchedule]);
 
   return (
-    <Card>
+    <Card className="min-w-0">
       <CardHeader>
         <CardTitle>Your paycheck schedule</CardTitle>
         <CardDescription>
@@ -191,7 +191,10 @@ export function PaycheckScheduleSettingsPanel({
                   handleScheduleTypeChange(value as PaycheckScheduleType)
                 }
               >
-                <SelectTrigger id="paycheck-schedule-type" className="w-full">
+                <SelectTrigger
+                  id="paycheck-schedule-type"
+                  className="h-auto min-w-0 w-full whitespace-normal text-left *:data-[slot=select-value]:line-clamp-3 *:data-[slot=select-value]:whitespace-normal"
+                >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -238,7 +241,9 @@ export function PaycheckScheduleSettingsPanel({
                   {datePreview.title}
                 </h3>
                 {datePreview.scheduleLabel ? (
-                  <p className="text-xs text-muted-foreground">{datePreview.scheduleLabel}</p>
+                  <p className="break-words text-xs text-muted-foreground">
+                    {datePreview.scheduleLabel}
+                  </p>
                 ) : null}
                 <p className="text-xs text-muted-foreground">{PAYCHECK_DATE_ADJUSTMENT_COPY}</p>
                 <p className="text-xs text-muted-foreground">

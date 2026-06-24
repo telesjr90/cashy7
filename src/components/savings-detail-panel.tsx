@@ -1,5 +1,6 @@
 import type { SavingsGoalDetailView } from "@/lib/savings-detail";
 import { SHARED_GOAL_METADATA_ONLY_COPY } from "@/lib/savings-edit";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -27,9 +28,11 @@ function DetailRow({
   align?: "left" | "right";
 }) {
   return (
-    <div className="flex justify-between gap-4">
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className={align === "right" ? "text-right" : undefined}>{value}</dd>
+    <div className="flex min-w-0 justify-between gap-4">
+      <dt className="shrink-0 text-muted-foreground">{label}</dt>
+      <dd className={cn("min-w-0 break-words", align === "right" ? "text-right" : undefined)}>
+        {value}
+      </dd>
     </div>
   );
 }

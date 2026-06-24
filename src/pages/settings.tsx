@@ -1152,7 +1152,7 @@ export function SettingsPage() {
         </div>
       </div>
 
-      <div className="container mx-auto max-w-2xl space-y-6 px-4 py-6">
+      <div className="container mx-auto min-w-0 max-w-2xl space-y-6 px-4 py-6">
         <CashflowStartDateSettingsCard
           householdId={household.id}
           userId={user.id}

@@ -10,6 +10,7 @@ import {
   type BillEditFormValues,
   validateBillEditForm,
 } from "@/lib/bill-edit";
+import { MOBILE_FORM_GRID_TWO_COL } from "@/lib/mobile-form-layout";
 import { validateDueDay } from "@/lib/bill-templates";
 import {
   buildInstanceOnlyEditPlan,
@@ -363,7 +364,7 @@ export function BillEditPanel({
               />
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className={MOBILE_FORM_GRID_TWO_COL}>
               <div className="space-y-2">
                 <Label htmlFor="edit-bill-teles">Teles amount (CA$)</Label>
                 <Input
@@ -413,7 +414,7 @@ export function BillEditPanel({
               Apply 51/49 split
             </Button>
 
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className={MOBILE_FORM_GRID_TWO_COL}>
               <div className="space-y-2">
                 <Label htmlFor="edit-bill-period">Pay period</Label>
                 <Select

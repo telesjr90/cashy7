@@ -8,6 +8,7 @@ import {
   validateGoalEditForm,
   type GoalEditFormValues,
 } from "@/lib/savings-edit";
+import { MOBILE_FORM_GRID_TWO_COL } from "@/lib/mobile-form-layout";
 import { deleteSavingsGoal, updateSavingsGoal } from "@/lib/savings";
 import {
   AlertDialog,
@@ -152,7 +153,7 @@ export function SavingsGoalEditDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={handleOpenChange}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>Edit savings goal</DialogTitle>
             <DialogDescription>
@@ -216,7 +217,7 @@ export function SavingsGoalEditDialog({
               />
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className={MOBILE_FORM_GRID_TWO_COL}>
               <div className="space-y-2">
                 <Label htmlFor="edit-goal-start">Start date</Label>
                 <Input

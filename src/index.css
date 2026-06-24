@@ -151,6 +151,20 @@
   }
 }
 
+@layer components {
+  .mobile-form-grid-2 {
+    @apply grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2;
+  }
+
+  .mobile-contained-scroll {
+    @apply min-w-0 overflow-x-auto;
+  }
+
+  .mobile-dialog-body {
+    @apply min-w-0;
+  }
+}
+
 @media print {
   @page {
     margin: 0.75in;

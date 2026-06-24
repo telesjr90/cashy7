@@ -219,14 +219,14 @@ export function HouseholdMemberManagementCard({
                         key={member.id}
                         className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-muted/40 px-3 py-2"
                       >
-                        <div className="space-y-1">
+                        <div className="min-w-0 flex-1 space-y-1">
                           <div className="flex flex-wrap items-center gap-2">
                             <span className="font-medium">{member.label}</span>
                             <Badge variant="secondary">{member.roleLabel}</Badge>
                             <Badge variant="outline">{member.statusLabel}</Badge>
                           </div>
                           {member.detailLabel && member.detailLabel !== member.label && (
-                            <p className="text-muted-foreground">{member.detailLabel}</p>
+                            <p className="break-all text-muted-foreground">{member.detailLabel}</p>
                           )}
                         </div>
                         {canManage && removalCheck.allowed && (
@@ -263,9 +263,9 @@ export function HouseholdMemberManagementCard({
                         key={invite.id}
                         className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-muted/40 px-3 py-2"
                       >
-                        <div className="space-y-1">
+                        <div className="min-w-0 flex-1 space-y-1">
                           <div className="flex flex-wrap items-center gap-2">
-                            <span className="font-medium">{invite.email}</span>
+                            <span className="break-all font-medium">{invite.email}</span>
                             <Badge variant="outline">{invite.statusLabel}</Badge>
                           </div>
                           <p className="text-muted-foreground">

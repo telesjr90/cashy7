@@ -22,6 +22,10 @@ import {
   IMPORT_VALIDATION_NEXT_COPY,
 } from "@/lib/import-upload";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  MOBILE_CONTAINED_SCROLL,
+  MOBILE_FORM_GRID_TWO_COL,
+} from "@/lib/mobile-form-layout";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -110,7 +114,7 @@ function FieldMappingGroup({
   return (
     <div className="space-y-3">
       <h5 className="text-sm font-medium">{title}</h5>
-      <div className="grid gap-3 sm:grid-cols-2">
+      <div className={MOBILE_FORM_GRID_TWO_COL}>
         {fields.map((field) => (
           <MappingFieldSelect
             key={field}
@@ -240,7 +244,8 @@ export function ImportColumnMappingPanel({
       {previewRows.length > 0 && previewColumns.length > 0 && (
         <div className="space-y-2">
           <h5 className="text-sm font-medium">Mapped row preview</h5>
-          <Table>
+          <div className={`${MOBILE_CONTAINED_SCROLL} rounded-md border bg-background`}>
+            <Table>
             <TableHeader>
               <TableRow>
                 <TableHead>Row</TableHead>
@@ -262,6 +267,7 @@ export function ImportColumnMappingPanel({
               ))}
             </TableBody>
           </Table>
+          </div>
         </div>
       )}
 
