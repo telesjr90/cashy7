@@ -1,0 +1,52 @@
+{
+  "taskId": "CASHFLOW-CURSOR-131E",
+  "result": "PASS",
+  "filesChanged": [
+    "scripts/smoke-dashboard-reports-mobile.mjs",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-131E.md",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-131E.result.json"
+  ],
+  "migrationsCreated": [],
+  "functionsCreated": [],
+  "dependenciesAdded": [],
+  "validation": {
+    "typecheck": "PASS",
+    "build": "PASS",
+    "testRun": "PASS",
+    "rlsAudit": "PASS",
+    "functionAudit": "PASS"
+  },
+  "mobileReportSmoke": {
+    "aggregatorSmokeCreated": true,
+    "dashboardDesktop": "PASS",
+    "dashboardMobile": "PASS",
+    "dashboardDrilldowns": "PASS",
+    "reportsDesktop": "PASS",
+    "reportsMobile": "PASS",
+    "reportsPrintBehavior": "PASS",
+    "noHorizontalOverflow": "PASS",
+    "noRawUuids": "PASS",
+    "consoleErrors": 0,
+    "pageErrors": 0
+  },
+  "viewports": [
+    { "id": "desktop-1280x800", "status": "PASS", "required": true },
+    { "id": "mobile-390x844", "status": "PASS", "required": true },
+    { "id": "narrow-360x740", "status": "PASS", "required": false },
+    {
+      "id": "tablet-768x1024",
+      "status": "EXCLUDED",
+      "required": false,
+      "note": "Out-of-scope global desktop-nav overflow at the md (768px) breakpoint; not a C131 dashboard/reports layout issue."
+    }
+  ],
+  "focusedSmokePreserved": {
+    "smoke-dashboard-cards.mjs": "PASS",
+    "smoke-dashboard-drilldown-panels.mjs": "PASS",
+    "smoke-reports-charts.mjs": "PASS"
+  },
+  "privacy": "PASS_WITH_OWNER_ADMIN_EXCEPTION",
+  "productRules": "PASS",
+  "readyToCommit": true,
+  "nextTaskId": "CASHFLOW-CURSOR-132"
+}
