@@ -1397,23 +1397,24 @@ export function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen min-w-0 overflow-x-hidden bg-background" data-testid="dashboard-page">
       <div className="border-b">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <h1 className="text-2xl font-semibold tracking-tight">
+        <div className="container mx-auto max-w-full px-4 py-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <h1 className="truncate text-xl font-semibold tracking-tight sm:text-2xl">
                 {household.name}
               </h1>
               <p className="text-sm text-muted-foreground">
                 Household Cashflow Dashboard
               </p>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex shrink-0 items-center gap-4">
               <Link to="/bills/new">
-                <Button>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add Bill
+                <Button className="min-h-10">
+                  <Plus className="h-4 w-4 sm:mr-2" aria-hidden="true" />
+                  <span className="hidden sm:inline">Add Bill</span>
+                  <span className="sr-only sm:hidden">Add Bill</span>
                 </Button>
               </Link>
             </div>
@@ -1421,7 +1422,7 @@ export function DashboardPage() {
         </div>
       </div>
 
-      <div className="container mx-auto px-4 py-6">
+      <div className="container mx-auto max-w-full min-w-0 px-4 py-6">
         {settingsError && (
           <Alert variant="destructive" className="mb-4">
             <AlertDescription>
@@ -1437,7 +1438,7 @@ export function DashboardPage() {
           </p>
         )}
 
-        <Card className="mb-6">
+        <Card className="mb-6" data-testid="dashboard-current-amount-card">
           <CardHeader className="pb-2">
             <CardTitle className="text-base">Your current available amount</CardTitle>
           </CardHeader>
@@ -1453,7 +1454,7 @@ export function DashboardPage() {
               <Skeleton className="h-8 w-48" />
             ) : cashSnapshot ? (
               <div className="space-y-1">
-                <p className="text-2xl font-semibold">
+                <p className="text-xl font-semibold tabular-nums break-words sm:text-2xl">
                   {formatCurrency(Number(cashSnapshot.amount))}
                 </p>
                 <p className="text-sm text-muted-foreground">
@@ -1521,13 +1522,13 @@ export function DashboardPage() {
           </CardContent>
         </Card>
 
-        <Card className="mb-6">
+        <Card className="mb-6" data-testid="dashboard-bill-total-card">
           <CardHeader className="pb-2">
-            <div className="flex items-center justify-between gap-2">
-              <CardTitle className="text-base">My bill total for this view</CardTitle>
+            <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+              <CardTitle className="min-w-0 text-base">My bill total for this view</CardTitle>
               <Button
                 variant="link"
-                className="h-auto p-0 text-sm"
+                className="h-auto min-h-10 shrink-0 p-0 text-sm"
                 onClick={() => openDrilldown("bills")}
               >
                 View bills
@@ -1547,7 +1548,7 @@ export function DashboardPage() {
               <Skeleton className="h-8 w-48" />
             ) : (
               <div className="space-y-1">
-                <p className="text-2xl font-semibold">
+                <p className="text-xl font-semibold tabular-nums break-words sm:text-2xl">
                   {formatCurrency(myBillTotal ?? 0)}
                 </p>
                 <p className="text-sm text-muted-foreground">{myBillTotalViewLabel}</p>
@@ -1557,6 +1558,7 @@ export function DashboardPage() {
         </Card>
 
         <Card
+          data-testid="dashboard-unpaid-bills-card"
           className={`mb-6 ${shareKey !== null && !loading ? "cursor-pointer transition-colors hover:bg-muted/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" : ""}`}
           role={shareKey !== null && !loading ? "button" : undefined}
           tabIndex={shareKey !== null && !loading ? 0 : undefined}
@@ -1577,11 +1579,11 @@ export function DashboardPage() {
           }}
         >
           <CardHeader className="pb-2">
-            <div className="flex items-center justify-between gap-2">
-              <CardTitle className="text-base">My unpaid bills for this view</CardTitle>
+            <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+              <CardTitle className="min-w-0 text-base">My unpaid bills for this view</CardTitle>
               <Button
                 variant="link"
-                className="h-auto p-0 text-sm"
+                className="h-auto min-h-10 shrink-0 p-0 text-sm"
                 onClick={(event) => {
                   event.stopPropagation();
                   openDrilldown("unpaid-bills");
@@ -1604,7 +1606,7 @@ export function DashboardPage() {
               <Skeleton className="h-8 w-48" />
             ) : (
               <div className="space-y-1">
-                <p className="text-2xl font-semibold">
+                <p className="text-xl font-semibold tabular-nums break-words sm:text-2xl">
                   {formatDeductionAmount(myUnpaidBillTotal ?? 0)}
                 </p>
                 <p className="text-sm text-muted-foreground">{myBillTotalViewLabel}</p>
@@ -1617,6 +1619,7 @@ export function DashboardPage() {
         </Card>
 
         <Card
+          data-testid="dashboard-manual-expenses-card"
           className={`mb-6 ${
             shareKey !== null &&
             cashSnapshot &&
@@ -1670,11 +1673,11 @@ export function DashboardPage() {
           }}
         >
           <CardHeader className="pb-2">
-            <div className="flex items-center justify-between gap-2">
-              <CardTitle className="text-base">My manual expenses for this view</CardTitle>
+            <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+              <CardTitle className="min-w-0 text-base">My manual expenses for this view</CardTitle>
               <Button
                 variant="link"
-                className="h-auto p-0 text-sm"
+                className="h-auto min-h-10 shrink-0 p-0 text-sm"
                 onClick={(event) => {
                   event.stopPropagation();
                   openDrilldown("expenses");
@@ -1718,7 +1721,7 @@ export function DashboardPage() {
               <Skeleton className="h-8 w-48" />
             ) : (
               <div className="space-y-1">
-                <p className="text-2xl font-semibold">
+                <p className="text-xl font-semibold tabular-nums break-words sm:text-2xl">
                   {formatDeductionAmount(myManualExpenseTotalForView ?? 0)}
                 </p>
                 <p className="text-sm text-muted-foreground">{myBillTotalViewLabel}</p>
@@ -1738,13 +1741,13 @@ export function DashboardPage() {
           onOpenDrilldown={openDrilldown}
         />
 
-        <Card className="mb-6">
+        <Card className="mb-6" data-testid="dashboard-safe-to-spend-before-card">
           <CardHeader className="pb-2">
-            <div className="flex items-center justify-between gap-2">
-              <CardTitle className="text-base">Safe to spend before savings</CardTitle>
+            <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+              <CardTitle className="min-w-0 text-base">Safe to spend before savings</CardTitle>
               <Button
                 variant="link"
-                className="h-auto p-0 text-sm"
+                className="h-auto min-h-10 shrink-0 p-0 text-sm"
                 onClick={() => openDrilldown("safe-to-spend-before")}
               >
                 Why this amount?
@@ -1794,7 +1797,7 @@ export function DashboardPage() {
             ) : (
               <div className="space-y-4">
                 <div className="space-y-1">
-                  <p className="text-2xl font-semibold">
+                  <p className="text-xl font-semibold tabular-nums break-words sm:text-2xl">
                     {formatCurrency(safeToSpendBeforeSavings ?? 0)}
                   </p>
                   <p className="text-sm text-muted-foreground">{safeToSpendViewLabel}</p>
@@ -1802,27 +1805,27 @@ export function DashboardPage() {
                 <div className="rounded-lg border bg-muted/30 p-3 text-sm">
                   <p className="mb-2 font-medium">How this was calculated</p>
                   <dl className="space-y-1.5">
-                    <div className="flex items-baseline justify-between gap-4">
-                      <dt className="text-muted-foreground">Current available amount</dt>
-                      <dd className="font-medium tabular-nums">
+                    <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+                      <dt className="min-w-0 text-muted-foreground">Current available amount</dt>
+                      <dd className="shrink-0 font-medium tabular-nums">
                         {formatCurrency(Number(cashSnapshot.amount))}
                       </dd>
                     </div>
-                    <div className="flex items-baseline justify-between gap-4">
-                      <dt className="text-muted-foreground">Your unpaid bills in this view</dt>
-                      <dd className="font-medium tabular-nums">
+                    <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+                      <dt className="min-w-0 text-muted-foreground">Your unpaid bills in this view</dt>
+                      <dd className="shrink-0 font-medium tabular-nums">
                         {formatDeductionAmount(myUnpaidBillTotal ?? 0)}
                       </dd>
                     </div>
-                    <div className="flex items-baseline justify-between gap-4">
-                      <dt className="text-muted-foreground">Your manual expenses in this view</dt>
-                      <dd className="font-medium tabular-nums">
+                    <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+                      <dt className="min-w-0 text-muted-foreground">Your manual expenses in this view</dt>
+                      <dd className="shrink-0 font-medium tabular-nums">
                         {formatDeductionAmount(myManualExpenseTotalForView ?? 0)}
                       </dd>
                     </div>
-                    <div className="flex items-baseline justify-between gap-4 border-t pt-1.5">
-                      <dt className="font-medium">Safe to spend before savings</dt>
-                      <dd className="font-semibold tabular-nums">
+                    <div className="flex flex-col gap-0.5 border-t pt-1.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+                      <dt className="min-w-0 font-medium">Safe to spend before savings</dt>
+                      <dd className="shrink-0 font-semibold tabular-nums">
                         {formatCurrency(safeToSpendBeforeSavings ?? 0)}
                       </dd>
                     </div>
@@ -1840,6 +1843,7 @@ export function DashboardPage() {
         </Card>
 
         <Card
+          data-testid="dashboard-safe-to-spend-after-card"
           className={`mb-6 ${
             cashSnapshot &&
             shareKey !== null &&
@@ -1908,25 +1912,27 @@ export function DashboardPage() {
           }}
         >
           <CardHeader className="pb-2">
-            <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1">
-              <CardTitle className="mr-auto text-base">Safe to spend after savings</CardTitle>
-              <Button
-                variant="link"
-                className="h-auto p-0 text-sm"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  openDrilldown("savings");
-                }}
-              >
-                View savings
-              </Button>
-              <Button
-                variant="link"
-                className="h-auto p-0 text-sm"
-                onClick={() => openDrilldown("safe-to-spend-after")}
-              >
-                Why this amount?
-              </Button>
+            <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+              <CardTitle className="min-w-0 text-base">Safe to spend after savings</CardTitle>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <Button
+                  variant="link"
+                  className="h-auto min-h-10 shrink-0 p-0 text-sm"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    openDrilldown("savings");
+                  }}
+                >
+                  View savings
+                </Button>
+                <Button
+                  variant="link"
+                  className="h-auto min-h-10 shrink-0 p-0 text-sm"
+                  onClick={() => openDrilldown("safe-to-spend-after")}
+                >
+                  Why this amount?
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent>
@@ -1973,7 +1979,7 @@ export function DashboardPage() {
             ) : (
               <div className="space-y-4">
                 <div className="space-y-1">
-                  <p className="text-2xl font-semibold">
+                  <p className="text-xl font-semibold tabular-nums break-words sm:text-2xl">
                     {formatCurrency(safeToSpendAfterSavings ?? 0)}
                   </p>
                   <p className="text-sm text-muted-foreground">{safeToSpendViewLabel}</p>
@@ -1993,33 +1999,33 @@ export function DashboardPage() {
                 <div className="rounded-lg border bg-muted/30 p-3 text-sm">
                   <p className="mb-2 font-medium">How this was calculated</p>
                   <dl className="space-y-1.5">
-                    <div className="flex items-baseline justify-between gap-4">
-                      <dt className="text-muted-foreground">Safe to spend before savings</dt>
-                      <dd className="font-medium tabular-nums">
+                    <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+                      <dt className="min-w-0 text-muted-foreground">Safe to spend before savings</dt>
+                      <dd className="shrink-0 font-medium tabular-nums">
                         {formatCurrency(safeToSpendBeforeSavings ?? 0)}
                       </dd>
                     </div>
-                    <div className="flex items-baseline justify-between gap-4">
-                      <dt className="text-muted-foreground">Your savings target in this view</dt>
-                      <dd className="font-medium tabular-nums">
+                    <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+                      <dt className="min-w-0 text-muted-foreground">Your savings target in this view</dt>
+                      <dd className="shrink-0 font-medium tabular-nums">
                         {formatCurrency(mySavingsTargetForView)}
                       </dd>
                     </div>
-                    <div className="flex items-baseline justify-between gap-4">
-                      <dt className="text-muted-foreground">Your contributions counted in this view</dt>
-                      <dd className="font-medium tabular-nums">
+                    <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+                      <dt className="min-w-0 text-muted-foreground">Your contributions counted in this view</dt>
+                      <dd className="shrink-0 font-medium tabular-nums">
                         {formatCurrency(myContributionsForView)}
                       </dd>
                     </div>
-                    <div className="flex items-baseline justify-between gap-4">
-                      <dt className="text-muted-foreground">Remaining savings obligation in this view</dt>
-                      <dd className="font-medium tabular-nums">
+                    <div className="flex flex-col gap-0.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+                      <dt className="min-w-0 text-muted-foreground">Remaining savings obligation in this view</dt>
+                      <dd className="shrink-0 font-medium tabular-nums">
                         {formatDeductionAmount(remainingSavingsObligationForView)}
                       </dd>
                     </div>
-                    <div className="flex items-baseline justify-between gap-4 border-t pt-1.5">
-                      <dt className="font-medium">Safe to spend after savings</dt>
-                      <dd className="font-semibold tabular-nums">
+                    <div className="flex flex-col gap-0.5 border-t pt-1.5 sm:flex-row sm:items-baseline sm:justify-between sm:gap-4">
+                      <dt className="min-w-0 font-medium">Safe to spend after savings</dt>
+                      <dd className="shrink-0 font-semibold tabular-nums">
                         {formatCurrency(safeToSpendAfterSavings ?? 0)}
                       </dd>
                     </div>
@@ -2041,12 +2047,21 @@ export function DashboardPage() {
           error={debtSummaryError}
         />
 
-        <div className="mb-6 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="icon" onClick={() => navigateMonth("prev")}>
+        <div
+          className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+          data-testid="dashboard-month-controls"
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="icon"
+              className="min-h-10 min-w-10 shrink-0"
+              onClick={() => navigateMonth("prev")}
+              aria-label="Previous month"
+            >
               <ChevronLeft className="h-4 w-4" />
             </Button>
-            <div className="flex items-center gap-4">
+            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2 sm:flex-initial sm:gap-4">
               <Select
                 value={month.toString()}
                 onValueChange={(value) => {
@@ -2055,7 +2070,7 @@ export function DashboardPage() {
                   setViewedMonth(newDate);
                 }}
               >
-                <SelectTrigger className="w-[140px]">
+                <SelectTrigger className="min-h-10 w-full min-w-[8rem] flex-1 sm:w-[140px] sm:flex-none">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -2074,7 +2089,7 @@ export function DashboardPage() {
                   setViewedMonth(newDate);
                 }}
               >
-                <SelectTrigger className="w-[100px]">
+                <SelectTrigger className="min-h-10 w-full min-w-[5.5rem] flex-1 sm:w-[100px] sm:flex-none">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -2086,21 +2101,28 @@ export function DashboardPage() {
                 </SelectContent>
               </Select>
             </div>
-            <Button variant="outline" size="icon" onClick={() => navigateMonth("next")}>
+            <Button
+              variant="outline"
+              size="icon"
+              className="min-h-10 min-w-10 shrink-0"
+              onClick={() => navigateMonth("next")}
+              aria-label="Next month"
+            >
               <ChevronRight className="h-4 w-4" />
             </Button>
           </div>
-          <Button variant="ghost" onClick={goToCurrentMonth}>
+          <Button variant="ghost" className="min-h-10 self-start sm:self-auto" onClick={goToCurrentMonth}>
             Today
           </Button>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2" data-testid="dashboard-period-controls">
           <span className="text-sm font-medium text-muted-foreground">Period:</span>
           {(["1_14", "15_eom", "full"] as PeriodView[]).map((view) => (
             <Button
               key={view}
               size="sm"
+              className="min-h-10"
               variant={periodView === view ? "default" : "outline"}
               onClick={() => setPeriodView(view)}
             >
@@ -2155,17 +2177,17 @@ export function DashboardPage() {
           </div>
         )}
 
-        <div className="mt-6">
+        <div className="mt-6" data-testid="dashboard-monthly-summary">
           <Card>
             <CardHeader>
-              <div className="flex items-start justify-between gap-2">
-                <div>
+              <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+                <div className="min-w-0">
                   <CardTitle className="text-lg">{summaryTitle}</CardTitle>
                   <CardDescription>{summaryDescription}</CardDescription>
                 </div>
                 <Button
                   variant="link"
-                  className="h-auto shrink-0 p-0 text-sm"
+                  className="h-auto min-h-10 shrink-0 p-0 text-sm"
                   onClick={() => openDrilldown("bills")}
                 >
                   View bills
@@ -2173,14 +2195,17 @@ export function DashboardPage() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="grid gap-4 md:grid-cols-3">
-                <div className="flex items-center gap-3 rounded-lg border p-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 text-blue-600 dark:bg-blue-900 dark:text-blue-300">
+              <div
+                className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:grid-cols-3"
+                data-testid="dashboard-monthly-summary-grid"
+              >
+                <div className="flex min-w-0 items-center gap-3 rounded-lg border p-4">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600 dark:bg-blue-900 dark:text-blue-300">
                     <User className="h-5 w-5" />
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-sm font-medium text-muted-foreground">Teles Total</p>
-                    <p className="text-2xl font-semibold text-blue-600 dark:text-blue-400">
+                    <p className="text-xl font-semibold tabular-nums break-words text-blue-600 sm:text-2xl dark:text-blue-400">
                       {formatCurrency(summaryTelesTotal)}
                     </p>
                     <p className="text-xs text-muted-foreground">
@@ -2199,13 +2224,13 @@ export function DashboardPage() {
                     ) : null}
                   </div>
                 </div>
-                <div className="flex items-center gap-3 rounded-lg border p-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-100 text-green-600 dark:bg-green-900 dark:text-green-300">
+                <div className="flex min-w-0 items-center gap-3 rounded-lg border p-4">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-green-100 text-green-600 dark:bg-green-900 dark:text-green-300">
                     <User className="h-5 w-5" />
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-sm font-medium text-muted-foreground">Nicole Total</p>
-                    <p className="text-2xl font-semibold text-green-600 dark:text-green-400">
+                    <p className="text-xl font-semibold tabular-nums break-words text-green-600 sm:text-2xl dark:text-green-400">
                       {formatCurrency(summaryNicoleTotal)}
                     </p>
                     <p className="text-xs text-muted-foreground">
@@ -2224,13 +2249,13 @@ export function DashboardPage() {
                     ) : null}
                   </div>
                 </div>
-                <div className="flex items-center gap-3 rounded-lg border p-4">
-                  <div className="flex h-10 w-10 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <div className="flex min-w-0 items-center gap-3 rounded-lg border p-4 sm:col-span-2 md:col-span-1">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
                     <DollarSign className="h-5 w-5" />
                   </div>
-                  <div>
+                  <div className="min-w-0">
                     <p className="text-sm font-medium text-muted-foreground">Household Total</p>
-                    <p className="text-2xl font-semibold">
+                    <p className="text-xl font-semibold tabular-nums break-words sm:text-2xl">
                       {formatCurrency(summaryHouseholdTotal)}
                     </p>
                     <p className="text-xs text-muted-foreground">
@@ -2300,24 +2325,24 @@ function PeriodCard({
   return (
     <Card className={isCurrentPeriod ? "ring-2 ring-primary" : ""}>
       <CardHeader className="pb-4">
-        <div className="flex items-center justify-between">
-          <div>
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div className="min-w-0">
             <CardTitle className="text-lg">{title}</CardTitle>
             <CardDescription>
               {summary.bills.length} bill{summary.bills.length !== 1 ? "s" : ""}
             </CardDescription>
           </div>
           {isCurrentPeriod && (
-            <Badge variant="default">Current Period</Badge>
+            <Badge variant="default" className="shrink-0">Current Period</Badge>
           )}
         </div>
       </CardHeader>
       <CardContent>
         <p className="mb-3 text-xs text-muted-foreground italic">{fundingLabel}</p>
-        <div className="mb-4 grid grid-cols-3 gap-2 rounded-lg bg-muted/50 p-3">
-          <div className="text-center">
+        <div className="mb-4 grid grid-cols-1 gap-2 rounded-lg bg-muted/50 p-3 min-[400px]:grid-cols-3">
+          <div className="min-w-0 text-center min-[400px]:text-center">
             <p className="text-xs font-medium text-blue-600 dark:text-blue-400">Teles</p>
-            <p className="text-sm font-semibold">{formatCurrency(summary.telesTotal)}</p>
+            <p className="text-sm font-semibold tabular-nums break-words">{formatCurrency(summary.telesTotal)}</p>
             <p className="text-[10px] text-muted-foreground">
               Income {formatDashboardPaycheckIncomeAmount(paycheck.teles, formatCurrency)}
             </p>
@@ -2330,9 +2355,9 @@ function PeriodCard({
               </p>
             ) : null}
           </div>
-          <div className="text-center">
+          <div className="min-w-0 text-center">
             <p className="text-xs font-medium text-green-600 dark:text-green-400">Nicole</p>
-            <p className="text-sm font-semibold">{formatCurrency(summary.nicoleTotal)}</p>
+            <p className="text-sm font-semibold tabular-nums break-words">{formatCurrency(summary.nicoleTotal)}</p>
             <p className="text-[10px] text-muted-foreground">
               Income {formatDashboardPaycheckIncomeAmount(paycheck.nicole, formatCurrency)}
             </p>
@@ -2345,9 +2370,9 @@ function PeriodCard({
               </p>
             ) : null}
           </div>
-          <div className="text-center">
+          <div className="min-w-0 text-center">
             <p className="text-xs font-medium text-muted-foreground">Total</p>
-            <p className="text-sm font-semibold">{formatCurrency(summary.householdTotal)}</p>
+            <p className="text-sm font-semibold tabular-nums break-words">{formatCurrency(summary.householdTotal)}</p>
             <p className="text-[10px] text-muted-foreground">
               Income {formatCurrency(paycheck.householdTotal)}
             </p>
@@ -2384,9 +2409,9 @@ function PeriodCard({
                     </p>
                   )}
                 </div>
-                <div className="text-right shrink-0">
-                  <p className="text-sm font-medium">{formatCurrency(Number(bill.amount))}</p>
-                  <div className="mt-0.5 flex items-center gap-2 text-xs">
+                <div className="shrink-0 text-right">
+                  <p className="text-sm font-medium tabular-nums">{formatCurrency(Number(bill.amount))}</p>
+                  <div className="mt-0.5 flex flex-wrap items-center justify-end gap-x-2 gap-y-0.5 text-xs">
                     <span className="text-blue-600 dark:text-blue-400">
                       {formatCurrency(Number(bill.teles_amount))}
                     </span>

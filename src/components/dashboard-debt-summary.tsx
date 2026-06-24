@@ -35,9 +35,9 @@ function SummaryMetric({
   description?: string | null;
 }) {
   return (
-    <div className="rounded-lg border bg-card p-3">
+    <div className="min-w-0 rounded-lg border bg-card p-3">
       <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="mt-1 text-lg font-semibold tabular-nums">{value}</p>
+      <p className="mt-1 break-words text-base font-semibold tabular-nums sm:text-lg">{value}</p>
       {description ? (
         <p className="mt-1 text-xs text-muted-foreground">{description}</p>
       ) : null}
@@ -52,16 +52,16 @@ function UpcomingPaymentRow({
 }) {
   return (
     <div className="rounded-lg border p-3">
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0 space-y-1">
-          <p className="font-medium">{row.accountName}</p>
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 flex-1 space-y-1">
+          <p className="font-medium break-words">{row.accountName}</p>
           <p className="text-sm text-muted-foreground">{row.paymentDateLabel}</p>
           {row.periodBucketLabel ? (
             <p className="text-xs text-muted-foreground">{row.periodBucketLabel}</p>
           ) : null}
         </div>
-        <div className="text-right">
-          <p className="font-medium tabular-nums">{row.totalPaymentLabel}</p>
+        <div className="shrink-0 text-left sm:text-right">
+          <p className="font-medium tabular-nums break-words">{row.totalPaymentLabel}</p>
           <p className="mt-1 text-xs text-muted-foreground">
             <span className="text-blue-600 dark:text-blue-400">
               {row.telesAmountLabel}
@@ -131,17 +131,17 @@ export function DashboardDebtSummary({
   const nextPayment = formatDashboardDebtNextPaymentLabel(summary.totals);
 
   return (
-    <Card className="mb-6">
+    <Card className="mb-6" data-testid="dashboard-debt-summary">
       <CardHeader className="pb-2">
-        <div className="flex items-start justify-between gap-2">
-          <div>
+        <div className="flex flex-wrap items-start justify-between gap-x-3 gap-y-1">
+          <div className="min-w-0">
             <CardTitle className="flex items-center gap-2 text-base">
-              <TrendingDown className="h-4 w-4" aria-hidden="true" />
+              <TrendingDown className="h-4 w-4 shrink-0" aria-hidden="true" />
               Debt summary
             </CardTitle>
             <CardDescription>{summary.sourceContextLabel}</CardDescription>
           </div>
-          <Button variant="link" className="h-auto shrink-0 p-0 text-sm" asChild>
+          <Button variant="link" className="h-auto min-h-10 shrink-0 p-0 text-sm" asChild>
             <Link to="/debt">View debt details</Link>
           </Button>
         </div>
@@ -155,7 +155,7 @@ export function DashboardDebtSummary({
               <h3 id="dashboard-debt-summary-metrics" className="sr-only">
                 Active debt summary metrics
               </h3>
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
                 <SummaryMetric
                   label="Total original (active)"
                   value={formatCurrency(summary.totals.totalOriginal)}

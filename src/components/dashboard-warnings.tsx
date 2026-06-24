@@ -63,7 +63,7 @@ function WarningAction({
     return (
       <Button
         variant="link"
-        className="h-auto p-0 text-sm"
+        className="h-auto min-h-10 p-0 text-sm"
         onClick={() => onOpenDrilldown(warning.drilldownKind!)}
       >
         {warning.actionLabel ?? "Review details"}
@@ -75,7 +75,7 @@ function WarningAction({
     return (
       <Link
         to={warning.actionPath}
-        className="text-sm font-medium underline underline-offset-4"
+        className="inline-flex min-h-10 items-center text-sm font-medium underline underline-offset-4"
       >
         {warning.actionLabel}
       </Link>
@@ -125,7 +125,7 @@ export function DashboardWarnings({
   const warningCount = warnings.filter((warning) => warning.severity === "warning").length;
 
   return (
-    <Card className="mb-6">
+    <Card className="mb-6" data-testid="dashboard-warnings">
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-base">
           <AlertCircle className="h-4 w-4" aria-hidden="true" />

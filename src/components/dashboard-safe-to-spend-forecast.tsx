@@ -51,10 +51,10 @@ function SummaryMetric({
   tone?: "default" | "warning";
 }) {
   return (
-    <div className="rounded-lg border bg-card p-3">
+    <div className="min-w-0 rounded-lg border bg-card p-3">
       <p className="text-xs text-muted-foreground">{label}</p>
       <p
-        className={`mt-1 text-lg font-semibold tabular-nums ${
+        className={`mt-1 break-words text-base font-semibold tabular-nums sm:text-lg ${
           tone === "warning" ? "text-destructive" : ""
         }`}
       >
@@ -86,10 +86,10 @@ function ForecastEventRow({
         event.isShortfall ? "border-destructive/50 bg-destructive/5" : ""
       }`}
     >
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0 space-y-1">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 flex-1 space-y-1">
           <div className="flex flex-wrap items-center gap-2">
-            <p className="font-medium">{event.label}</p>
+            <p className="font-medium break-words">{event.label}</p>
             <Badge variant="outline">{formatForecastEventTypeLabel(event.type)}</Badge>
             {event.isShortfall ? (
               <Badge variant="destructive">Shortfall</Badge>
@@ -99,10 +99,10 @@ function ForecastEventRow({
           {event.periodLabel ? (
             <p className="text-xs text-muted-foreground">{event.periodLabel}</p>
           ) : null}
-          <p className="text-xs text-muted-foreground">{event.sourceLabel}</p>
+          <p className="break-words text-xs text-muted-foreground">{event.sourceLabel}</p>
         </div>
-        <div className="text-right">
-          <p className="font-medium tabular-nums">{amountLabel}</p>
+        <div className="shrink-0 text-left sm:text-right">
+          <p className="font-medium tabular-nums break-words">{amountLabel}</p>
           <p className="mt-1 text-xs text-muted-foreground">
             Balance {formatCurrency(event.projectedBalance)}
           </p>
@@ -188,12 +188,12 @@ export function DashboardSafeToSpendForecast({
   const { summary, events, emptyStateMessage } = forecast;
 
   return (
-    <Card className="mb-6">
+    <Card className="mb-6" data-testid="dashboard-forecast-section">
       <CardHeader className="pb-2">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
             <CardTitle className="flex items-center gap-2 text-base">
-              <LineChart className="h-4 w-4" aria-hidden="true" />
+              <LineChart className="h-4 w-4 shrink-0" aria-hidden="true" />
               Future safe-to-spend forecast
             </CardTitle>
             <CardDescription>
@@ -205,7 +205,10 @@ export function DashboardSafeToSpendForecast({
             value={windowKind}
             onValueChange={(value) => setWindowKind(value as ForecastWindowKind)}
           >
-            <SelectTrigger className="w-[220px]">
+            <SelectTrigger
+              className="min-h-10 w-full min-w-0 sm:w-[220px]"
+              data-testid="dashboard-forecast-window-select"
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -249,7 +252,7 @@ export function DashboardSafeToSpendForecast({
             <h3 id="forecast-summary-metrics" className="sr-only">
               Forecast summary metrics
             </h3>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
               <SummaryMetric
                 label="Starting available amount"
                 value={formatCurrency(summary.startingCash)}
@@ -331,7 +334,7 @@ export function DashboardSafeToSpendForecast({
               {events.length > 4 ? (
                 <button
                   type="button"
-                  className="text-sm font-medium text-primary underline-offset-4 hover:underline"
+                  className="min-h-10 text-sm font-medium text-primary underline-offset-4 hover:underline"
                   onClick={() => setShowDetails((current) => !current)}
                 >
                   {showDetails ? "Hide details" : "View details"}
