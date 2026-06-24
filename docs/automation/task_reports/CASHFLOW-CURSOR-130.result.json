@@ -1,0 +1,49 @@
+{
+  "taskId": "CASHFLOW-CURSOR-130",
+  "result": "PARTIAL",
+  "filesChanged": [
+    "scripts/lib/two-user-privacy-v2-test-support.mjs",
+    "scripts/seed-same-household-two-user-privacy-test-users.mjs",
+    "scripts/cleanup-same-household-two-user-privacy-test-users.mjs",
+    "scripts/smoke-same-household-two-user-privacy.mjs",
+    "src/lib/same-household-privacy-audit.ts",
+    "src/lib/same-household-privacy-audit.test.ts",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-130.md",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-130.result.json"
+  ],
+  "migrationsCreated": [],
+  "functionsCreated": [],
+  "dependenciesAdded": [],
+  "validation": {
+    "typecheck": "PASS",
+    "build": "PASS",
+    "testRun": "PASS",
+    "rlsAudit": "PASS",
+    "functionAudit": "PASS"
+  },
+  "sameHouseholdPrivacy": {
+    "seed": "BLOCKED",
+    "sharedDataVisibleToBoth": "NOT_RUN",
+    "personalViewOwnUserOnly": "NOT_RUN",
+    "ownerAdminRead": "NOT_RUN",
+    "ownerAdminReadOnly": "NOT_RUN",
+    "memberCannotAdminRead": "NOT_RUN",
+    "memberCannotSeeOwnerPrivateData": "NOT_RUN",
+    "rpcIsolation": "NOT_RUN",
+    "uiIsolation": "NOT_RUN",
+    "cleanupDryRun": "PASS",
+    "privateLeaksFound": 0
+  },
+  "browserSmoke": {
+    "required": true,
+    "result": "NOT_RUN"
+  },
+  "privacy": "PASS_WITH_OWNER_ADMIN_EXCEPTION",
+  "productRules": "PASS",
+  "readyToCommit": false,
+  "nextTaskId": "CASHFLOW-CURSOR-131",
+  "blockers": [
+    "SUPABASE_SERVICE_ROLE_KEY not present in local .env — seed and live API/RPC/UI smoke could not run",
+    "After adding service role key locally: run seed, smoke (API + optional UI on port 5230), then optionally destructive cleanup"
+  ]
+}
