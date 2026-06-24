@@ -32,3 +32,9 @@ dist-ssr
 # Automation runner scratch files
 docs/automation/.runner-current-prompt.md
 docs/automation/last-cursor-agent-output.log
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+!.env.example
