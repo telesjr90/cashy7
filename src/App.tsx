@@ -13,19 +13,12 @@ import { ExpensesPage } from "@/pages/expenses";
 import { CalendarPage } from "@/pages/calendar";
 import { MonthlyReportPage } from "@/pages/monthly-report";
 import { ModeToggle } from "@/components/mode-toggle";
+import { AppNavigation } from "@/components/app-navigation";
+import { MobileNavigation } from "@/components/mobile-navigation";
 import { Button } from "@/components/ui/button";
-import {
-  LogOut,
-  Home,
-  FileText,
-  LayoutDashboard,
-  CreditCard,
-  Settings,
-  Receipt,
-  CalendarDays,
-  Printer,
-} from "lucide-react";
+import { LogOut, LayoutDashboard } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
+import { getActiveNavItem } from "@/lib/navigation";
 
 function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
   const { user, household, signOut } = useAuth();
@@ -43,79 +36,39 @@ function AuthenticatedLayout({ children }: { children: React.ReactNode }) {
     await signOut();
   };
 
+  const activeNavItem = getActiveNavItem(location.pathname);
+
   return (
     <div className="min-h-screen bg-background">
       <header className="no-print sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container mx-auto flex h-14 items-center justify-between px-4">
-          <div className="flex items-center gap-6">
-            <Link to="/" className="flex items-center gap-2 font-semibold">
-              <LayoutDashboard className="h-5 w-5" />
+        <div className="container mx-auto flex h-14 items-center justify-between gap-2 px-4">
+          <div className="flex min-w-0 flex-1 items-center gap-3 md:gap-6">
+            <Link to="/" className="flex shrink-0 items-center gap-2 font-semibold">
+              <LayoutDashboard className="h-5 w-5" aria-hidden="true" />
               <span className="hidden sm:inline">Cashflow</span>
             </Link>
-            <nav className="flex items-center gap-4">
-              <Link to="/">
-                <Button variant={location.pathname === "/" ? "secondary" : "ghost"} size="sm">
-                  <Home className="mr-2 h-4 w-4" />
-                  Dashboard
-                </Button>
-              </Link>
-              <Link to="/bills">
-                <Button variant={location.pathname === "/bills" ? "secondary" : "ghost"} size="sm">
-                  <FileText className="mr-2 h-4 w-4" />
-                  Bills
-                </Button>
-              </Link>
-              <Link to="/debt">
-                <Button variant={location.pathname === "/debt" ? "secondary" : "ghost"} size="sm">
-                  <CreditCard className="mr-2 h-4 w-4" />
-                  Debt
-                </Button>
-              </Link>
-              <Link to="/expenses">
-                <Button
-                  variant={location.pathname === "/expenses" ? "secondary" : "ghost"}
-                  size="sm"
-                >
-                  <Receipt className="mr-2 h-4 w-4" />
-                  Expenses
-                </Button>
-              </Link>
-              <Link to="/calendar">
-                <Button
-                  variant={location.pathname === "/calendar" ? "secondary" : "ghost"}
-                  size="sm"
-                >
-                  <CalendarDays className="mr-2 h-4 w-4" />
-                  Calendar
-                </Button>
-              </Link>
-              <Link to="/reports/monthly">
-                <Button
-                  variant={location.pathname === "/reports/monthly" ? "secondary" : "ghost"}
-                  size="sm"
-                >
-                  <Printer className="mr-2 h-4 w-4" />
-                  Reports
-                </Button>
-              </Link>
-              <Link to="/settings">
-                <Button variant={location.pathname === "/settings" ? "secondary" : "ghost"} size="sm">
-                  <Settings className="mr-2 h-4 w-4" />
-                  Settings
-                </Button>
-              </Link>
-            </nav>
+            {activeNavItem ? (
+              <span
+                className="truncate text-sm font-medium text-muted-foreground md:hidden"
+                data-testid="mobile-current-route"
+              >
+                {activeNavItem.label}
+              </span>
+            ) : null}
+            <AppNavigation className="hidden md:flex" />
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex shrink-0 items-center gap-1 sm:gap-2">
             <ModeToggle />
             <Button variant="ghost" size="sm" onClick={handleSignOut}>
-              <LogOut className="mr-2 h-4 w-4" />
-              Sign Out
+              <LogOut className="h-4 w-4 sm:mr-2" aria-hidden="true" />
+              <span className="hidden sm:inline">Sign Out</span>
+              <span className="sr-only sm:hidden">Sign Out</span>
             </Button>
           </div>
         </div>
       </header>
-      <main>{children}</main>
+      <main className="pb-[calc(4rem+env(safe-area-inset-bottom))] md:pb-0">{children}</main>
+      <MobileNavigation />
     </div>
   );
 }
