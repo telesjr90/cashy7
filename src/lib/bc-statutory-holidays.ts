@@ -1,8 +1,62 @@
-/** MVP B.C. statutory holiday calendar for paycheck anchor adjustment (C114/C116). */
+/**
+ * B.C. statutory holiday calendar for paycheck anchor adjustment (C114–C116).
+ *
+ * Source of truth: Province of British Columbia Employment Standards Act definitions
+ * (https://www2.gov.bc.ca/gov/content/employment-business/employment-standards-advice/employment-standards/statutory-holidays)
+ *
+ * Strategy: **rule-based (Option B)** — deterministic formulas for recurring holidays,
+ * not a manually maintained yearly table. Good Friday uses the Western Easter algorithm.
+ * National Day for Truth and Reconciliation applies from 2021 onward only.
+ *
+ * Canada Day follows the BC ESA rule: when July 1 falls on Sunday, the statutory holiday
+ * is observed on Monday July 2 (July 1 is not listed as a holiday that year).
+ *
+ * We do **not** apply general observed-day substitution for other holidays. Paycheck anchors
+ * that land on a statutory holiday move to the previous business day (never forward).
+ *
+ * Verified forecast window: {@link BC_FORECAST_SUPPORTED_YEARS} (2022–2030). Rule-based
+ * dates can be computed for other years, but paycheck forecast should stay within the
+ * supported range until dates are re-verified against BC.gov.
+ *
+ * All date strings are local calendar `YYYY-MM-DD` values (no UTC midnight parsing).
+ */
 
 export interface ForecastYearRange {
   startYear: number;
   endYear: number;
+}
+
+/** Years verified against BC.gov for forecast and paycheck planning. */
+export const BC_FORECAST_SUPPORTED_YEARS = {
+  start: 2022,
+  end: 2030,
+} as const;
+
+export const BC_STATUTORY_HOLIDAY_SOURCE_URL =
+  "https://www2.gov.bc.ca/gov/content/employment-business/employment-standards-advice/employment-standards/statutory-holidays";
+
+/** Readable names aligned with the BC Employment Standards Act list (MVP). */
+export const BC_STATUTORY_HOLIDAY_NAMES = [
+  "New Year's Day",
+  "Family Day",
+  "Good Friday",
+  "Victoria Day",
+  "Canada Day",
+  "B.C. Day",
+  "Labour Day",
+  "National Day for Truth and Reconciliation",
+  "Thanksgiving Day",
+  "Remembrance Day",
+  "Christmas Day",
+] as const;
+
+export type BcStatutoryHolidayName = (typeof BC_STATUTORY_HOLIDAY_NAMES)[number];
+
+export function isForecastYearInSupportedRange(year: number): boolean {
+  return (
+    year >= BC_FORECAST_SUPPORTED_YEARS.start &&
+    year <= BC_FORECAST_SUPPORTED_YEARS.end
+  );
 }
 
 function formatIsoDate(year: number, month: number, day: number): string {
@@ -86,6 +140,26 @@ function mondayOnOrBefore(year: number, month: number, day: number): string {
   return formatIsoDateFromLocal(date);
 }
 
+/** Victoria Day: Monday preceding May 25 (BC ESA) — Monday on or before May 24. */
+function victoriaDay(year: number): string {
+  return mondayOnOrBefore(year, 5, 24);
+}
+
+/**
+ * Canada Day: July 1, except when July 1 is Sunday the statutory holiday is July 2 (BC ESA).
+ */
+function canadaDay(year: number): string {
+  const july1 = formatIsoDate(year, 7, 1);
+  if (toLocalDate(july1).getDay() === 0) {
+    return formatIsoDate(year, 7, 2);
+  }
+  return july1;
+}
+
+/**
+ * Returns sorted, deduplicated B.C. statutory holiday dates for a calendar year.
+ * Computes via deterministic rules; does not throw for out-of-range years.
+ */
 export function getBcStatutoryHolidayDatesForYear(year: number): string[] {
   const easter = computeWesternEasterSunday(year);
   const easterSunday = formatIsoDate(year, easter.month, easter.day);
@@ -93,8 +167,8 @@ export function getBcStatutoryHolidayDatesForYear(year: number): string[] {
     formatIsoDate(year, 1, 1),
     nthWeekdayOfMonth(year, 2, 1, 3),
     addDays(easterSunday, -2),
-    mondayOnOrBefore(year, 5, 24),
-    formatIsoDate(year, 7, 1),
+    victoriaDay(year),
+    canadaDay(year),
     nthWeekdayOfMonth(year, 8, 1, 1),
     nthWeekdayOfMonth(year, 9, 1, 1),
     formatIsoDate(year, 11, 11),
@@ -135,6 +209,7 @@ export function isBcStatutoryHoliday(
   return getBcStatutoryHolidaySet({ startYear: year, endYear: year }).has(isoDate);
 }
 
+/** Monday–Friday and not a B.C. statutory holiday. */
 export function isBusinessDay(
   isoDate: string,
   holidays?: ReadonlySet<string>
@@ -142,6 +217,10 @@ export function isBusinessDay(
   return !isWeekendDate(isoDate) && !isBcStatutoryHoliday(isoDate, holidays);
 }
 
+/**
+ * Moves backward to the nearest business day. Never moves forward.
+ * Uses year-1..year holiday lookup when no set is supplied (safe for year boundaries).
+ */
 export function adjustToPreviousBusinessDay(
   isoDate: string,
   holidays?: ReadonlySet<string>
