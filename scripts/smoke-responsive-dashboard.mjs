@@ -231,11 +231,7 @@ async function runDashboardResponsiveChecks(page, viewportLabel) {
     await warnings.waitFor({ state: "visible", timeout: 10000 });
   }
 
-  await page.getByTestId("dashboard-safe-to-spend-before-card").waitFor({
-    state: "visible",
-    timeout: 15000,
-  });
-  await page.getByTestId("dashboard-safe-to-spend-after-card").waitFor({
+  await page.getByTestId("dashboard-card-available-after-savings").waitFor({
     state: "visible",
     timeout: 15000,
   });

@@ -59,10 +59,6 @@ const VIEWPORTS = [
 const DASHBOARD_TEST_IDS = {
   availableAfterSavings: "dashboard-card-available-after-savings",
   totalAvailable: "dashboard-card-total-available",
-  toggleAvailableAfterSavings: "dashboard-card-toggle-available-after-savings",
-  toggleTotalAvailable: "dashboard-card-toggle-total-available",
-  detailsAvailableAfterSavings: "dashboard-card-details-available-after-savings",
-  detailsTotalAvailable: "dashboard-card-details-total-available",
   currentAmount: "dashboard-current-amount-card",
   openAvailableAfterSavings: "dashboard-drilldown-open-available-after-savings",
   openTotalAvailable: "dashboard-drilldown-open-total-available",
@@ -179,15 +175,6 @@ async function assertVisible(page, testId, label) {
   assert(await isVisible(page, testId), `${label}: [data-testid="${testId}"] should be visible`);
 }
 
-async function assertHiddenOrAbsent(page, testId, label) {
-  const count = await page.locator(`[data-testid="${testId}"]`).count();
-  if (count === 0) return;
-  assert(
-    !(await isVisible(page, testId)),
-    `${label}: [data-testid="${testId}"] should be hidden by default`
-  );
-}
-
 async function assertNonEmptyText(page, testId, label) {
   const text = await page
     .getByTestId(testId)
@@ -236,13 +223,10 @@ async function runDashboard(page, viewport) {
   }
   console.log(`${tag}: priority cards present and ordered`);
 
-  // Collapsed cards show title + amount only — large details hidden by default.
-  await assertHiddenOrAbsent(page, DASHBOARD_TEST_IDS.detailsAvailableAfterSavings, tag);
-  await assertHiddenOrAbsent(page, DASHBOARD_TEST_IDS.detailsTotalAvailable, tag);
-  console.log(`${tag}: inline details collapsed by default`);
-
-  await assertNoHorizontalOverflowDetailed(page, viewport.id, "/", "dashboard collapsed");
-  await assertNoUuidLabels(page, `${tag} collapsed`);
+  // Compact stat blocks show title + amount only; full detail lives in the
+  // drilldown panel opened from each block.
+  await assertNoHorizontalOverflowDetailed(page, viewport.id, "/", "dashboard blocks");
+  await assertNoUuidLabels(page, `${tag} blocks`);
 
   // Available-to-spend drilldown panel.
   await openDrilldownPanel(page, DASHBOARD_TEST_IDS.openAvailableAfterSavings, tag);

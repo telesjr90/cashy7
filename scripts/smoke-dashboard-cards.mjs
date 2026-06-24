@@ -32,33 +32,23 @@ const VIEWPORTS = [
 const CARD_TEST_IDS = {
   availableAfterSavings: "dashboard-card-available-after-savings",
   totalAvailable: "dashboard-card-total-available",
-  toggleAvailableAfterSavings: "dashboard-card-toggle-available-after-savings",
-  toggleTotalAvailable: "dashboard-card-toggle-total-available",
-  detailsAvailableAfterSavings: "dashboard-card-details-available-after-savings",
-  detailsTotalAvailable: "dashboard-card-details-total-available",
   currentAmount: "dashboard-current-amount-card",
-  safeToSpendBefore: "dashboard-safe-to-spend-before-card",
   unpaidBills: "dashboard-unpaid-bills-card",
   manualExpenses: "dashboard-manual-expenses-card",
   billTotal: "dashboard-bill-total-card",
+};
+
+const PANEL_TEST_IDS = {
+  panel: "dashboard-drilldown-panel",
+  panelClose: "dashboard-drilldown-panel-close",
+  openAvailableAfterSavings: "dashboard-drilldown-open-available-after-savings",
+  openTotalAvailable: "dashboard-drilldown-open-total-available",
 };
 
 async function assertElementVisible(page, testId, label) {
   const el = page.getByTestId(testId);
   const visible = await el.isVisible().catch(() => false);
   assert(visible, `${label}: [data-testid="${testId}"] should be visible`);
-}
-
-async function assertElementNotVisible(page, testId, label) {
-  // Details sections are hidden via Collapsible — they may not be in DOM or
-  // have display:none / hidden attribute.
-  const count = await page.locator(`[data-testid="${testId}"]`).count();
-  if (count === 0) {
-    return; // Not in DOM at all — counts as hidden.
-  }
-  const el = page.getByTestId(testId);
-  const visible = await el.isVisible().catch(() => false);
-  assert(!visible, `${label}: [data-testid="${testId}"] should be hidden (collapsed)`);
 }
 
 async function assertCardOrder(page, firstTestId, secondTestId, label) {
@@ -74,31 +64,48 @@ async function assertCardOrder(page, firstTestId, secondTestId, label) {
   );
 }
 
-async function expandCard(page, toggleTestId, detailsTestId, label) {
-  const toggle = page.getByTestId(toggleTestId);
-  const exists = (await toggle.count()) > 0;
+async function openPanelFromBlock(page, openTestId, label) {
+  const button = page.getByTestId(openTestId);
+  const exists = (await button.count()) > 0;
   if (!exists) {
-    console.warn(`${label}: toggle [data-testid="${toggleTestId}"] not found — skipping expand`);
+    console.warn(`${label}: open button [data-testid="${openTestId}"] not found — skipping`);
     return false;
   }
 
-  await toggle.click();
-  await page.waitForTimeout(300); // allow Collapsible animation
+  await button.click();
+  await page
+    .getByTestId(PANEL_TEST_IDS.panel)
+    .waitFor({ state: "visible", timeout: 10000 })
+    .catch(() => {});
 
-  const details = page.getByTestId(detailsTestId);
-  const visible = await details.isVisible().catch(() => false);
-  assert(visible, `${label}: details [data-testid="${detailsTestId}"] should be visible after expand`);
+  const visible = await page
+    .getByTestId(PANEL_TEST_IDS.panel)
+    .isVisible()
+    .catch(() => false);
+  assert(
+    visible,
+    `${label}: drilldown panel [data-testid="${PANEL_TEST_IDS.panel}"] should open after clicking the block`
+  );
   return true;
 }
 
-async function collapseCard(page, toggleTestId, detailsTestId, label) {
-  const toggle = page.getByTestId(toggleTestId);
-  await toggle.click();
-  await page.waitForTimeout(300);
+async function closePanel(page, label) {
+  const closeBtn = page.getByTestId(PANEL_TEST_IDS.panelClose);
+  if ((await closeBtn.count()) > 0) {
+    await closeBtn.click();
+  } else {
+    await page.keyboard.press("Escape");
+  }
+  await page
+    .getByTestId(PANEL_TEST_IDS.panel)
+    .waitFor({ state: "hidden", timeout: 10000 })
+    .catch(() => {});
 
-  const details = page.getByTestId(detailsTestId);
-  const visible = await details.isVisible().catch(() => false);
-  assert(!visible, `${label}: details [data-testid="${detailsTestId}"] should be hidden after collapse`);
+  const visible = await page
+    .getByTestId(PANEL_TEST_IDS.panel)
+    .isVisible()
+    .catch(() => false);
+  assert(!visible, `${label}: drilldown panel should be closed`);
 }
 
 async function assertNoRawUuids(page, label) {
@@ -162,72 +169,43 @@ async function runForViewport(browser, viewport) {
     );
     console.log(`[${viewport.id}] Card priority order OK`);
 
-    // 5. Details are hidden by default (collapsed)
-    await assertElementNotVisible(
-      page,
-      CARD_TEST_IDS.detailsAvailableAfterSavings,
-      `${viewport.id} available-after-savings details hidden by default`
-    );
-    await assertElementNotVisible(
-      page,
-      CARD_TEST_IDS.detailsTotalAvailable,
-      `${viewport.id} total-available details hidden by default`
-    );
-    console.log(`[${viewport.id}] Details hidden by default`);
-
-    // 6. No horizontal overflow in collapsed state
+    // 5. No horizontal overflow with the compact stat blocks laid out in a row
     await assertNoHorizontalOverflow(
       page,
-      `${viewport.id} collapsed cards no overflow`
+      `${viewport.id} stat blocks no overflow`
     );
     console.log(`[${viewport.id}] No horizontal overflow`);
 
-    // 7. Expand "Available to spend after savings"
-    const expandedAfterSavings = await expandCard(
+    // 6. Tapping "Available to spend after savings" opens its drilldown panel
+    const openedAfterSavings = await openPanelFromBlock(
       page,
-      CARD_TEST_IDS.toggleAvailableAfterSavings,
-      CARD_TEST_IDS.detailsAvailableAfterSavings,
-      `${viewport.id} expand available-after-savings`
+      PANEL_TEST_IDS.openAvailableAfterSavings,
+      `${viewport.id} open available-after-savings panel`
     );
-    if (expandedAfterSavings) {
-      console.log(`[${viewport.id}] Available-after-savings expanded OK`);
+    if (openedAfterSavings) {
+      console.log(`[${viewport.id}] Available-after-savings panel opened OK`);
       await assertNoHorizontalOverflow(
         page,
-        `${viewport.id} available-after-savings expanded no overflow`
+        `${viewport.id} available-after-savings panel no overflow`
       );
-
-      // 8. Collapse it again
-      await collapseCard(
-        page,
-        CARD_TEST_IDS.toggleAvailableAfterSavings,
-        CARD_TEST_IDS.detailsAvailableAfterSavings,
-        `${viewport.id} collapse available-after-savings`
-      );
-      console.log(`[${viewport.id}] Available-after-savings collapsed again OK`);
+      await closePanel(page, `${viewport.id} close available-after-savings panel`);
+      console.log(`[${viewport.id}] Available-after-savings panel closed OK`);
     }
 
-    // 9. Expand "Total amount available"
-    const expandedTotalAvailable = await expandCard(
+    // 7. Tapping "Total amount available" opens its drilldown panel
+    const openedTotalAvailable = await openPanelFromBlock(
       page,
-      CARD_TEST_IDS.toggleTotalAvailable,
-      CARD_TEST_IDS.detailsTotalAvailable,
-      `${viewport.id} expand total-available`
+      PANEL_TEST_IDS.openTotalAvailable,
+      `${viewport.id} open total-available panel`
     );
-    if (expandedTotalAvailable) {
-      console.log(`[${viewport.id}] Total-available expanded OK`);
+    if (openedTotalAvailable) {
+      console.log(`[${viewport.id}] Total-available panel opened OK`);
       await assertNoHorizontalOverflow(
         page,
-        `${viewport.id} total-available expanded no overflow`
+        `${viewport.id} total-available panel no overflow`
       );
-
-      // 10. Collapse it again
-      await collapseCard(
-        page,
-        CARD_TEST_IDS.toggleTotalAvailable,
-        CARD_TEST_IDS.detailsTotalAvailable,
-        `${viewport.id} collapse total-available`
-      );
-      console.log(`[${viewport.id}] Total-available collapsed again OK`);
+      await closePanel(page, `${viewport.id} close total-available panel`);
+      console.log(`[${viewport.id}] Total-available panel closed OK`);
     }
 
     // 11. No raw UUIDs visible
