@@ -1,0 +1,46 @@
+{
+  "taskId": "CASHFLOW-CURSOR-129",
+  "result": "PARTIAL",
+  "filesChanged": [
+    "scripts/lib/cross-household-privacy-test-support.mjs",
+    "scripts/seed-cross-household-privacy-test-users.mjs",
+    "scripts/cleanup-cross-household-privacy-test-users.mjs",
+    "scripts/smoke-cross-household-privacy.mjs",
+    "src/lib/cross-household-privacy-audit.ts",
+    "src/lib/cross-household-privacy-audit.test.ts",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-129.md",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-129.result.json"
+  ],
+  "migrationsCreated": [],
+  "functionsCreated": [],
+  "dependenciesAdded": [],
+  "validation": {
+    "typecheck": "PASS",
+    "build": "PASS",
+    "testRun": "PASS",
+    "rlsAudit": "PASS",
+    "functionAudit": "PASS"
+  },
+  "crossHouseholdPrivacy": {
+    "seed": "BLOCKED",
+    "apiIsolation": "NOT_RUN",
+    "rpcIsolation": "NOT_RUN",
+    "ownerAdminCrossHouseholdIsolation": "NOT_RUN",
+    "uiIsolation": "NOT_RUN",
+    "cleanupDryRun": "PASS",
+    "householdsTested": 0,
+    "crossHouseholdLeaksFound": 0
+  },
+  "browserSmoke": {
+    "required": true,
+    "result": "NOT_RUN"
+  },
+  "privacy": "PASS",
+  "productRules": "PASS",
+  "readyToCommit": false,
+  "nextTaskId": "CASHFLOW-CURSOR-130",
+  "blockers": [
+    "SUPABASE_SERVICE_ROLE_KEY not present in local .env — seed and live API/UI smoke could not run",
+    "After adding service role key locally: run seed, smoke, then optionally destructive cleanup"
+  ]
+}
