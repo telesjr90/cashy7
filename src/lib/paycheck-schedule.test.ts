@@ -3,6 +3,9 @@ import {
   adjustToPreviousBusinessDay,
   buildDashboardPaycheckIncomeByPerson,
   buildFixedPayDate,
+  buildForecastPaycheckDateDisplay,
+  buildForecastPaycheckDateDisplayFromIncomeEvents,
+  buildPaycheckDatePreview,
   buildPaycheckForecastIncomeEvents,
   buildPaycheckScheduleUpsertPayload,
   clampFixedPayDay,
@@ -11,6 +14,7 @@ import {
   computePayDatesInRange,
   filterOwnPaycheckIncomeEvents,
   formatDashboardPaycheckIncomeAmount,
+  formatPaycheckDisplayDate,
   getBcStatutoryHolidayDates,
   getFixedFifteenthAndThirtiethPayDates,
   getFifteenthAndLastBusinessDayPayDates,
@@ -22,14 +26,18 @@ import {
   isWeekendDate,
   normalizePaycheckScheduleSettings,
   paycheckScheduleDisplayLabelsArePrivacySafe,
+  PAYCHECK_DATE_ADJUSTMENT_COPY,
+  PAYCHECK_DATE_PREVIEW_TITLE,
   PAYCHECK_DASHBOARD_INCOME_NOT_CONFIGURED_LABEL,
   PAYCHECK_OTHER_USER_INCOME_LABEL,
   PAYCHECK_SCHEDULE_TYPE_LABELS,
   PAYCHECK_SETTINGS_AMOUNT_PRIVACY_COPY,
   PAYCHECK_SETTINGS_FORECAST_ONLY_COPY,
   PAYCHECK_SETTINGS_HOUSEHOLD_PRIVACY_COPY,
+  PAYCHECK_SETTINGS_NO_SCHEDULE_LABEL,
   validatePaycheckScheduleSettings,
 } from "@/lib/paycheck-schedule";
+import { BC_FORECAST_SUPPORTED_YEARS } from "@/lib/bc-statutory-holidays";
 import * as periodsModule from "@/lib/periods";
 
 const USER_ID = "user-teles";
@@ -647,10 +655,279 @@ describe("shared business-day helpers re-export", () => {
   });
 });
 
+describe("B.C. holiday hardening — both schedules share helpers", () => {
+  const schedule1530 = normalizePaycheckScheduleSettings({
+    amount: 2000,
+    scheduleType: "semi_monthly_15_30",
+    firstPayDay: 15,
+    secondPayDay: 30,
+    useLastBusinessDay: false,
+    isActive: true,
+    effectiveFrom: null,
+  });
+
+  const scheduleLastBd = normalizePaycheckScheduleSettings({
+    amount: 1990,
+    scheduleType: "semi_monthly_15_last_business_day",
+    firstPayDay: 15,
+    secondPayDay: null,
+    useLastBusinessDay: true,
+    isActive: true,
+    effectiveFrom: null,
+  });
+
+  it("applies the same 15th holiday adjustment on both schedules (April 2022 Good Friday)", () => {
+    expect(getFixedFifteenthAndThirtiethPayDates(2022, 4)[0]).toBe("2022-04-14");
+    expect(getFifteenthAndLastBusinessDayPayDates(2022, 4)[0]).toBe("2022-04-14");
+  });
+
+  it("uses September 29 2026 last business day on both schedules when Sep 30 is a holiday", () => {
+    expect(getFixedFifteenthAndThirtiethPayDates(2026, 9)).toEqual([
+      "2026-09-15",
+      "2026-09-29",
+    ]);
+    expect(getFifteenthAndLastBusinessDayPayDates(2026, 9)).toEqual([
+      "2026-09-15",
+      "2026-09-29",
+    ]);
+    expect(getLastBusinessDayOfMonth(2026, 9)).toBe("2026-09-29");
+  });
+
+  it("produces forecast income on adjusted dates for both schedule types", () => {
+    const range = { start: "2026-09-01", end: "2026-09-30" };
+    const events1530 = buildPaycheckForecastIncomeEvents({
+      settings: schedule1530,
+      range,
+      signedInUserId: USER_ID,
+      snapshotDate: "2026-08-31",
+    });
+    const eventsLastBd = buildPaycheckForecastIncomeEvents({
+      settings: scheduleLastBd,
+      range,
+      signedInUserId: USER_ID,
+      snapshotDate: "2026-08-31",
+    });
+
+    expect(events1530.map((event) => event.date)).toEqual(["2026-09-15", "2026-09-29"]);
+    expect(eventsLastBd.map((event) => event.date)).toEqual(["2026-09-15", "2026-09-29"]);
+    expect(events1530.some((event) => event.date === "2026-09-30")).toBe(false);
+    expect(eventsLastBd.some((event) => event.date === "2026-09-30")).toBe(false);
+  });
+
+  it("covers supported forecast years 2022 through 2030 without errors", () => {
+    const range = {
+      start: `${BC_FORECAST_SUPPORTED_YEARS.start}-01-01`,
+      end: `${BC_FORECAST_SUPPORTED_YEARS.end}-12-31`,
+    };
+
+    const dates1530 = getPaycheckDatesForSchedule(schedule1530, range);
+    const datesLastBd = getPaycheckDatesForSchedule(scheduleLastBd, range);
+
+    expect(dates1530.length).toBeGreaterThan(0);
+    expect(datesLastBd.length).toBeGreaterThan(0);
+    expect(dates1530.every((date) => isBusinessDay(date))).toBe(true);
+    expect(datesLastBd.every((date) => isBusinessDay(date))).toBe(true);
+    expect(dates1530.every((date) => /^\d{4}-\d{2}-\d{2}$/.test(date))).toBe(true);
+    expect(datesLastBd.every((date) => /^\d{4}-\d{2}-\d{2}$/.test(date))).toBe(true);
+  });
+});
+
 describe("no hardcoded paycheck runtime constants", () => {
   it("does not export Teles/Nicole paycheck fallbacks from periods module", () => {
     expect("TELES_PAYCHECK" in periodsModule).toBe(false);
     expect("NICOLE_PAYCHECK" in periodsModule).toBe(false);
     expect("paycheckIncome" in periodsModule).toBe(false);
+  });
+});
+
+describe("paycheck date preview display", () => {
+  const schedule1530 = normalizePaycheckScheduleSettings({
+    amount: 2127.08,
+    scheduleType: "semi_monthly_15_30",
+    firstPayDay: 15,
+    secondPayDay: 30,
+    useLastBusinessDay: false,
+    isActive: true,
+    effectiveFrom: null,
+  });
+
+  const scheduleLastBd = normalizePaycheckScheduleSettings({
+    amount: 1990,
+    scheduleType: "semi_monthly_15_last_business_day",
+    firstPayDay: 15,
+    secondPayDay: null,
+    useLastBusinessDay: true,
+    isActive: true,
+    effectiveFrom: null,
+  });
+
+  it("returns no preview dates and setup copy when no schedule exists", () => {
+    const preview = buildPaycheckDatePreview({
+      settings: null,
+      savedScheduleExists: false,
+    });
+
+    expect(preview.status).toBe("no_schedule");
+    expect(preview.dates).toEqual([]);
+    expect(preview.statusMessage).toBe(PAYCHECK_SETTINGS_NO_SCHEDULE_LABEL);
+  });
+
+  it("returns no preview dates for a disabled saved schedule", () => {
+    const preview = buildPaycheckDatePreview({
+      settings: normalizePaycheckScheduleSettings({
+        amount: 0,
+        scheduleType: "disabled",
+        firstPayDay: null,
+        secondPayDay: null,
+        useLastBusinessDay: false,
+        isActive: false,
+        effectiveFrom: null,
+      }),
+      savedScheduleExists: true,
+    });
+
+    expect(preview.status).toBe("disabled");
+    expect(preview.dates).toEqual([]);
+  });
+
+  it("uses adjusted dates for the 15th/30th schedule preview", () => {
+    const preview = buildPaycheckDatePreview({
+      settings: schedule1530,
+      savedScheduleExists: true,
+      fromDate: "2026-09-01",
+      maxDates: 4,
+    });
+
+    expect(preview.status).toBe("configured");
+    expect(preview.dates.map((entry) => entry.date)).toEqual([
+      "2026-09-15",
+      "2026-09-29",
+      "2026-10-15",
+      "2026-10-30",
+    ]);
+    expect(preview.dates.every((entry) => entry.amount === 2127.08)).toBe(true);
+    expect(formatPaycheckDisplayDate("2026-09-29")).toBe("Sep 29, 2026");
+  });
+
+  it("uses adjusted dates for the 15th and last business day schedule preview", () => {
+    const preview = buildPaycheckDatePreview({
+      settings: scheduleLastBd,
+      savedScheduleExists: true,
+      fromDate: "2026-09-01",
+      maxDates: 3,
+    });
+
+    expect(preview.status).toBe("configured");
+    expect(preview.dates.map((entry) => entry.date)).toEqual([
+      "2026-09-15",
+      "2026-09-29",
+      "2026-10-15",
+    ]);
+  });
+
+  it("includes a weekend-adjusted date in the preview", () => {
+    const preview = buildPaycheckDatePreview({
+      settings: schedule1530,
+      savedScheduleExists: true,
+      fromDate: "2026-08-01",
+      maxDates: 2,
+    });
+
+    expect(preview.dates.map((entry) => entry.date)).toEqual(["2026-08-14", "2026-08-28"]);
+  });
+
+  it("includes a holiday-adjusted date in the preview", () => {
+    const preview = buildPaycheckDatePreview({
+      settings: schedule1530,
+      savedScheduleExists: true,
+      fromDate: "2026-09-01",
+      maxDates: 2,
+    });
+
+    expect(preview.dates.map((entry) => entry.date)).toEqual(["2026-09-15", "2026-09-29"]);
+    expect(preview.dates.some((entry) => entry.date === "2026-09-30")).toBe(false);
+  });
+
+  it("uses forecast income event dates for dashboard display model", () => {
+    const range = { start: "2026-09-01", end: "2026-09-30" };
+    const incomeEvents = buildPaycheckForecastIncomeEvents({
+      settings: schedule1530,
+      range,
+      signedInUserId: USER_ID,
+      snapshotDate: "2026-08-31",
+    });
+    const display = buildForecastPaycheckDateDisplay({
+      incomeEvents,
+      signedInUserId: USER_ID,
+    });
+
+    expect(display.incomeConfigured).toBe(true);
+    expect(display.dates.map((entry) => entry.date)).toEqual(["2026-09-15", "2026-09-29"]);
+    expect(
+      buildForecastPaycheckDateDisplayFromIncomeEvents({
+        settings: schedule1530,
+        range,
+        signedInUserId: USER_ID,
+        snapshotDate: "2026-08-31",
+      }).dates.map((entry) => entry.date)
+    ).toEqual(["2026-09-15", "2026-09-29"]);
+  });
+
+  it("ignores other-user schedule events in forecast display", () => {
+    const ownEvents = buildPaycheckForecastIncomeEvents({
+      settings: schedule1530,
+      range: { start: "2026-06-01", end: "2026-06-30" },
+      signedInUserId: USER_ID,
+      snapshotDate: "2026-05-31",
+    });
+    const otherEvents = buildPaycheckForecastIncomeEvents({
+      settings: scheduleLastBd,
+      range: { start: "2026-06-01", end: "2026-06-30" },
+      signedInUserId: OTHER_USER_ID,
+      snapshotDate: "2026-05-31",
+    });
+    const display = buildForecastPaycheckDateDisplay({
+      incomeEvents: [...ownEvents, ...otherEvents],
+      signedInUserId: USER_ID,
+    });
+
+    expect(display.dates).toHaveLength(2);
+    expect(display.dates.every((entry) => entry.amount === 2127.08)).toBe(true);
+    expect(display.dates.some((entry) => entry.amount === 1990)).toBe(false);
+  });
+
+  it("keeps preview labels privacy-safe without raw UUIDs", () => {
+    const preview = buildPaycheckDatePreview({
+      settings: schedule1530,
+      savedScheduleExists: true,
+      fromDate: "2026-06-01",
+      maxDates: 2,
+    });
+
+    expect(
+      paycheckScheduleDisplayLabelsArePrivacySafe([
+        preview.title,
+        preview.scheduleLabel,
+        preview.adjustmentCopy,
+        ...preview.dates.map((entry) => entry.formattedDate),
+      ])
+    ).toBe(true);
+  });
+
+  it("includes required privacy and adjustment copy", () => {
+    const preview = buildPaycheckDatePreview({
+      settings: schedule1530,
+      savedScheduleExists: true,
+      fromDate: "2026-06-01",
+      maxDates: 1,
+    });
+
+    expect(preview.title).toBe(PAYCHECK_DATE_PREVIEW_TITLE);
+    expect(preview.adjustmentCopy).toBe(PAYCHECK_DATE_ADJUSTMENT_COPY);
+    expect(PAYCHECK_SETTINGS_AMOUNT_PRIVACY_COPY).toMatch(/Only you can see your paycheck amount/i);
+    expect(PAYCHECK_SETTINGS_FORECAST_ONLY_COPY).toMatch(/forecast only/i);
+    expect(PAYCHECK_SETTINGS_HOUSEHOLD_PRIVACY_COPY).toMatch(
+      /Other household members cannot see your paycheck settings/i
+    );
   });
 });

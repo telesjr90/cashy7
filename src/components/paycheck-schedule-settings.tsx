@@ -1,9 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Loader as Loader2 } from "lucide-react";
 import { formatCurrency } from "@/lib/format";
 import {
+  buildPaycheckDatePreview,
   defaultPaycheckScheduleSettings,
   mapPaycheckScheduleRow,
+  PAYCHECK_DATE_ADJUSTMENT_COPY,
   PAYCHECK_SCHEDULE_PRIVACY_COPY,
   PAYCHECK_SCHEDULE_TYPE_LABELS,
   PAYCHECK_SETTINGS_AMOUNT_PRIVACY_COPY,
@@ -131,6 +133,20 @@ export function PaycheckScheduleSettingsPanel({
   const showDisabledState =
     !loading && settings.scheduleType === "disabled" && Boolean(initialSchedule);
 
+  const datePreview = useMemo(() => {
+    const parsedAmount = amountInput.trim() === "" ? 0 : Number(amountInput);
+    const previewSettings: PaycheckScheduleSettings = {
+      ...settings,
+      amount: Number.isFinite(parsedAmount) ? parsedAmount : 0,
+    };
+
+    return buildPaycheckDatePreview({
+      settings: previewSettings,
+      savedScheduleExists: Boolean(initialSchedule),
+      maxDates: 4,
+    });
+  }, [settings, amountInput, initialSchedule]);
+
   return (
     <Card>
       <CardHeader>
@@ -212,6 +228,44 @@ export function PaycheckScheduleSettingsPanel({
                 </p>
               ) : null}
             </div>
+
+            <section
+              aria-labelledby="paycheck-date-preview-heading"
+              className="rounded-lg border bg-muted/30 p-4 space-y-3"
+            >
+              <div className="space-y-1">
+                <h3 id="paycheck-date-preview-heading" className="text-sm font-medium">
+                  {datePreview.title}
+                </h3>
+                {datePreview.scheduleLabel ? (
+                  <p className="text-xs text-muted-foreground">{datePreview.scheduleLabel}</p>
+                ) : null}
+                <p className="text-xs text-muted-foreground">{PAYCHECK_DATE_ADJUSTMENT_COPY}</p>
+                <p className="text-xs text-muted-foreground">
+                  {datePreview.businessDayExplanationCopy}
+                </p>
+              </div>
+
+              {datePreview.status === "configured" ? (
+                <ul className="space-y-2">
+                  {datePreview.dates.map((entry) => (
+                    <li
+                      key={entry.date}
+                      className="flex flex-wrap items-baseline justify-between gap-2 text-sm"
+                    >
+                      <span>{entry.formattedDate}</span>
+                      {entry.amount !== null ? (
+                        <span className="tabular-nums text-muted-foreground">
+                          {formatCurrency(entry.amount)}
+                        </span>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              ) : datePreview.statusMessage ? (
+                <p className="text-sm text-muted-foreground">{datePreview.statusMessage}</p>
+              ) : null}
+            </section>
 
             {saveError ? (
               <Alert variant="destructive">

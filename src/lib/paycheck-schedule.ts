@@ -1,7 +1,9 @@
 import type { BillShareKey } from "@/lib/bill-share";
+import { format, parseISO } from "date-fns";
 import {
   adjustToPreviousBusinessDay,
   getBcStatutoryHolidaySet,
+  isForecastYearInSupportedRange,
 } from "@/lib/bc-statutory-holidays";
 import { supabase } from "@/lib/supabase";
 import type { PeriodView } from "@/lib/periods";
@@ -61,6 +63,20 @@ export const PAYCHECK_SETTINGS_NO_SCHEDULE_LABEL =
 
 export const PAYCHECK_SETTINGS_DISABLED_LABEL =
   "Paycheck income is disabled. Your forecast will not include expected paychecks until you enable a schedule.";
+
+export const PAYCHECK_DATE_PREVIEW_TITLE = "Upcoming paycheck dates";
+
+export const PAYCHECK_DATE_ADJUSTMENT_COPY =
+  "Dates adjust backward for weekends and B.C. statutory holidays.";
+
+export const PAYCHECK_DATE_BUSINESS_DAY_EXPLANATION_COPY =
+  "Pay dates follow your selected schedule. When a date falls on a weekend or B.C. statutory holiday, the paycheck moves to the previous business day and never moves forward.";
+
+export const PAYCHECK_DATE_PREVIEW_AMOUNT_REQUIRED_LABEL =
+  "Enter a paycheck amount greater than zero to preview upcoming dates.";
+
+export const PAYCHECK_DATE_UNSUPPORTED_RANGE_COPY =
+  "Paycheck dates are verified for 2022 through 2030. Preview dates outside that range are unavailable until holidays are re-verified.";
 
 const PAYCHECK_SCHEDULE_TYPES: PaycheckScheduleType[] = [
   "disabled",
@@ -467,6 +483,206 @@ export function filterOwnPaycheckIncomeEvents<
   T extends { userId: string }
 >(events: readonly T[], signedInUserId: string): T[] {
   return events.filter((event) => event.userId === signedInUserId);
+}
+
+export type PaycheckDatePreviewStatus =
+  | "no_schedule"
+  | "disabled"
+  | "configured"
+  | "unsupported_range";
+
+export interface PaycheckDatePreviewEntry {
+  date: string;
+  formattedDate: string;
+  amount: number | null;
+}
+
+export interface PaycheckDatePreview {
+  status: PaycheckDatePreviewStatus;
+  title: string;
+  dates: PaycheckDatePreviewEntry[];
+  scheduleLabel: string | null;
+  adjustmentCopy: string;
+  businessDayExplanationCopy: string;
+  statusMessage: string | null;
+}
+
+export interface ForecastPaycheckDateDisplay {
+  title: string;
+  dates: PaycheckDatePreviewEntry[];
+  scheduleLabel: string | null;
+  adjustmentCopy: string;
+  businessDayExplanationCopy: string;
+  incomeConfigured: boolean;
+  emptyMessage: string | null;
+}
+
+export function formatPaycheckDisplayDate(isoDate: string): string {
+  return format(parseISO(isoDate), "MMM d, yyyy");
+}
+
+function resolvePreviewFromDate(fromDate?: string): string {
+  if (fromDate && /^\d{4}-\d{2}-\d{2}$/.test(fromDate)) {
+    return fromDate;
+  }
+
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function buildPreviewDateRange(fromDate: string, maxDates: number): ForecastDateRange {
+  const fromYear = Number(fromDate.slice(0, 4));
+  const fromMonth = Number(fromDate.slice(5, 7));
+  let year = fromYear;
+  let month = fromMonth + maxDates + 1;
+
+  while (month > 12) {
+    month -= 12;
+    year += 1;
+  }
+
+  const endDay = lastDayOfMonth(year, month);
+  return {
+    start: fromDate,
+    end: buildFixedPayDate(year, month, endDay),
+  };
+}
+
+function isDateRangeWithinSupportedForecastYears(range: ForecastDateRange): boolean {
+  const startYear = Number(range.start.slice(0, 4));
+  const endYear = Number(range.end.slice(0, 4));
+
+  for (let year = startYear; year <= endYear; year += 1) {
+    if (!isForecastYearInSupportedRange(year)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+function mapPayDatesToPreviewEntries(
+  payDates: readonly string[],
+  amount: number | null
+): PaycheckDatePreviewEntry[] {
+  return payDates.map((date) => ({
+    date,
+    formattedDate: formatPaycheckDisplayDate(date),
+    amount,
+  }));
+}
+
+export function buildPaycheckDatePreview(input: {
+  settings: PaycheckScheduleSettings | null | undefined;
+  savedScheduleExists?: boolean;
+  fromDate?: string;
+  maxDates?: number;
+}): PaycheckDatePreview {
+  const maxDates = input.maxDates ?? 4;
+  const fromDate = resolvePreviewFromDate(input.fromDate);
+  const basePreview = {
+    title: PAYCHECK_DATE_PREVIEW_TITLE,
+    adjustmentCopy: PAYCHECK_DATE_ADJUSTMENT_COPY,
+    businessDayExplanationCopy: PAYCHECK_DATE_BUSINESS_DAY_EXPLANATION_COPY,
+  };
+
+  if (!input.settings) {
+    return {
+      ...basePreview,
+      status: "no_schedule",
+      dates: [],
+      scheduleLabel: null,
+      statusMessage: PAYCHECK_SETTINGS_NO_SCHEDULE_LABEL,
+    };
+  }
+
+  const normalized = normalizePaycheckScheduleSettings(input.settings);
+  const scheduleLabel = PAYCHECK_SCHEDULE_TYPE_LABELS[normalized.scheduleType];
+
+  if (normalized.scheduleType === "disabled") {
+    return {
+      ...basePreview,
+      status: input.savedScheduleExists ? "disabled" : "no_schedule",
+      dates: [],
+      scheduleLabel,
+      statusMessage: input.savedScheduleExists
+        ? PAYCHECK_SETTINGS_DISABLED_LABEL
+        : PAYCHECK_SETTINGS_NO_SCHEDULE_LABEL,
+    };
+  }
+
+  if (!isPaycheckScheduleConfigured(normalized)) {
+    return {
+      ...basePreview,
+      status: "no_schedule",
+      dates: [],
+      scheduleLabel,
+      statusMessage: PAYCHECK_DATE_PREVIEW_AMOUNT_REQUIRED_LABEL,
+    };
+  }
+
+  const range = buildPreviewDateRange(fromDate, maxDates);
+  if (!isDateRangeWithinSupportedForecastYears(range)) {
+    return {
+      ...basePreview,
+      status: "unsupported_range",
+      dates: [],
+      scheduleLabel,
+      statusMessage: PAYCHECK_DATE_UNSUPPORTED_RANGE_COPY,
+    };
+  }
+
+  const payDates = computePayDatesInRange(normalized, range)
+    .filter((payDate) => payDate >= fromDate)
+    .slice(0, maxDates);
+
+  return {
+    ...basePreview,
+    status: "configured",
+    dates: mapPayDatesToPreviewEntries(payDates, normalized.amount),
+    scheduleLabel,
+    statusMessage: null,
+  };
+}
+
+export function buildForecastPaycheckDateDisplay(input: {
+  incomeEvents: readonly PaycheckForecastIncomeEvent[];
+  signedInUserId: string;
+}): ForecastPaycheckDateDisplay {
+  const ownEvents = filterOwnPaycheckIncomeEvents(
+    input.incomeEvents,
+    input.signedInUserId
+  ).sort((left, right) => left.date.localeCompare(right.date));
+
+  return {
+    title: PAYCHECK_DATE_PREVIEW_TITLE,
+    dates: mapPayDatesToPreviewEntries(
+      ownEvents.map((event) => event.date),
+      ownEvents[0]?.amount ?? null
+    ),
+    scheduleLabel: ownEvents[0]?.sourceLabel ?? null,
+    adjustmentCopy: PAYCHECK_DATE_ADJUSTMENT_COPY,
+    businessDayExplanationCopy: PAYCHECK_DATE_BUSINESS_DAY_EXPLANATION_COPY,
+    incomeConfigured: ownEvents.length > 0,
+    emptyMessage:
+      ownEvents.length > 0 ? null : FORECAST_INCOME_NOT_CONFIGURED_LABEL,
+  };
+}
+
+export function buildForecastPaycheckDateDisplayFromIncomeEvents(input: {
+  settings: PaycheckScheduleSettings;
+  range: ForecastDateRange;
+  signedInUserId: string;
+  snapshotDate?: string | null;
+}): ForecastPaycheckDateDisplay {
+  const incomeEvents = buildPaycheckForecastIncomeEvents(input);
+  return buildForecastPaycheckDateDisplay({
+    incomeEvents,
+    signedInUserId: input.signedInUserId,
+  });
 }
 
 export function buildPaycheckForecastIncomeEvents(input: {

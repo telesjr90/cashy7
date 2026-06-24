@@ -3,6 +3,10 @@ import { format, parseISO } from "date-fns";
 import { AlertTriangle, LineChart } from "lucide-react";
 import { formatCurrency, formatDeductionAmount } from "@/lib/format";
 import {
+  buildForecastPaycheckDateDisplay,
+  PAYCHECK_DATE_ADJUSTMENT_COPY,
+} from "@/lib/paycheck-schedule";
+import {
   buildSafeToSpendForecast,
   FORECAST_WINDOW_OPTIONS,
   formatForecastEventTypeLabel,
@@ -139,6 +143,28 @@ export function DashboardSafeToSpendForecast({
     });
   }, [forecastInput, windowKind]);
 
+  const paycheckDateDisplay = useMemo(() => {
+    if (!forecastInput || !forecast) {
+      return null;
+    }
+
+    const incomeEvents = forecast.events
+      .filter((event) => event.type === "income")
+      .map((event) => ({
+        id: event.id,
+        userId: forecastInput.signedInUserId,
+        date: event.date,
+        amount: event.amount,
+        label: event.label,
+        sourceLabel: event.sourceLabel,
+      }));
+
+    return buildForecastPaycheckDateDisplay({
+      incomeEvents,
+      signedInUserId: forecastInput.signedInUserId,
+    });
+  }, [forecast, forecastInput]);
+
   if (loading) {
     return (
       <Card className="mb-6">
@@ -255,6 +281,44 @@ export function DashboardSafeToSpendForecast({
                 value={summary.windowLabel}
               />
             </div>
+          </section>
+        ) : null}
+
+        {paycheckDateDisplay ? (
+          <section
+            aria-labelledby="forecast-paycheck-dates-heading"
+            className="rounded-lg border bg-muted/30 p-4 space-y-3"
+          >
+            <div className="space-y-1">
+              <h3 id="forecast-paycheck-dates-heading" className="text-sm font-medium">
+                {paycheckDateDisplay.title}
+              </h3>
+              {paycheckDateDisplay.scheduleLabel ? (
+                <p className="text-xs text-muted-foreground">
+                  {paycheckDateDisplay.scheduleLabel}
+                </p>
+              ) : null}
+              <p className="text-xs text-muted-foreground">{PAYCHECK_DATE_ADJUSTMENT_COPY}</p>
+            </div>
+            {paycheckDateDisplay.incomeConfigured ? (
+              <ul className="space-y-2">
+                {paycheckDateDisplay.dates.map((entry) => (
+                  <li
+                    key={entry.date}
+                    className="flex flex-wrap items-baseline justify-between gap-2 text-sm"
+                  >
+                    <span>{entry.formattedDate}</span>
+                    {entry.amount !== null ? (
+                      <span className="tabular-nums text-muted-foreground">
+                        {formatCurrency(entry.amount)}
+                      </span>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            ) : paycheckDateDisplay.emptyMessage ? (
+              <p className="text-sm text-muted-foreground">{paycheckDateDisplay.emptyMessage}</p>
+            ) : null}
           </section>
         ) : null}
 
