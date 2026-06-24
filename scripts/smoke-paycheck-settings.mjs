@@ -1,10 +1,11 @@
 /**
- * CASHFLOW-CURSOR-113/114/115/116/117 — Paycheck settings browser smoke.
+ * CASHFLOW-CURSOR-113/114/115/116/117/118 — Paycheck settings browser smoke.
  *
  * C114: selects and saves the 15th/30th schedule; verifies forecast privacy copy.
  * C115: selects and saves the 15th/last business day schedule.
  * C116: verifies business-day schedule labels and privacy copy after holiday hardening.
  * C117: verifies actual paycheck date preview in Settings and Dashboard forecast.
+ * C118: verifies forecast projected income, window selector, and adjusted paycheck dates.
  *
  * Env: TEST_EMAIL, TEST_PASSWORD (or CASHFLOW_OWNER_* from C112 seed)
  * Optional: CASHFLOW_E2E_BASE_URL (default http://127.0.0.1:5212)
@@ -133,13 +134,16 @@ async function main() {
       "Missing household privacy copy"
     );
 
+    await page.locator("#paycheck-schedule-type").click();
+    const scheduleOptionsText = await page.locator("body").innerText();
     assert(
-      settingsText.includes("previous business day") ||
-        settingsText.includes("B.C. holiday") ||
-        settingsText.includes("B.C. statutory holidays") ||
-        settingsText.includes("Dates adjust backward"),
+      scheduleOptionsText.includes("previous business day") ||
+        scheduleOptionsText.includes("B.C. holiday") ||
+        scheduleOptionsText.includes("B.C. statutory holidays") ||
+        scheduleOptionsText.includes("Dates adjust backward"),
       "Schedule labels should mention business-day or B.C. holiday adjustment"
     );
+    await page.keyboard.press("Escape");
 
     await page.locator("#paycheck-schedule-type").click();
     await page.getByRole("option", {
@@ -231,8 +235,41 @@ async function main() {
       dashboardText.includes(DATE_PREVIEW_COPY.adjustment),
       "Dashboard forecast should show business-day adjustment copy"
     );
+    assert(
+      dashboardText.includes("Income in forecast"),
+      "Dashboard forecast should show projected income summary metric"
+    );
+    assert(
+      dashboardText.includes("Includes your private expected paycheck schedule."),
+      "Dashboard forecast should show configured income label"
+    );
     assert(!dashboardText.includes("2127.08"), "Dashboard leaked other hardcoded Teles amount");
     assert(!dashboardText.includes("1990.11"), "Dashboard leaked hardcoded Nicole amount");
+
+    const forecastWindowSelect = page.locator('[role="combobox"]').filter({
+      has: page.getByText("Rest of this month"),
+    });
+    await forecastWindowSelect.click();
+    await page.getByRole("option", { name: "Next 90 days" }).click();
+    await page.getByText("Next 90 days", { exact: false }).first().waitFor({
+      timeout: 10000,
+    });
+    await page.getByText(DATE_PREVIEW_COPY.title, { exact: false }).first().waitFor({
+      timeout: 10000,
+    });
+
+    const next90Text = await page.locator("body").innerText();
+    assert(
+      next90Text.includes("Next 90 days"),
+      "Forecast window selector should update the displayed window"
+    );
+    assert(
+      next90Text.includes(uniqueAmountLastBd) ||
+        next90Text.includes(formattedCad) ||
+        next90Text.includes(formattedCad.replace(/\u00a0/g, " ")) ||
+        next90Text.includes(formattedApp),
+      "Next 90 days forecast should still show current-user projected income"
+    );
 
     for (const route of ROUTES) {
       await page.goto(`${BASE_URL}${route.path}`, { waitUntil: "domcontentloaded" });
@@ -251,14 +288,14 @@ async function main() {
       `Browser console errors: ${consoleErrors.join(" | ")}`
     );
 
-    console.log("CASHFLOW-CURSOR-117 browser smoke: PASS");
+    console.log("CASHFLOW-CURSOR-118 browser smoke: PASS");
   } finally {
     await browser.close();
   }
 }
 
 main().catch((error) => {
-  console.error("CASHFLOW-CURSOR-117 browser smoke: FAIL");
+  console.error("CASHFLOW-CURSOR-118 browser smoke: FAIL");
   console.error(error.message);
   process.exit(1);
 });

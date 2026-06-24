@@ -473,3 +473,237 @@ describe("buildSafeToSpendForecast", () => {
     expect(result.emptyStateMessage).toBe(FORECAST_MISSING_CASH_LABEL);
   });
 });
+
+describe("paycheck income in safe-to-spend forecast", () => {
+  const schedule1530 = normalizePaycheckScheduleSettings({
+    amount: 2127.08,
+    scheduleType: "semi_monthly_15_30",
+    firstPayDay: 15,
+    secondPayDay: 30,
+    useLastBusinessDay: false,
+    isActive: true,
+    effectiveFrom: null,
+  });
+
+  const scheduleLastBd = normalizePaycheckScheduleSettings({
+    amount: 1990,
+    scheduleType: "semi_monthly_15_last_business_day",
+    firstPayDay: 15,
+    secondPayDay: null,
+    useLastBusinessDay: true,
+    isActive: true,
+    effectiveFrom: null,
+  });
+
+  it("includes 15th/30th adjusted income events in the forecast", () => {
+    const result = buildSafeToSpendForecast({
+      ...baseInput,
+      windowKind: "rest_of_month",
+      paycheckSchedule: schedule1530,
+    });
+
+    const incomeEvents = result.events.filter((event) => event.type === "income");
+    expect(incomeEvents.map((event) => event.date)).toEqual(["2026-06-30"]);
+    expect(incomeEvents.every((event) => event.amount === 2127.08)).toBe(true);
+    expect(incomeEvents.some((event) => event.date === "2026-06-15")).toBe(false);
+  });
+
+  it("includes 15th and last-business-day adjusted income events in the forecast", () => {
+    const result = buildSafeToSpendForecast({
+      ...baseInput,
+      windowKind: "current_period",
+      periodView: "full",
+      selectedYear: 2026,
+      selectedMonth: 9,
+      today: "2026-09-01",
+      snapshotDate: "2026-08-31",
+      paycheckSchedule: scheduleLastBd,
+    });
+
+    const incomeEvents = result.events.filter((event) => event.type === "income");
+    expect(incomeEvents.map((event) => event.date)).toEqual(["2026-09-15", "2026-09-29"]);
+    expect(incomeEvents.every((event) => event.amount === 1990)).toBe(true);
+    expect(incomeEvents.some((event) => event.date === "2026-09-30")).toBe(false);
+  });
+
+  it("uses weekend-adjusted paycheck dates in forecast events", () => {
+    const result = buildSafeToSpendForecast({
+      ...baseInput,
+      windowKind: "current_period",
+      periodView: "full",
+      selectedYear: 2026,
+      selectedMonth: 8,
+      today: "2026-08-01",
+      snapshotDate: "2026-07-31",
+      paycheckSchedule: schedule1530,
+    });
+
+    const incomeDates = result.events
+      .filter((event) => event.type === "income")
+      .map((event) => event.date);
+    expect(incomeDates).toEqual(["2026-08-14", "2026-08-28"]);
+    expect(incomeDates.some((date) => date === "2026-08-15")).toBe(false);
+  });
+
+  it("uses holiday-adjusted paycheck dates in forecast events", () => {
+    const result = buildSafeToSpendForecast({
+      ...baseInput,
+      windowKind: "next_month",
+      today: "2026-08-22",
+      snapshotDate: "2026-08-20",
+      paycheckSchedule: schedule1530,
+    });
+
+    const incomeDates = result.events
+      .filter((event) => event.type === "income")
+      .map((event) => event.date);
+    expect(incomeDates).toEqual(["2026-09-15", "2026-09-29"]);
+    expect(incomeDates.some((date) => date === "2026-09-30")).toBe(false);
+  });
+
+  it("avoids shortfall when paycheck income on the same day covers the obligation", () => {
+    const withoutIncome = buildSafeToSpendForecast({
+      ...baseInput,
+      startingCash: 100,
+      bills: [makeBill({ id: "b1", due_date: "2026-06-30", teles_amount: 150 })],
+    });
+    expect(withoutIncome.summary.hasShortfall).toBe(true);
+
+    const withIncome = buildSafeToSpendForecast({
+      ...baseInput,
+      startingCash: 100,
+      bills: [makeBill({ id: "b1", due_date: "2026-06-30", teles_amount: 150 })],
+      paycheckSchedule: schedule1530,
+    });
+    expect(withIncome.summary.hasShortfall).toBe(false);
+    expect(withIncome.summary.projectedEndingBalance).toBeGreaterThan(0);
+  });
+
+  it("creates no income events for a disabled paycheck schedule", () => {
+    const disabled = normalizePaycheckScheduleSettings({
+      amount: 0,
+      scheduleType: "disabled",
+      firstPayDay: null,
+      secondPayDay: null,
+      useLastBusinessDay: false,
+      isActive: false,
+      effectiveFrom: null,
+    });
+
+    const result = buildSafeToSpendForecast({
+      ...baseInput,
+      paycheckSchedule: disabled,
+    });
+
+    expect(result.events.some((event) => event.type === "income")).toBe(false);
+    expect(result.summary.totalProjectedIncome).toBe(0);
+    expect(result.summary.incomeStatus).toBe("not_configured");
+    expect(result.summary.isIncomplete).toBe(true);
+  });
+
+  it("sets total projected income to the sum of signed-in-user income events", () => {
+    const result = buildSafeToSpendForecast({
+      ...baseInput,
+      windowKind: "days_60",
+      paycheckSchedule: schedule1530,
+    });
+
+    const incomeEvents = result.events.filter((event) => event.type === "income");
+    const incomeSum = incomeEvents.reduce((sum, event) => sum + event.amount, 0);
+    expect(result.summary.totalProjectedIncome).toBe(incomeSum);
+    expect(incomeSum).toBeGreaterThan(0);
+  });
+
+  it("sorts income and obligations chronologically in the event list", () => {
+    const result = buildSafeToSpendForecast({
+      ...baseInput,
+      windowKind: "days_60",
+      paycheckSchedule: schedule1530,
+      bills: [
+        makeBill({ id: "b1", due_date: "2026-07-15", teles_amount: 40 }),
+        makeBill({ id: "b2", due_date: "2026-06-24", teles_amount: 20 }),
+      ],
+    });
+
+    const datedEvents = result.events.filter((event) => event.type !== "starting_balance");
+    const dates = datedEvents.map((event) => event.date);
+    expect([...dates].sort()).toEqual(dates);
+    expect(datedEvents.some((event) => event.type === "income")).toBe(true);
+    expect(datedEvents.some((event) => event.type === "bill")).toBe(true);
+  });
+
+  it("uses deterministic same-day ordering by label", () => {
+    const result = buildSafeToSpendForecast({
+      ...baseInput,
+      paycheckSchedule: schedule1530,
+      bills: [
+        makeBill({
+          id: "same-day-bill",
+          name: "Internet",
+          due_date: "2026-06-30",
+          teles_amount: 25,
+        }),
+      ],
+    });
+
+    const sameDayEvents = result.events.filter(
+      (event) => event.date === "2026-06-30" && event.type !== "starting_balance"
+    );
+    expect(sameDayEvents.map((event) => event.label)).toEqual([
+      "Expected paycheck",
+      "Internet",
+    ]);
+  });
+
+  it.each([
+    ["current_period", "15_eom" as const, 2026, 6],
+    ["rest_of_month", "full" as const, 2026, 6],
+    ["next_month", "full" as const, 2026, 6],
+    ["days_30", "full" as const, 2026, 6],
+    ["days_60", "full" as const, 2026, 6],
+    ["days_90", "full" as const, 2026, 6],
+  ] as const)(
+    "includes paycheck income for forecast window %s",
+    (windowKind, periodView, selectedYear, selectedMonth) => {
+      const result = buildSafeToSpendForecast({
+        ...baseInput,
+        windowKind,
+        periodView,
+        selectedYear,
+        selectedMonth,
+        paycheckSchedule: schedule1530,
+      });
+
+      expect(result.summary.incomeStatus).toBe("configured");
+      expect(result.summary.totalProjectedIncome).toBeGreaterThan(0);
+      expect(result.events.some((event) => event.type === "income")).toBe(true);
+    }
+  );
+
+  it("builds income events from paycheck schedule without precomputed incomeEvents", () => {
+    const prebuilt = buildPaycheckForecastIncomeEvents({
+      settings: schedule1530,
+      range: buildDaysDateRange(30, TODAY),
+      signedInUserId: USER_ID,
+      snapshotDate: baseInput.snapshotDate,
+    });
+    const fromSchedule = buildSafeToSpendForecast({
+      ...baseInput,
+      paycheckSchedule: schedule1530,
+    });
+    const fromPrebuilt = buildSafeToSpendForecast({
+      ...baseInput,
+      paycheckSchedule: schedule1530,
+      incomeEvents: prebuilt,
+    });
+
+    const scheduleIncome = fromSchedule.events.filter((event) => event.type === "income");
+    const prebuiltIncome = fromPrebuilt.events.filter((event) => event.type === "income");
+    expect(scheduleIncome.map((event) => event.date)).toEqual(
+      prebuiltIncome.map((event) => event.date)
+    );
+    expect(fromSchedule.summary.totalProjectedIncome).toBe(
+      fromPrebuilt.summary.totalProjectedIncome
+    );
+  });
+});
