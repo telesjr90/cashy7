@@ -35,6 +35,7 @@ import type {
   SavingsGoalParticipant,
 } from "@/lib/types";
 import { MonthlyPrintableReport } from "@/components/monthly-printable-report";
+import { ReportsExpenseCharts } from "@/components/reports-expense-charts";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -471,6 +472,12 @@ export function MonthlyReportPage() {
       )}
 
       <MonthlyPrintableReport report={report} loading={loading} error={error} />
+
+      <ReportsExpenseCharts
+        expenses={manualExpenses}
+        cashflowStartDate={cashflowStartDate}
+        loading={loading}
+      />
     </div>
   );
 }

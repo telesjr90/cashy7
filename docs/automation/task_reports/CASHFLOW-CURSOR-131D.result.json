@@ -1,0 +1,49 @@
+{
+  "taskId": "CASHFLOW-CURSOR-131D",
+  "result": "PASS",
+  "filesChanged": [
+    "src/components/reports-expense-charts.tsx",
+    "src/pages/monthly-report.tsx",
+    "src/lib/report-chart-ui.test.ts",
+    "scripts/smoke-reports-charts.mjs",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-131D.md",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-131D.result.json"
+  ],
+  "migrationsCreated": [],
+  "functionsCreated": [],
+  "dependenciesAdded": [],
+  "validation": {
+    "typecheck": "PASS",
+    "build": "PASS",
+    "testRun": "PASS",
+    "rlsAudit": "PASS",
+    "functionAudit": "PASS"
+  },
+  "reportsCharts": {
+    "chartsSectionAdded": true,
+    "expensesByCategoryChart": true,
+    "expensesByMonthChart": true,
+    "expensesByPayPeriodChart": true,
+    "categoryByMonthChart": true,
+    "categoryByPayPeriodChart": true,
+    "usesC131CHelpers": true,
+    "emptyState": true,
+    "mobileSafe": true,
+    "noRawUuids": true,
+    "personalViewPrivacyPreserved": true,
+    "ownerAdminBehaviorPreserved": true,
+    "memberAdminDenied": true
+  },
+  "browserSmoke": {
+    "required": true,
+    "result": "PASS",
+    "viewports": [
+      { "id": "desktop-1280x800", "status": "PASS" },
+      { "id": "mobile-390x844", "status": "PASS" }
+    ]
+  },
+  "privacy": "PASS_WITH_OWNER_ADMIN_EXCEPTION",
+  "productRules": "PASS",
+  "readyToCommit": true,
+  "nextTaskId": "CASHFLOW-CURSOR-131E"
+}
