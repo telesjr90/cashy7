@@ -308,7 +308,7 @@ export function CalendarPage() {
   };
 
   return (
-    <div className="container mx-auto px-4 py-8">
+    <div className="container mx-auto min-w-0 overflow-x-hidden px-4 py-8">
       <div className="mb-6">
         <h1 className="text-3xl font-bold tracking-tight">Calendar</h1>
         <p className="mt-1 text-muted-foreground">
@@ -317,14 +317,14 @@ export function CalendarPage() {
       </div>
 
       <div
-        className="mb-6 flex items-center justify-between"
+        className="mb-6 flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
         data-testid="calendar-month-selector"
       >
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
           <Button variant="outline" size="icon" onClick={() => navigateMonth("prev")}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <div className="flex items-center gap-4">
+          <div className="flex min-w-0 flex-wrap items-center gap-2 sm:gap-4">
             <Select
               value={month.toString()}
               onValueChange={(value) => {
@@ -333,7 +333,7 @@ export function CalendarPage() {
                 setCurrentDate(newDate);
               }}
             >
-              <SelectTrigger className="w-[140px]">
+              <SelectTrigger className="w-[7.5rem] sm:w-[140px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -352,7 +352,7 @@ export function CalendarPage() {
                 setCurrentDate(newDate);
               }}
             >
-              <SelectTrigger className="w-[100px]">
+              <SelectTrigger className="w-[5.5rem] sm:w-[100px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>

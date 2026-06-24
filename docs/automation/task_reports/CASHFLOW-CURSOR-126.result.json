@@ -1,0 +1,32 @@
+{
+  "taskId": "CASHFLOW-CURSOR-126",
+  "result": "PASS",
+  "filesChanged": [
+    "scripts/smoke-android-viewports.mjs",
+    "scripts/lib/android-smoke-helpers.mjs",
+    "src/pages/calendar.tsx",
+    "src/components/cashflow-calendar.tsx",
+    "src/components/ui/sheet.tsx",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-126.md",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-126.result.json"
+  ],
+  "migrationsCreated": [],
+  "functionsCreated": [
+    "scripts/lib/android-smoke-helpers.mjs"
+  ],
+  "dependenciesAdded": [],
+  "validation": {
+    "typecheck": "PASS",
+    "build": "PASS",
+    "testRun": "PASS"
+  },
+  "browserSmoke": {
+    "required": true,
+    "result": "PASS",
+    "viewports": ["320x740", "390x844", "412x915", "1280x800"]
+  },
+  "privacy": "PASS",
+  "productRules": "PASS",
+  "readyToCommit": true,
+  "nextTaskId": "CASHFLOW-CURSOR-127"
+}

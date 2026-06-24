@@ -342,8 +342,8 @@ export function CashflowCalendar({
             for the full month timeline.
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="mb-2 grid grid-cols-7 gap-2">
+        <CardContent className="min-w-0">
+          <div className="mb-2 grid min-w-0 grid-cols-7 gap-1 sm:gap-2">
             {WEEKDAY_LABELS.map((label) => (
               <div
                 key={label}
@@ -353,11 +353,11 @@ export function CashflowCalendar({
               </div>
             ))}
           </div>
-          <div className="grid grid-cols-7 gap-2">
-            {calendar.gridWeeks.flatMap((week) =>
-              week.map((cell, index) => (
+          <div className="grid min-w-0 grid-cols-7 gap-1 sm:gap-2">
+            {calendar.gridWeeks.flatMap((week, weekIndex) =>
+              week.map((cell, cellIndex) => (
                 <DayCellButton
-                  key={cell.date ?? `blank-${index}`}
+                  key={cell.date ?? `blank-${weekIndex}-${cellIndex}`}
                   cell={cell}
                   onSelect={setSelectedDate}
                 />
@@ -389,7 +389,7 @@ export function CashflowCalendar({
       </Card>
 
       <Sheet open={selectedDate != null} onOpenChange={(open) => !open && setSelectedDate(null)}>
-        <SheetContent className="overflow-y-auto sm:max-w-lg">
+        <SheetContent className="w-full max-w-full overflow-y-auto sm:max-w-lg">
           <SheetHeader>
             <SheetTitle>
               {selectedDate ? formatCalendarDate(selectedDate) : "Day details"}
