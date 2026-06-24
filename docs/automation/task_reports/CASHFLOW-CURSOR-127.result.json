@@ -1,0 +1,38 @@
+{
+  "taskId": "CASHFLOW-CURSOR-127",
+  "result": "PASS",
+  "filesChanged": [
+    "src/lib/rls-audit.ts",
+    "src/lib/rls-audit.test.ts",
+    "scripts/audit-rls-policies.mjs",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-127-rls-matrix.md",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-127.md",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-127.result.json"
+  ],
+  "migrationsCreated": [],
+  "functionsCreated": [
+    "src/lib/rls-audit.ts",
+    "scripts/audit-rls-policies.mjs"
+  ],
+  "dependenciesAdded": [],
+  "validation": {
+    "typecheck": "PASS",
+    "build": "PASS",
+    "testRun": "PASS"
+  },
+  "rlsAudit": {
+    "matrixCreated": true,
+    "tablesReviewed": 21,
+    "storagePoliciesReviewed": true,
+    "gapsFound": 1,
+    "gapsFixed": 0
+  },
+  "browserSmoke": {
+    "required": false,
+    "result": "NOT_REQUIRED"
+  },
+  "privacy": "PASS",
+  "productRules": "PASS",
+  "readyToCommit": true,
+  "nextTaskId": "CASHFLOW-CURSOR-128"
+}
