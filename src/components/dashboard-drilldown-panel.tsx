@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { format, parseISO } from "date-fns";
+import { XIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,11 +14,14 @@ import {
 } from "@/components/ui/select";
 import {
   Sheet,
+  SheetClose,
   SheetContent,
   SheetDescription,
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
+import type { DashboardDebtSummaryResult } from "@/lib/dashboard-debt-summary";
+import type { DashboardWarning } from "@/lib/dashboard-warnings";
 import { formatCurrency, formatDeductionAmount } from "@/lib/format";
 import type { DashboardBillDrilldownRow } from "@/lib/dashboard-drilldowns";
 import type {
@@ -60,7 +64,10 @@ export type DashboardDrilldownKind =
   | "expenses"
   | "savings"
   | "safe-to-spend-before"
-  | "safe-to-spend-after";
+  | "safe-to-spend-after"
+  | "total-available"
+  | "debt"
+  | "warnings";
 
 export interface SafeToSpendBreakdown {
   currentAmount: number;
@@ -78,6 +85,8 @@ interface DashboardDrilldownPanelProps {
   onOpenChange: (open: boolean) => void;
   kind: DashboardDrilldownKind | null;
   viewLabel: string;
+  /** Pre-formatted primary amount to display in the panel header. */
+  panelAmount?: string | null;
   billRows?: DashboardBillDrilldownRow[];
   unpaidBillRows?: DashboardUnpaidBillDrilldownRow[];
   unpaidBillReconciliation?: DashboardUnpaidBillDrilldownReconciliation | null;
@@ -88,12 +97,24 @@ interface DashboardDrilldownPanelProps {
   savingsReconciliation?: DashboardSavingsDrilldownReconciliation | null;
   savingsHasSharedGoals?: boolean;
   safeToSpendBreakdown?: SafeToSpendBreakdown | null;
+  /** Cash/available amount for total-available panel. */
+  totalAvailableCash?: number | null;
+  /** Savings balance for total-available panel. */
+  totalSavingsBalance?: number;
+  /** Computed total for total-available panel. */
+  totalAmountAvailable?: number | null;
+  /** Debt summary for debt panel. */
+  debtSummary?: DashboardDebtSummaryResult | null;
+  /** Warnings relevant to the open panel kind (shown when present). */
+  relatedWarnings?: DashboardWarning[];
+  /** All dashboard warnings for the dedicated warnings panel. */
+  allWarnings?: DashboardWarning[];
   loading?: boolean;
   emptyMessage?: string;
   cashDeductionContextAvailable?: boolean;
 }
 
-function drilldownTitle(kind: DashboardDrilldownKind | null): string {
+export function drilldownTitle(kind: DashboardDrilldownKind | null): string {
   switch (kind) {
     case "bills":
       return "Bill details";
@@ -106,13 +127,19 @@ function drilldownTitle(kind: DashboardDrilldownKind | null): string {
     case "safe-to-spend-before":
       return "Safe to spend before savings";
     case "safe-to-spend-after":
-      return "Safe to spend after savings";
+      return "Available to spend after savings";
+    case "total-available":
+      return "Total amount available";
+    case "debt":
+      return "Debt summary";
+    case "warnings":
+      return "Dashboard warnings";
     default:
       return "Dashboard details";
   }
 }
 
-function drilldownDescription(
+export function drilldownDescription(
   kind: DashboardDrilldownKind | null,
   viewLabel: string
 ): string {
@@ -128,7 +155,13 @@ function drilldownDescription(
     case "safe-to-spend-before":
       return `How safe to spend before savings was calculated for ${viewLabel}.`;
     case "safe-to-spend-after":
-      return `How safe to spend after savings was calculated for ${viewLabel}.`;
+      return `How available to spend after savings was calculated for ${viewLabel}.`;
+    case "total-available":
+      return "Your current available amount plus your accumulated savings balance.";
+    case "debt":
+      return "Active household debt accounts and upcoming payment schedule.";
+    case "warnings":
+      return "Items that may affect your budget or cash flow.";
     default:
       return viewLabel;
   }
@@ -816,11 +849,227 @@ function SafeToSpendAfterBreakdown({
   );
 }
 
+function TotalAvailablePanel({
+  cash,
+  savingsBalance,
+  total,
+}: {
+  cash: number | null;
+  savingsBalance: number;
+  total: number | null;
+}) {
+  if (cash === null) {
+    return (
+      <div className="space-y-3">
+        <p className="text-sm text-muted-foreground">
+          Record your current available amount in{" "}
+          <Link to="/settings" className="font-medium underline underline-offset-4">
+            Settings
+          </Link>{" "}
+          to see your total amount available.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-muted-foreground">
+        Your total amount available includes your current available amount plus any
+        savings you have set aside. Savings contributions have been deducted from
+        cash via Pay &amp; deduct; adding them back shows your complete financial
+        position.
+      </p>
+      <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+        <dl className="space-y-1.5">
+          <div className="flex items-baseline justify-between gap-4">
+            <dt className="text-muted-foreground">Current available amount</dt>
+            <dd className="font-medium tabular-nums">{formatCurrency(cash)}</dd>
+          </div>
+          <div className="flex items-baseline justify-between gap-4">
+            <dt className="text-muted-foreground">Total savings balance</dt>
+            <dd className="font-medium tabular-nums">
+              {formatCurrency(savingsBalance)}
+            </dd>
+          </div>
+          <div className="flex items-baseline justify-between gap-4 border-t pt-1.5">
+            <dt className="font-medium">Total amount available</dt>
+            <dd className="font-semibold tabular-nums">
+              {total !== null ? formatCurrency(total) : "—"}
+            </dd>
+          </div>
+        </dl>
+      </div>
+      <div className="flex flex-wrap gap-3">
+        <Link
+          to="/settings"
+          className="text-sm font-medium underline underline-offset-4"
+        >
+          Update current amount
+        </Link>
+        <Link
+          to="/savings"
+          className="text-sm font-medium underline underline-offset-4"
+        >
+          Savings goals
+        </Link>
+      </div>
+    </div>
+  );
+}
+
+function DebtDrilldownPanel({
+  summary,
+}: {
+  summary: DashboardDebtSummaryResult | null;
+}) {
+  if (!summary || !summary.hasActiveDebts) {
+    return (
+      <div className="space-y-3">
+        <p className="text-sm text-muted-foreground">
+          {summary?.emptyStateMessage ??
+            "No active debt accounts. Add debts on the Debt page to track payoff progress."}
+        </p>
+        <Link
+          to="/debt"
+          className="text-sm font-medium underline underline-offset-4"
+        >
+          Go to Debt page
+        </Link>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      {summary.totals && (
+        <div className="rounded-lg border bg-muted/30 p-3 text-sm">
+          <p className="mb-2 font-medium">Debt totals</p>
+          <dl className="space-y-1.5">
+            <div className="flex items-baseline justify-between gap-4">
+              <dt className="text-muted-foreground">Total remaining</dt>
+              <dd className="font-medium tabular-nums">
+                {formatCurrency(summary.totals.totalRemaining)}
+              </dd>
+            </div>
+            <div className="flex items-baseline justify-between gap-4">
+              <dt className="text-muted-foreground">Total paid</dt>
+              <dd className="font-medium tabular-nums">
+                {formatCurrency(summary.totals.totalPaid)}
+              </dd>
+            </div>
+          </dl>
+        </div>
+      )}
+      {summary.upcomingPayments.length > 0 && (
+        <div>
+          <p className="mb-2 text-sm font-medium">Upcoming payments</p>
+          <ul className="space-y-2">
+            {summary.upcomingPayments.map((payment) => (
+              <li
+                key={payment.rowKey}
+                className="rounded-lg border p-3 text-sm"
+              >
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-medium">{payment.accountName}</p>
+                    <p className="text-muted-foreground">
+                      {payment.paymentDateLabel}
+                      {payment.periodBucketLabel
+                        ? ` · ${payment.periodBucketLabel}`
+                        : ""}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-semibold tabular-nums">
+                      {payment.totalPaymentLabel}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {payment.paidStatusLabel}
+                    </p>
+                  </div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      <Link
+        to="/debt"
+        className="text-sm font-medium underline underline-offset-4"
+      >
+        Go to Debt page
+      </Link>
+    </div>
+  );
+}
+
+function WarningsList({
+  warnings,
+  testId,
+}: {
+  warnings: DashboardWarning[];
+  testId?: string;
+}) {
+  if (warnings.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="space-y-2" data-testid={testId}>
+      <p className="text-sm font-medium">Warnings</p>
+      <ul className="space-y-2">
+        {warnings.map((warning) => (
+          <li
+            key={warning.id}
+            className="rounded-lg border p-3 text-sm"
+          >
+            <div className="flex flex-wrap items-start gap-2">
+              <Badge
+                variant={warning.severity === "critical" ? "destructive" : "outline"}
+                className="shrink-0"
+              >
+                {warning.severity}
+              </Badge>
+              <p className="font-medium">{warning.title}</p>
+            </div>
+            <p className="mt-1 text-muted-foreground">{warning.description}</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Affects: {warning.affectedArea}
+            </p>
+            {warning.actionPath && warning.actionLabel && (
+              <Link
+                to={warning.actionPath}
+                className="mt-2 block text-sm font-medium underline underline-offset-4"
+              >
+                {warning.actionLabel}
+              </Link>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function AllWarningsPanel({ warnings }: { warnings: DashboardWarning[] }) {
+  if (warnings.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        No warnings at this time. Your budget looks good!
+      </p>
+    );
+  }
+
+  return <WarningsList warnings={warnings} />;
+}
+
 export function DashboardDrilldownPanel({
   open,
   onOpenChange,
   kind,
   viewLabel,
+  panelAmount,
   billRows = [],
   unpaidBillRows = [],
   unpaidBillReconciliation = null,
@@ -831,6 +1080,12 @@ export function DashboardDrilldownPanel({
   savingsReconciliation = null,
   savingsHasSharedGoals = false,
   safeToSpendBreakdown = null,
+  totalAvailableCash = null,
+  totalSavingsBalance = 0,
+  totalAmountAvailable = null,
+  debtSummary = null,
+  relatedWarnings = [],
+  allWarnings = [],
   loading = false,
   emptyMessage,
   cashDeductionContextAvailable = true,
@@ -840,10 +1095,42 @@ export function DashboardDrilldownPanel({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="w-full overflow-y-auto sm:max-w-lg">
+      <SheetContent
+        className="w-full overflow-y-auto sm:max-w-lg"
+        showCloseButton={false}
+        data-testid="dashboard-drilldown-panel"
+      >
         <SheetHeader>
-          <SheetTitle>{drilldownTitle(kind)}</SheetTitle>
-          <SheetDescription>{drilldownDescription(kind, viewLabel)}</SheetDescription>
+          <div className="flex items-start gap-2">
+            <div className="min-w-0 flex-1">
+              <SheetTitle data-testid="dashboard-drilldown-panel-title">
+                {drilldownTitle(kind)}
+              </SheetTitle>
+              {panelAmount != null && (
+                <p
+                  className="mt-1 text-xl font-semibold tabular-nums"
+                  data-testid="dashboard-drilldown-panel-amount"
+                >
+                  {panelAmount}
+                </p>
+              )}
+              <SheetDescription>
+                {drilldownDescription(kind, viewLabel)}
+              </SheetDescription>
+            </div>
+            <SheetClose asChild>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 shrink-0"
+                data-testid="dashboard-drilldown-panel-close"
+                aria-label="Close panel"
+              >
+                <XIcon className="h-4 w-4" aria-hidden="true" />
+                <span className="sr-only">Close</span>
+              </Button>
+            </SheetClose>
+          </div>
         </SheetHeader>
 
         <div className="space-y-4 px-4 pb-6 pt-2">
@@ -861,32 +1148,46 @@ export function DashboardDrilldownPanel({
           ) : emptyMessage ? (
             <p className="text-sm text-muted-foreground">{emptyMessage}</p>
           ) : kind === "bills" || kind === "unpaid-bills" ? (
-            <>
+            <div data-testid="dashboard-drilldown-bills">
               <BillRowsList rows={billRowsForKind} kind={kind} />
               {kind === "unpaid-bills" && unpaidBillReconciliation && (
-                <DrilldownReconciliation reconciliation={unpaidBillReconciliation} />
+                <div className="mt-4">
+                  <DrilldownReconciliation reconciliation={unpaidBillReconciliation} />
+                </div>
               )}
               {kind === "unpaid-bills" && !cashDeductionContextAvailable && (
-                <p className="text-xs text-muted-foreground">
+                <p className="mt-3 text-xs text-muted-foreground">
                   {UNPAID_BILL_CASH_CONTEXT_UNAVAILABLE_MESSAGE}
                 </p>
               )}
-            </>
+              <div className="mt-4">
+                <Link
+                  to="/bills"
+                  className="text-sm font-medium underline underline-offset-4"
+                >
+                  Go to Bills page
+                </Link>
+              </div>
+            </div>
           ) : kind === "expenses" ? (
-            <ExpenseDrilldownSection
-              rows={expenseRows}
-              reconciliation={expenseReconciliation}
-              viewLabel={viewLabel}
-            />
+            <div data-testid="dashboard-drilldown-expenses">
+              <ExpenseDrilldownSection
+                rows={expenseRows}
+                reconciliation={expenseReconciliation}
+                viewLabel={viewLabel}
+              />
+            </div>
           ) : kind === "savings" ? (
-            <SavingsDrilldownSection
-              rows={savingsTargetRows}
-              summary={savingsSummary}
-              reconciliation={savingsReconciliation}
-              viewLabel={viewLabel}
-              hasSharedGoals={savingsHasSharedGoals}
-              cashDeductionContextAvailable={cashDeductionContextAvailable}
-            />
+            <div data-testid="dashboard-drilldown-savings">
+              <SavingsDrilldownSection
+                rows={savingsTargetRows}
+                summary={savingsSummary}
+                reconciliation={savingsReconciliation}
+                viewLabel={viewLabel}
+                hasSharedGoals={savingsHasSharedGoals}
+                cashDeductionContextAvailable={cashDeductionContextAvailable}
+              />
+            </div>
           ) : kind === "safe-to-spend-before" && safeToSpendBreakdown ? (
             <>
               <SafeToSpendBeforeBreakdown breakdown={safeToSpendBreakdown} />
@@ -895,9 +1196,82 @@ export function DashboardDrilldownPanel({
                 to avoid double-counting. Expenses paid through the app are not
                 counted again.
               </p>
+              {relatedWarnings.length > 0 && (
+                <WarningsList
+                  warnings={relatedWarnings}
+                  testId="dashboard-drilldown-warnings"
+                />
+              )}
             </>
-          ) : kind === "safe-to-spend-after" && safeToSpendBreakdown ? (
-            <SafeToSpendAfterBreakdown breakdown={safeToSpendBreakdown} />
+          ) : kind === "safe-to-spend-after" ? (
+            <div data-testid="dashboard-drilldown-available-after-savings">
+              {safeToSpendBreakdown ? (
+                <>
+                  <SafeToSpendAfterBreakdown breakdown={safeToSpendBreakdown} />
+                  <div className="mt-4 flex flex-wrap gap-3">
+                    <Link
+                      to="/bills"
+                      className="text-sm font-medium underline underline-offset-4"
+                    >
+                      Bills
+                    </Link>
+                    <Link
+                      to="/debt"
+                      className="text-sm font-medium underline underline-offset-4"
+                    >
+                      Debt
+                    </Link>
+                    <Link
+                      to="/savings"
+                      className="text-sm font-medium underline underline-offset-4"
+                    >
+                      Savings
+                    </Link>
+                    <Link
+                      to="/expenses"
+                      className="text-sm font-medium underline underline-offset-4"
+                    >
+                      Expenses
+                    </Link>
+                  </div>
+                </>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  Record your current amount in{" "}
+                  <Link
+                    to="/settings"
+                    className="font-medium underline underline-offset-4"
+                  >
+                    Settings
+                  </Link>{" "}
+                  to see the available-to-spend breakdown.
+                </p>
+              )}
+              {relatedWarnings.length > 0 && (
+                <div className="mt-4">
+                  <WarningsList
+                    warnings={relatedWarnings}
+                    testId="dashboard-drilldown-warnings"
+                  />
+                </div>
+              )}
+            </div>
+          ) : kind === "total-available" ? (
+            <div data-testid="dashboard-drilldown-total-available">
+              <TotalAvailablePanel
+                cash={totalAvailableCash}
+                savingsBalance={totalSavingsBalance}
+                total={totalAmountAvailable}
+              />
+            </div>
+          ) : kind === "debt" ? (
+            <div data-testid="dashboard-drilldown-debt">
+              <DebtDrilldownPanel summary={debtSummary} />
+            </div>
+          ) : kind === "warnings" ? (
+            <div data-testid="dashboard-drilldown-warnings">
+              <AllWarningsPanel warnings={allWarnings} />
+            </div>
           ) : (
             <p className="text-sm text-muted-foreground">
               Details are not available for this view yet.

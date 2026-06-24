@@ -1406,7 +1406,11 @@ export function DashboardPage() {
               paymentTransactionsLoading ||
               savingsParticipantsLoading ||
               savingsContributionsLoading
-            : false;
+            : drilldownKind === "total-available"
+              ? cashSnapshotLoading || savingsContributionsLoading
+              : drilldownKind === "debt"
+                ? debtSummaryLoading
+                : false;
 
   if (!household) {
     return null;
@@ -1461,6 +1465,8 @@ export function DashboardPage() {
           data-testid="dashboard-card-available-after-savings"
           toggleTestId="dashboard-card-toggle-available-after-savings"
           detailsTestId="dashboard-card-details-available-after-savings"
+          onOpenPanel={() => openDrilldown("safe-to-spend-after")}
+          openPanelTestId="dashboard-drilldown-open-available-after-savings"
           amountNode={
             cashSnapshotLoading ||
             loading ||
@@ -1602,6 +1608,8 @@ export function DashboardPage() {
           data-testid="dashboard-card-total-available"
           toggleTestId="dashboard-card-toggle-total-available"
           detailsTestId="dashboard-card-details-total-available"
+          onOpenPanel={() => openDrilldown("total-available")}
+          openPanelTestId="dashboard-drilldown-open-total-available"
           amountNode={
             totalAmountAvailableLoading ? (
               <Skeleton className="h-7 w-44" />
@@ -2257,6 +2265,13 @@ export function DashboardPage() {
         }}
         kind={drilldownKind}
         viewLabel={drilldownViewLabel}
+        panelAmount={
+          drilldownKind === "safe-to-spend-after" && safeToSpendAfterSavings !== null
+            ? formatCurrency(safeToSpendAfterSavings)
+            : drilldownKind === "total-available" && totalAmountAvailable !== null
+              ? formatCurrency(totalAmountAvailable)
+              : null
+        }
         billRows={drilldownBillRows}
         unpaidBillRows={unpaidBillDrilldown?.rows ?? []}
         unpaidBillReconciliation={unpaidBillDrilldown?.reconciliation ?? null}
@@ -2267,6 +2282,20 @@ export function DashboardPage() {
         savingsReconciliation={savingsDrilldown?.reconciliation ?? null}
         savingsHasSharedGoals={savingsDrilldown?.hasSharedGoals ?? false}
         safeToSpendBreakdown={safeToSpendBreakdown}
+        totalAvailableCash={cashSnapshot ? Number(cashSnapshot.amount) : null}
+        totalSavingsBalance={totalSavingsBalance}
+        totalAmountAvailable={totalAmountAvailable}
+        debtSummary={dashboardDebtSummary}
+        relatedWarnings={
+          drilldownKind === "safe-to-spend-after" || drilldownKind === "safe-to-spend-before"
+            ? dashboardWarnings.filter(
+                (w) =>
+                  w.category === "negative_safe_to_spend" ||
+                  w.category === "forecast_shortfall"
+              )
+            : []
+        }
+        allWarnings={dashboardWarnings}
         loading={drilldownLoading}
         emptyMessage={drilldownEmptyMessage}
         cashDeductionContextAvailable={!paymentTransactionsLoading}

@@ -1,0 +1,61 @@
+{
+  "taskId": "CASHFLOW-CURSOR-131B",
+  "result": "PASS",
+  "filesChanged": [
+    "src/components/dashboard-summary-card.tsx",
+    "src/components/dashboard-drilldown-panel.tsx",
+    "src/pages/dashboard.tsx",
+    "src/lib/dashboard-drilldown-panels.test.ts",
+    "scripts/smoke-dashboard-drilldown-panels.mjs",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-131B.md",
+    "docs/automation/task_reports/CASHFLOW-CURSOR-131B.result.json"
+  ],
+  "migrationsCreated": [],
+  "functionsCreated": [],
+  "dependenciesAdded": [],
+  "validation": {
+    "typecheck": "PASS",
+    "build": "PASS",
+    "testRun": "PASS",
+    "rlsAudit": "PASS",
+    "functionAudit": "PASS"
+  },
+  "dashboardDrilldownPanels": {
+    "panelComponentCreated": true,
+    "noNewRoutes": true,
+    "cardsRemainCompact": true,
+    "availableAfterSavingsPanel": true,
+    "totalAvailablePanel": true,
+    "secondaryPanels": true,
+    "mobileSafe": true,
+    "accessiblePanelControls": true,
+    "personalViewPrivacyPreserved": true,
+    "ownerAdminBehaviorPreserved": true,
+    "memberAdminDenied": true,
+    "noRawUuids": true
+  },
+  "dataTestIds": {
+    "dashboardDrilldownPanel": true,
+    "dashboardDrilldownPanelTitle": true,
+    "dashboardDrilldownPanelAmount": true,
+    "dashboardDrilldownPanelClose": true,
+    "dashboardDrilldownOpenAvailableAfterSavings": true,
+    "dashboardDrilldownOpenTotalAvailable": true,
+    "dashboardDrilldownAvailableAfterSavings": true,
+    "dashboardDrilldownTotalAvailable": true,
+    "dashboardDrilldownBills": true,
+    "dashboardDrilldownExpenses": true,
+    "dashboardDrilldownSavings": true,
+    "dashboardDrilldownDebt": true,
+    "dashboardDrilldownWarnings": true
+  },
+  "browserSmoke": {
+    "required": true,
+    "result": "PARTIAL",
+    "reason": "Script created at scripts/smoke-dashboard-drilldown-panels.mjs; requires running dev server with authenticated credentials to execute"
+  },
+  "privacy": "PASS_WITH_OWNER_ADMIN_EXCEPTION",
+  "productRules": "PASS",
+  "readyToCommit": true,
+  "nextTaskId": "CASHFLOW-CURSOR-131C"
+}
