@@ -1,0 +1,44 @@
+{
+  "taskId": "CASHFLOW-DEPLOY-002",
+  "result": "PARTIAL",
+  "filesChanged": [
+    "src/pages/login.tsx",
+    "scripts/smoke-google-login-button.mjs",
+    "docs/deployment/cloudflare-google-auth.md",
+    ".env.example",
+    "docs/automation/task_reports/CASHFLOW-DEPLOY-002.md",
+    "docs/automation/task_reports/CASHFLOW-DEPLOY-002.result.json"
+  ],
+  "migrationsCreated": [],
+  "functionsCreated": [],
+  "dependenciesAdded": [],
+  "validation": {
+    "typecheck": "PASS",
+    "build": "PASS",
+    "testRun": "PASS"
+  },
+  "googleSignIn": {
+    "buttonVisibleOnLogin": true,
+    "requiresExistingGoogleUser": false,
+    "usesSupabaseOAuth": true,
+    "redirectTo": "window.location.origin/login",
+    "serviceRoleInFrontend": "ABSENT",
+    "googleSecretInFrontend": "ABSENT"
+  },
+  "browserSmoke": {
+    "required": true,
+    "local": "PASS",
+    "production": "FAIL_UNTIL_DEPLOY"
+  },
+  "productionDeployNote": "Cloudflare Worker at https://cashy7.tjr-8fa.workers.dev serves commit fc5118b (email/password-only login). Redeploy after committing src/pages/login.tsx.",
+  "manualChecksRequired": [
+    "Deploy latest build to Cloudflare Workers",
+    "Open production /login and confirm Continue with Google is visible",
+    "Complete real Google OAuth login in browser",
+    "Confirm new Google user without membership gets safe app state or onboarding"
+  ],
+  "privacy": "PASS",
+  "productRules": "PASS",
+  "readyToCommit": true,
+  "nextTaskId": "CASHFLOW-CURSOR-128"
+}
