@@ -136,6 +136,7 @@ import {
 } from "@/components/ui/sheet";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
+import { ResponsiveListCard } from "@/components/responsive-list-card";
 import {
   Collapsible,
   CollapsibleContent,
@@ -991,7 +992,10 @@ export function ExpensesPage() {
   }
 
   return (
-    <div className="container mx-auto max-w-6xl space-y-6 px-4 py-6">
+    <div
+      className="container mx-auto max-w-6xl min-w-0 space-y-6 overflow-x-hidden px-4 py-6"
+      data-testid="expenses-page"
+    >
       <div className="flex items-center gap-3">
         <Receipt className="h-8 w-8 text-primary" />
         <div>
@@ -1282,7 +1286,7 @@ export function ExpensesPage() {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card data-testid="expenses-list-section">
           <CardHeader>
             <CardTitle>Recorded expenses</CardTitle>
             <CardDescription>
@@ -1335,9 +1339,9 @@ export function ExpensesPage() {
               )}
 
             {!loading && expenses.length > 0 && (
-              <div className="mb-4 space-y-3">
-                <div className="flex flex-wrap items-end gap-2">
-                  <div className="min-w-[12rem] flex-1 space-y-1">
+              <div className="mb-4 space-y-3" data-testid="expenses-filters">
+                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
+                  <div className="min-w-0 w-full flex-1 space-y-1">
                     <Label htmlFor="expense-search">Search</Label>
                     <div className="relative">
                       <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -1566,6 +1570,270 @@ export function ExpensesPage() {
                 )}
               </div>
             ) : (
+              <>
+                <div
+                  className="space-y-3 md:hidden"
+                  data-testid="expenses-mobile-list"
+                >
+                  {filteredExpenses.map((expense) => {
+                    const isAdjustment = isManualExpenseAdjustment(expense);
+                    const isPreStartExpense = isManualExpensePreStart(
+                      expense,
+                      cashflowStartDate
+                    );
+                    const hasPaymentTransaction = paymentByExpenseId.has(expense.id);
+                    const cashStatus = getCashDeductionStatus({
+                      isMarkedPaid: expense.is_paid,
+                      hasPaymentTransaction,
+                    });
+                    const paidThroughApp = isManualExpensePaidThroughApp(
+                      expense.id,
+                      paidManualExpenseIds
+                    );
+                    const canDelete = canDeleteManualExpense({
+                      createdByUserId: expense.created_by_user_id,
+                      userId: user.id,
+                      hasPaymentTransaction,
+                    });
+                    const originalExpense =
+                      expense.adjusts_manual_expense_id
+                        ? expenseById.get(expense.adjusts_manual_expense_id)
+                        : null;
+
+                    return (
+                      <ResponsiveListCard
+                        key={expense.id}
+                        testId="expenses-mobile-card"
+                        className={isPreStartExpense ? "bg-muted/30" : undefined}
+                      >
+                        <div className="flex items-start gap-3">
+                          {!isAdjustment ? (
+                            <Checkbox
+                              checked={expense.is_paid}
+                              disabled={
+                                markingPaidId === expense.id || expense.is_paid
+                              }
+                              onCheckedChange={() => void handleMarkPaid(expense)}
+                              aria-label={`Mark ${expense.description} paid`}
+                              className="mt-1"
+                            />
+                          ) : (
+                            <span className="w-4 shrink-0" aria-hidden="true" />
+                          )}
+                          <div className="min-w-0 flex-1 space-y-2">
+                            {isAdjustment && expense.adjustment_direction && (
+                              <p className="text-xs font-medium text-primary">
+                                Adjustment ·{" "}
+                                {adjustmentDirectionLabel(expense.adjustment_direction)}
+                              </p>
+                            )}
+                            <h3
+                              className={`text-base font-medium leading-snug ${
+                                expense.is_paid && !isAdjustment
+                                  ? "line-through text-muted-foreground"
+                                  : ""
+                              }`}
+                            >
+                              {expense.description}
+                            </h3>
+                            <div className="flex flex-wrap gap-2">
+                              {isPreStartExpense && (
+                                <Badge variant="secondary">
+                                  {EXPENSE_PRE_START_LABEL}
+                                </Badge>
+                              )}
+                              <Badge variant="outline">
+                                {expenseScopeLabel(expense.expense_scope)}
+                              </Badge>
+                            </div>
+                          </div>
+                          <p className="shrink-0 text-right text-base font-semibold tabular-nums">
+                            {formatCurrency(Number(expense.amount))}
+                          </p>
+                        </div>
+
+                        <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+                          <div>
+                            <dt className="text-xs text-muted-foreground">Date</dt>
+                            <dd>{formatDisplayDate(expense.expense_date)}</dd>
+                          </div>
+                          <div>
+                            <dt className="text-xs text-muted-foreground">Category</dt>
+                            <dd>{expense.category || "—"}</dd>
+                          </div>
+                          <div>
+                            <dt className="text-xs text-blue-600 dark:text-blue-400">
+                              Teles
+                            </dt>
+                            <dd className="tabular-nums">
+                              {formatCurrency(Number(expense.teles_amount))}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-xs text-green-600 dark:text-green-400">
+                              Nicole
+                            </dt>
+                            <dd className="tabular-nums">
+                              {formatCurrency(Number(expense.nicole_amount))}
+                            </dd>
+                          </div>
+                          <div className="col-span-2">
+                            <dt className="text-xs text-muted-foreground">Status</dt>
+                            <dd className="text-xs text-muted-foreground">
+                              {isAdjustment
+                                ? "Planning only"
+                                : cashDeductionStatusLabel(cashStatus)}
+                            </dd>
+                          </div>
+                        </dl>
+
+                        {isAdjustment && originalExpense && (
+                          <p className="text-xs text-muted-foreground">
+                            For: {originalExpense.description} (
+                            {formatCurrency(Number(originalExpense.amount))})
+                          </p>
+                        )}
+                        {isAdjustment && expense.adjustment_reason && (
+                          <p className="text-xs text-muted-foreground">
+                            Reason: {expense.adjustment_reason}
+                          </p>
+                        )}
+                        <p className="text-xs text-muted-foreground">
+                          {expenseSplitTypeLabel(expense.split_type)} ·{" "}
+                          {formatExpensePeriodBucket(expense.period_bucket)}
+                        </p>
+                        {expense.notes && (
+                          <p className="text-xs text-muted-foreground">{expense.notes}</p>
+                        )}
+
+                        <div className="flex flex-col gap-2 border-t pt-3">
+                          {isAdjustment ? (
+                            isDecreaseManualExpenseAdjustment(expense) ? (
+                              <div className="space-y-1">
+                                {canShowCashCreditActionForAdjustment(
+                                  expense,
+                                  creditedAdjustmentIds
+                                ) ? (
+                                  <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    className="w-full sm:w-auto"
+                                    disabled={creditingAdjustmentId === expense.id}
+                                    onClick={() => void handleCreditAdjustment(expense)}
+                                  >
+                                    Credit current amount
+                                  </Button>
+                                ) : isAdjustmentAlreadyCredited(
+                                    expense.id,
+                                    creditedAdjustmentIds
+                                  ) ? (
+                                  <p className="text-xs font-medium text-muted-foreground">
+                                    Credited to current amount
+                                  </p>
+                                ) : null}
+                                <p className="text-xs text-muted-foreground">
+                                  {CASH_CREDIT_UX_NOTE}
+                                </p>
+                              </div>
+                            ) : (
+                              <p className="text-xs text-muted-foreground">
+                                {ADJUSTMENT_PAY_DISABLED_MESSAGE}
+                              </p>
+                            )
+                          ) : cashStatus === "unpaid" ? (
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              className="w-full sm:w-auto"
+                              disabled={payingExpenseId === expense.id}
+                              onClick={() => void handlePay(expense)}
+                            >
+                              Pay & deduct cash
+                            </Button>
+                          ) : null}
+
+                          <div className="flex flex-wrap items-center gap-1">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              aria-label={`View details for ${expense.description}`}
+                              onClick={() => setDetailExpenseId(expense.id)}
+                            >
+                              <Eye className="mr-2 h-4 w-4" />
+                              Details
+                            </Button>
+                            {expense.created_by_user_id === user.id ? (
+                              <>
+                                {paidThroughApp ? (
+                                  <div className="w-full space-y-1">
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      onClick={() => startCreateAdjustment(expense)}
+                                    >
+                                      Create adjustment
+                                    </Button>
+                                    <p className="text-xs text-muted-foreground">
+                                      {PAID_THROUGH_APP_EDIT_MESSAGE}
+                                    </p>
+                                  </div>
+                                ) : (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    aria-label={`Edit ${expense.description}`}
+                                    onClick={() => startEditExpense(expense)}
+                                  >
+                                    <Pencil className="mr-2 h-4 w-4" />
+                                    Edit
+                                  </Button>
+                                )}
+                                {canDelete ? (
+                                  <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                      <Button
+                                        variant="ghost"
+                                        size="sm"
+                                        aria-label={`Delete ${expense.description}`}
+                                      >
+                                        <Trash2 className="mr-2 h-4 w-4" />
+                                        Delete
+                                      </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                      <AlertDialogHeader>
+                                        <AlertDialogTitle>Delete expense?</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                          This removes &quot;{expense.description}&quot; from
+                                          your expense history.
+                                        </AlertDialogDescription>
+                                      </AlertDialogHeader>
+                                      <AlertDialogFooter>
+                                        <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                        <AlertDialogAction
+                                          onClick={() => void handleDelete(expense.id)}
+                                        >
+                                          Delete
+                                        </AlertDialogAction>
+                                      </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                  </AlertDialog>
+                                ) : null}
+                                {paidThroughApp ? (
+                                  <p className="w-full text-xs text-muted-foreground">
+                                    {PAID_THROUGH_APP_DELETE_MESSAGE}
+                                  </p>
+                                ) : null}
+                              </>
+                            ) : null}
+                          </div>
+                        </div>
+                      </ResponsiveListCard>
+                    );
+                  })}
+                </div>
+
+                <div className="hidden md:block" data-testid="expenses-desktop-list">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -1815,6 +2083,8 @@ export function ExpensesPage() {
                   })}
                 </TableBody>
               </Table>
+                </div>
+              </>
             )}
           </CardContent>
         </Card>

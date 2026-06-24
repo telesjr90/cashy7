@@ -105,6 +105,7 @@ import {
   resolveBillPaymentTransaction,
 } from "@/lib/bill-detail";
 import { Badge } from "@/components/ui/badge";
+import { ResponsiveListCard } from "@/components/responsive-list-card";
 import {
   DEBT_LINKED_BILL_DELETE_MESSAGE,
   DEBT_LINKED_BILL_EDIT_MESSAGE,
@@ -670,7 +671,10 @@ export function BillsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div
+      className="min-h-screen min-w-0 overflow-x-hidden bg-background"
+      data-testid="bills-page"
+    >
       <div className="border-b">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
@@ -1047,9 +1051,9 @@ export function BillsPage() {
               )}
 
             {!loading && bills.length > 0 && (
-              <div className="mb-4 space-y-3">
-                <div className="flex flex-wrap items-end gap-2">
-                  <div className="min-w-[12rem] flex-1 space-y-1">
+              <div className="mb-4 space-y-3" data-testid="bills-filters">
+                <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
+                  <div className="min-w-0 w-full flex-1 space-y-1">
                     <Label htmlFor="bill-search">Search</Label>
                     <div className="relative">
                       <Search className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -1296,6 +1300,232 @@ export function BillsPage() {
                 )}
               </div>
             ) : (
+              <>
+                <div
+                  className="space-y-3 md:hidden"
+                  data-testid="bills-mobile-list"
+                >
+                  {displayedBills.map((bill) => {
+                    const debtLinked = isDebtLinkedBill(bill.id);
+                    const cashStatus = getCashDeductionStatus({
+                      isMarkedPaid: bill.is_paid,
+                      hasPaymentTransaction: billHasCashDeduction(bill.id),
+                    });
+                    const needsConfirmation = needsVariableAmountConfirmation(
+                      bill,
+                      variableBillContext
+                    );
+                    const isGeneratedVariable = isGeneratedVariableBillInstance(
+                      bill,
+                      variableBillContext
+                    );
+                    const isPreStartBill = isBillInstancePreStart(
+                      bill,
+                      cashflowStartDate
+                    );
+
+                    return (
+                      <ResponsiveListCard
+                        key={bill.id}
+                        testId="bills-mobile-card"
+                        className={isPreStartBill ? "bg-muted/30" : undefined}
+                      >
+                        <div className="flex items-start gap-3">
+                          <Checkbox
+                            checked={bill.is_paid}
+                            onCheckedChange={() => togglePaid(bill)}
+                            aria-label={`Mark ${bill.name} paid`}
+                            className="mt-1"
+                          />
+                          <div className="min-w-0 flex-1 space-y-2">
+                            <h3
+                              className={`text-base font-medium leading-snug ${
+                                bill.is_paid
+                                  ? "line-through text-muted-foreground"
+                                  : ""
+                              }`}
+                            >
+                              {bill.name}
+                            </h3>
+                            {!debtLinked && (
+                              <p className="text-xs text-muted-foreground">
+                                Source:{" "}
+                                {getBillInstanceSourceLabel({
+                                  billId: bill.bill_id,
+                                  name: bill.name,
+                                  notes: bill.notes,
+                                })}
+                                {isGeneratedVariable ? " · Variable amount" : ""}
+                              </p>
+                            )}
+                            <div className="flex flex-wrap gap-2">
+                              {needsConfirmation && (
+                                <Badge
+                                  variant="outline"
+                                  className="border-amber-500 text-amber-700 dark:text-amber-300"
+                                >
+                                  Confirm amount
+                                </Badge>
+                              )}
+                              {isPreStartBill && (
+                                <Badge variant="secondary">
+                                  {BILL_PRE_START_LABEL}
+                                </Badge>
+                              )}
+                            </div>
+                          </div>
+                          <p className="shrink-0 text-right text-base font-semibold tabular-nums">
+                            {formatCurrency(Number(bill.amount))}
+                          </p>
+                        </div>
+
+                        <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+                          <div>
+                            <dt className="text-xs text-muted-foreground">Due</dt>
+                            <dd>
+                              {bill.due_date
+                                ? format(new Date(bill.due_date), "MMM d")
+                                : "-"}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-xs text-muted-foreground">Period</dt>
+                            <dd>
+                              {bill.period_bucket === "1_14"
+                                ? "1st–14th"
+                                : "15th–EOM"}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-xs text-blue-600 dark:text-blue-400">
+                              Teles
+                            </dt>
+                            <dd className="tabular-nums">
+                              {formatCurrency(Number(bill.teles_amount))}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-xs text-green-600 dark:text-green-400">
+                              Nicole
+                            </dt>
+                            <dd className="tabular-nums">
+                              {formatCurrency(Number(bill.nicole_amount))}
+                            </dd>
+                          </div>
+                          <div className="col-span-2">
+                            <dt className="text-xs text-muted-foreground">Status</dt>
+                            <dd className="text-xs text-muted-foreground">
+                              {cashDeductionStatusLabel(cashStatus)}
+                            </dd>
+                          </div>
+                        </dl>
+
+                        {needsConfirmation && (
+                          <p className="text-xs text-amber-700 dark:text-amber-300">
+                            {VARIABLE_AMOUNT_CONFIRMATION_MESSAGE}
+                          </p>
+                        )}
+                        {debtLinked && (
+                          <p className="text-xs text-muted-foreground">
+                            {DEBT_LINKED_BILL_EDIT_MESSAGE}{" "}
+                            <Link to="/debt" className="underline underline-offset-2">
+                              Debt page
+                            </Link>
+                          </p>
+                        )}
+                        {bill.notes && (
+                          <p className="text-xs text-muted-foreground">{bill.notes}</p>
+                        )}
+
+                        <div className="flex flex-col gap-2 border-t pt-3">
+                          {cashStatus === "unpaid" ? (
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              className="w-full sm:w-auto"
+                              disabled={payingBillId === bill.id}
+                              onClick={() => void payBill(bill)}
+                            >
+                              Pay & deduct cash
+                            </Button>
+                          ) : null}
+                          <div className="flex flex-wrap items-center gap-1">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              aria-label={`View details for ${bill.name}`}
+                              onClick={() => setDetailBillId(bill.id)}
+                            >
+                              <Eye className="mr-2 h-4 w-4" />
+                              Details
+                            </Button>
+                            {canEditRegularBill(debtLinked) && needsConfirmation && (
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => startEditBill(bill)}
+                              >
+                                Confirm amount
+                              </Button>
+                            )}
+                            {canEditRegularBill(debtLinked) && (
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                aria-label={`Edit ${bill.name}`}
+                                onClick={() => startEditBill(bill)}
+                              >
+                                <Pencil className="mr-2 h-4 w-4" />
+                                Edit
+                              </Button>
+                            )}
+                            {debtLinked ? (
+                              <p className="w-full text-xs text-muted-foreground">
+                                {DEBT_LINKED_BILL_DELETE_MESSAGE}{" "}
+                                <Link to="/debt" className="underline underline-offset-2">
+                                  Debt page
+                                </Link>
+                              </p>
+                            ) : (
+                              <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    aria-label={`Delete ${bill.name}`}
+                                  >
+                                    <Trash2 className="mr-2 h-4 w-4 text-muted-foreground hover:text-destructive" />
+                                    Delete
+                                  </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                  <AlertDialogHeader>
+                                    <AlertDialogTitle>Delete Bill</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                      Are you sure you want to delete "{bill.name}"?
+                                      This action cannot be undone.
+                                    </AlertDialogDescription>
+                                  </AlertDialogHeader>
+                                  <AlertDialogFooter>
+                                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction
+                                      onClick={() => deleteBill(bill.id)}
+                                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                    >
+                                      Delete
+                                    </AlertDialogAction>
+                                  </AlertDialogFooter>
+                                </AlertDialogContent>
+                              </AlertDialog>
+                            )}
+                          </div>
+                        </div>
+                      </ResponsiveListCard>
+                    );
+                  })}
+                </div>
+
+                <div className="hidden md:block" data-testid="bills-desktop-list">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -1491,6 +1721,8 @@ export function BillsPage() {
                   })}
                 </TableBody>
               </Table>
+                </div>
+              </>
             )}
           </CardContent>
         </Card>

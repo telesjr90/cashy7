@@ -23,6 +23,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { TrendingDown } from "lucide-react";
+import { ResponsiveListCard } from "@/components/responsive-list-card";
 
 type DebtProgressDashboardProps = {
   activeTotals: DebtProgressTotals;
@@ -68,6 +69,75 @@ function formatNextPaymentLabel(
       ? `${accountLabel} · ${amountLabel}`
       : amountLabel,
   };
+}
+
+function AccountProgressCard({ progress }: { progress: DebtAccountProgress }) {
+  const nextPaymentDate = progress.nextPayment
+    ? formatDebtProgressDate(progress.nextPayment.payment_date)
+    : null;
+  const nextPaymentAmount = progress.nextPayment
+    ? formatCurrency(progress.nextPayment.total_payment)
+    : null;
+
+  return (
+    <ResponsiveListCard testId="debt-progress-mobile-card">
+      <div className="flex flex-wrap items-center gap-2">
+        <h3 className="text-base font-medium">{progress.accountName}</h3>
+        {progress.archivedBadgeLabel ? (
+          <Badge variant="secondary">{progress.archivedBadgeLabel}</Badge>
+        ) : null}
+      </div>
+      <div className="space-y-1">
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <span>
+            {formatCurrency(progress.totalPaid)} paid of{" "}
+            {formatCurrency(progress.originalAmount)}
+          </span>
+          <span>{progress.progressPercentage}%</span>
+        </div>
+        <Progress
+          value={progress.progressPercentage}
+          aria-label={`${progress.accountName} payoff progress`}
+          aria-valuenow={progress.progressPercentage}
+          aria-valuemin={0}
+          aria-valuemax={100}
+        />
+      </div>
+      <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+        <div>
+          <dt className="text-xs text-muted-foreground">Remaining</dt>
+          <dd className="font-medium tabular-nums">
+            {formatCurrency(progress.remainingBalance)}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-xs text-muted-foreground">Unpaid scheduled</dt>
+          <dd className="tabular-nums">{progress.remainingUnpaidCount}</dd>
+        </div>
+        <div>
+          <dt className="text-xs text-muted-foreground">Next payment</dt>
+          <dd>
+            {nextPaymentDate ? (
+              <span>
+                {nextPaymentDate}
+                {nextPaymentAmount ? (
+                  <span className="block text-xs text-muted-foreground">
+                    {nextPaymentAmount}
+                  </span>
+                ) : null}
+              </span>
+            ) : (
+              <span className="text-muted-foreground">—</span>
+            )}
+          </dd>
+        </div>
+        <div>
+          <dt className="text-xs text-muted-foreground">Est. payoff</dt>
+          <dd>{formatDebtProgressPayoffLabel(progress.payoffLabel)}</dd>
+        </div>
+      </dl>
+    </ResponsiveListCard>
+  );
 }
 
 function AccountProgressRow({ progress }: { progress: DebtAccountProgress }) {
@@ -179,7 +249,7 @@ export function DebtProgressDashboard({
   }
 
   return (
-    <Card>
+    <Card data-testid="debt-progress-dashboard">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <TrendingDown className="h-5 w-5" aria-hidden="true" />
@@ -236,6 +306,18 @@ export function DebtProgressDashboard({
               <h3 id="debt-progress-by-account" className="mb-3 text-sm font-medium">
                 Progress by account
               </h3>
+              <div
+                className="space-y-3 md:hidden"
+                data-testid="debt-progress-mobile-list"
+              >
+                {activeAccountProgress.map((progress) => (
+                  <AccountProgressCard
+                    key={progress.accountId}
+                    progress={progress}
+                  />
+                ))}
+              </div>
+              <div className="hidden md:block" data-testid="debt-progress-desktop-list">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -252,6 +334,7 @@ export function DebtProgressDashboard({
                   ))}
                 </TableBody>
               </Table>
+              </div>
             </section>
           </>
         ) : (
@@ -266,6 +349,12 @@ export function DebtProgressDashboard({
             <h3 id="debt-progress-archived" className="mb-3 text-sm font-medium">
               Archived / closed progress (not included in active totals)
             </h3>
+            <div className="space-y-3 md:hidden">
+              {archivedAccountProgress.map((progress) => (
+                <AccountProgressCard key={progress.accountId} progress={progress} />
+              ))}
+            </div>
+            <div className="hidden md:block">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -282,6 +371,7 @@ export function DebtProgressDashboard({
                 ))}
               </TableBody>
             </Table>
+            </div>
           </section>
         ) : null}
       </CardContent>

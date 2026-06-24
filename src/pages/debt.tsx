@@ -92,6 +92,7 @@ import {
 import { DebtAccountArchiveDialog } from "@/components/debt-account-archive-dialog";
 import { DebtProgressDashboard } from "@/components/debt-progress-dashboard";
 import { DebtPaymentDetailPanel } from "@/components/debt-payment-detail-panel";
+import { ResponsiveListCard } from "@/components/responsive-list-card";
 import { buildDebtPaymentDetailView } from "@/lib/debt-payment-detail";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -1316,6 +1317,126 @@ export function DebtPage() {
     );
   };
 
+  const renderDebtAccountMobileCard = (
+    account: DebtAccount,
+    options: { archived: boolean }
+  ) => {
+    const totalPaid = computeDebtAccountTotalPaid(account);
+    const archivedDateLabel = formatDebtAccountArchivedDate(account.archived_at);
+    const archiveStatus = getDebtAccountArchiveStatus(account);
+
+    return (
+      <ResponsiveListCard
+        key={account.id}
+        testId="debt-account-mobile-card"
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="text-base font-medium">{account.name}</h3>
+          {options.archived && renderAccountArchiveBadge(account)}
+        </div>
+        {options.archived && account.archive_reason && (
+          <p className="text-xs text-muted-foreground">
+            Reason: {account.archive_reason}
+          </p>
+        )}
+        <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+          <div>
+            <dt className="text-xs text-muted-foreground">Original</dt>
+            <dd className="tabular-nums">
+              {formatCurrency(account.original_amount)}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground">Total paid</dt>
+            <dd className="tabular-nums">{formatCurrency(totalPaid)}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground">Remaining</dt>
+            <dd className="font-semibold tabular-nums">
+              {formatCurrency(account.current_balance)}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground">
+              {options.archived ? "Archived" : "Target payoff"}
+            </dt>
+            <dd>
+              {options.archived
+                ? (archivedDateLabel ?? "-")
+                : account.target_payoff_date
+                  ? format(new Date(account.target_payoff_date), "MMM d, yyyy")
+                  : "-"}
+            </dd>
+          </div>
+        </dl>
+        <div className="flex flex-wrap gap-1 border-t pt-3">
+          {options.archived ? (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setReopenDialogAccountId(account.id)}
+            >
+              <ArchiveRestore className="mr-2 h-4 w-4" />
+              Reopen
+            </Button>
+          ) : (
+            <>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => startEditAccount(account)}
+                aria-label={`Edit ${account.name}`}
+              >
+                <Pencil className="mr-2 h-4 w-4 text-muted-foreground" />
+                Edit
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setArchiveDialogAccountId(account.id)}
+                aria-label={archiveStatus.closeActionLabel}
+              >
+                <Archive className="mr-2 h-4 w-4 text-muted-foreground" />
+                Archive
+              </Button>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    aria-label={`Delete ${account.name}`}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4 text-muted-foreground hover:text-destructive" />
+                    Delete
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete Debt Account</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Are you sure you want to delete "{account.name}"? All
+                      associated payments will also be deleted. This action cannot
+                      be undone.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      onClick={() => deleteDebtAccount(account.id)}
+                      className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                    >
+                      Delete
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
+            </>
+          )}
+        </div>
+      </ResponsiveListCard>
+    );
+  };
+
   const pendingGenerateAccount = pendingGenerateAccountId
     ? debtAccounts.find((account) => account.id === pendingGenerateAccountId)
     : null;
@@ -1558,7 +1679,10 @@ export function DebtPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div
+      className="min-h-screen min-w-0 overflow-x-hidden bg-background"
+      data-testid="debt-page"
+    >
       <div className="border-b">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
@@ -1891,6 +2015,16 @@ export function DebtPage() {
                   : 'No debt accounts yet. Click "Add Account" to create one.'}
               </div>
             ) : (
+              <>
+                <div
+                  className="space-y-3 md:hidden"
+                  data-testid="debt-accounts-mobile-list"
+                >
+                  {activeDebtAccounts.map((account) =>
+                    renderDebtAccountMobileCard(account, { archived: false })
+                  )}
+                </div>
+                <div className="hidden md:block" data-testid="debt-accounts-desktop-list">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -1908,11 +2042,19 @@ export function DebtPage() {
                   )}
                 </TableBody>
               </Table>
+                </div>
+              </>
             )}
 
             {showArchivedAccounts && archivedDebtAccounts.length > 0 && (
               <div className="mt-6 space-y-3">
                 <h3 className="text-sm font-medium">Archived / closed accounts</h3>
+                <div className="space-y-3 md:hidden">
+                  {archivedDebtAccounts.map((account) =>
+                    renderDebtAccountMobileCard(account, { archived: true })
+                  )}
+                </div>
+                <div className="hidden md:block">
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -1930,13 +2072,14 @@ export function DebtPage() {
                     )}
                   </TableBody>
                 </Table>
+                </div>
               </div>
             )}
           </CardContent>
         </Card>
 
         {/* Debt Payments Section */}
-        <Card>
+        <Card data-testid="debt-payments-section">
           <CardHeader className="flex flex-row items-center justify-between">
             <div>
               <CardTitle>Debt Payments</CardTitle>
@@ -2181,6 +2324,195 @@ export function DebtPage() {
                 ) : null}
               </div>
             ) : (
+              <>
+                <div
+                  className="space-y-3 md:hidden"
+                  data-testid="debt-payments-mobile-list"
+                >
+                  {visibleDebtPayments.map((payment) => {
+                    const cashStatus = getCashDeductionStatus({
+                      isMarkedPaid: payment.paid_status,
+                      hasPaymentTransaction: paymentByDebtPaymentId.has(payment.id),
+                    });
+                    const preStartLabel = getDebtPaymentPreStartLabel(
+                      payment,
+                      cashflowStartDate
+                    );
+                    const isPreStartPayment = isDebtPaymentPreStart(
+                      payment,
+                      cashflowStartDate
+                    );
+                    const account = debtAccounts.find(
+                      (row) => row.id === payment.debt_account_id
+                    );
+                    const accountName = getAccountName(payment.debt_account_id);
+
+                    return (
+                      <ResponsiveListCard
+                        key={payment.id}
+                        testId="debt-payment-mobile-card"
+                        className={
+                          isPreStartPayment && showPreStartDebtPayments
+                            ? "text-muted-foreground"
+                            : undefined
+                        }
+                      >
+                        <div className="flex items-start gap-3">
+                          <Checkbox
+                            checked={payment.paid_status}
+                            onCheckedChange={() =>
+                              toggleDebtPaymentPaidStatus(payment)
+                            }
+                            disabled={
+                              submitting || togglingPaymentId === payment.id
+                            }
+                            aria-label={`Mark ${accountName} payment paid`}
+                            className="mt-1"
+                          />
+                          <div className="min-w-0 flex-1 space-y-2">
+                            <h3 className="text-base font-medium leading-snug">
+                              {accountName}
+                            </h3>
+                            <div className="flex flex-wrap items-center gap-2">
+                              {account ? renderAccountArchiveBadge(account) : null}
+                              {preStartLabel && showPreStartDebtPayments && (
+                                <Badge variant="secondary">{preStartLabel}</Badge>
+                              )}
+                            </div>
+                          </div>
+                          <p className="shrink-0 text-right text-base font-semibold tabular-nums">
+                            {formatCurrency(payment.total_payment)}
+                          </p>
+                        </div>
+
+                        <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
+                          <div>
+                            <dt className="text-xs text-muted-foreground">Date</dt>
+                            <dd>
+                              {format(new Date(payment.payment_date), "MMM d, yyyy")}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-xs text-muted-foreground">Month</dt>
+                            <dd>
+                              {MONTHS.find((m) => m.value === payment.month.toString())
+                                ?.label}{" "}
+                              {payment.year}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-xs text-blue-600 dark:text-blue-400">
+                              Teles
+                            </dt>
+                            <dd className="tabular-nums">
+                              {formatCurrency(payment.teles_amount)}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt className="text-xs text-green-600 dark:text-green-400">
+                              Nicole
+                            </dt>
+                            <dd className="tabular-nums">
+                              {formatCurrency(payment.nicole_amount)}
+                            </dd>
+                          </div>
+                          <div className="col-span-2">
+                            <dt className="text-xs text-muted-foreground">
+                              Projected remaining after payment
+                            </dt>
+                            <dd className="tabular-nums">
+                              {payment.remaining_balance_after_payment !== null
+                                ? formatCurrency(payment.remaining_balance_after_payment)
+                                : "-"}
+                            </dd>
+                          </div>
+                          <div className="col-span-2">
+                            <dt className="text-xs text-muted-foreground">Status</dt>
+                            <dd className="text-xs text-muted-foreground">
+                              {cashDeductionStatusLabel(cashStatus)}
+                            </dd>
+                          </div>
+                        </dl>
+
+                        <div className="flex flex-col gap-2 border-t pt-3">
+                          {cashStatus === "unpaid" ? (
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              className="w-full sm:w-auto"
+                              disabled={
+                                payingPaymentId === payment.id ||
+                                togglingPaymentId === payment.id
+                              }
+                              onClick={() => void payDebtPayment(payment)}
+                            >
+                              Pay & deduct cash
+                            </Button>
+                          ) : null}
+                          <div className="flex flex-wrap items-center gap-1">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              aria-label={`View details for ${accountName} payment`}
+                              onClick={() => setDetailPaymentId(payment.id)}
+                            >
+                              <Eye className="mr-2 h-4 w-4" />
+                              Details
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              aria-label={`Edit ${accountName} payment`}
+                              onClick={() => startEditPayment(payment)}
+                              disabled={
+                                submitting || togglingPaymentId === payment.id
+                              }
+                            >
+                              <Pencil className="mr-2 h-4 w-4 text-muted-foreground" />
+                              Edit
+                            </Button>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  aria-label={`Delete ${accountName} payment`}
+                                >
+                                  <Trash2 className="mr-2 h-4 w-4 text-muted-foreground hover:text-destructive" />
+                                  Delete
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Delete Payment</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Are you sure you want to delete this payment? The
+                                    linked bill instance will also be deleted. This action
+                                    cannot be undone.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction
+                                    onClick={() => deleteDebtPayment(payment.id)}
+                                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                  >
+                                    Delete
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
+                        </div>
+                      </ResponsiveListCard>
+                    );
+                  })}
+                </div>
+
+                <div
+                  className="hidden md:block"
+                  data-testid="debt-payments-desktop-list"
+                >
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -2344,6 +2676,8 @@ export function DebtPage() {
                   })}
                 </TableBody>
               </Table>
+                </div>
+              </>
             )}
           </CardContent>
         </Card>
